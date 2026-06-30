@@ -2,8 +2,7 @@ package ues.edu.sv.education.service.facultad;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import ues.edu.sv.education.entity.Carrera;
-import ues.edu.sv.education.entity.Facultad;
+import ues.edu.sv.education.model.entity.Carrera;
 import ues.edu.sv.education.repository.CarreraRepository;
 
 import java.util.List;

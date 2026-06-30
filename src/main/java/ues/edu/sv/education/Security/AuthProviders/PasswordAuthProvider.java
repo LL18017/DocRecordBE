@@ -8,20 +8,21 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import ues.edu.sv.education.dto.auth.CustomUserDetails;
-import ues.edu.sv.education.entity.User;
-import ues.edu.sv.education.service.auth.UserService;
+import ues.edu.sv.education.controller.error.CustomAuthenticationException;
+import ues.edu.sv.education.model.dto.auth.CustomUserDetails;
+import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.service.auth.UserAuthService;
 
 import java.util.Objects;
 
 public class PasswordAuthProvider implements AuthenticationProvider {
 
     private final PasswordEncoder encoder;
-    private final UserService userService;
+    private final UserAuthService userAuthService;
 
-    public PasswordAuthProvider(PasswordEncoder encoder, UserService userService) {
+    public PasswordAuthProvider(PasswordEncoder encoder, UserAuthService userAuthService) {
         this.encoder = encoder;
-        this.userService = userService;
+        this.userAuthService = userAuthService;
     }
 
     @Override
@@ -31,7 +32,7 @@ public class PasswordAuthProvider implements AuthenticationProvider {
         String email = authentication.getName();
         String rawPassword = Objects.requireNonNull(authentication.getCredentials()).toString();
 
-        User user = userService.getUser(email);
+        User user = userAuthService.getUser(email);
 
         if (user == null) {
             throw new BadCredentialsException("Usuario no encontrado");
@@ -40,16 +41,17 @@ public class PasswordAuthProvider implements AuthenticationProvider {
         UserDetails userDetails = new CustomUserDetails(user);
 
         if (!userDetails.isEnabled())
-            throw new DisabledException("Usuario deshabilitado");
+            throw new CustomAuthenticationException("Usuario deshabilitado", 401) {
+            };
 
         if (!userDetails.isAccountNonExpired())
-            throw new DisabledException("Cuenta expirada");
+            throw new CustomAuthenticationException("Cuenta expirada",401);
 
         if (!userDetails.isAccountNonLocked())
-            throw new DisabledException("Usuario bloqueado");
+            throw new CustomAuthenticationException("Usuario bloqueado",401);
 
         if (!encoder.matches(rawPassword, userDetails.getPassword())) {
-            throw new BadCredentialsException("Credenciales incorrectas");
+           throw new CustomAuthenticationException("Credenciales incorrectas",401);
         }
 
         return new UsernamePasswordAuthenticationToken(

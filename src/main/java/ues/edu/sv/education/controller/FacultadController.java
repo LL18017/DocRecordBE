@@ -4,9 +4,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ues.edu.sv.education.dto.Carrera.CarreraRequestDto;
-import ues.edu.sv.education.dto.Facultad.FacultadDto;
-import ues.edu.sv.education.dto.Facultad.FacultadRequestDto;
+import ues.edu.sv.education.model.dto.Carrera.CarreraRequestDto;
+import ues.edu.sv.education.model.dto.Facultad.FacultadDto;
+import ues.edu.sv.education.model.dto.Facultad.FacultadRequestDto;
 import ues.edu.sv.education.service.facultad.FacultadService;
 
 import java.util.List;

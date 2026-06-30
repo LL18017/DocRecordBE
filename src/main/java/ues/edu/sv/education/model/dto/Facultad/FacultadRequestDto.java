@@ -1,15 +1,10 @@
-package ues.edu.sv.education.dto.Facultad;
+package ues.edu.sv.education.model.dto.Facultad;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.Setter;
-import ues.edu.sv.education.dto.Carrera.CarreraDto;
-import ues.edu.sv.education.entity.Carrera;
-import ues.edu.sv.education.entity.Facultad;
+import ues.edu.sv.education.model.dto.Carrera.CarreraDto;
+import ues.edu.sv.education.model.entity.Facultad;
 
 import java.util.List;
 

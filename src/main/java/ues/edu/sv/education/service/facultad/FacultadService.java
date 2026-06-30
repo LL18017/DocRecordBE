@@ -3,8 +3,8 @@ package ues.edu.sv.education.service.facultad;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import ues.edu.sv.education.entity.Carrera;
-import ues.edu.sv.education.entity.Facultad;
+import ues.edu.sv.education.model.entity.Carrera;
+import ues.edu.sv.education.model.entity.Facultad;
 import ues.edu.sv.education.repository.CarreraRepository;
 import ues.edu.sv.education.repository.FacultadRepository;
 

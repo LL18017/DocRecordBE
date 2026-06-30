@@ -2,16 +2,15 @@ package ues.edu.sv.education.service.auth;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import ues.edu.sv.education.entity.User;
+import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.repository.UserRepository;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class UserService {
+public class UserAuthService {
     private final UserRepository repository;
 
     public List<User> getAllUser() {

@@ -1,9 +1,9 @@
-package ues.edu.sv.education.dto.Carrera;
+package ues.edu.sv.education.model.dto.Carrera;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import ues.edu.sv.education.entity.Carrera;
+import ues.edu.sv.education.model.entity.Carrera;
 
 public record CarreraRequestDto(Integer carreraId,
                                 @NotBlank(message = "el nombre de la carrera no puede estar vacio")

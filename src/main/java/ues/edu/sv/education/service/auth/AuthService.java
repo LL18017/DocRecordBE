@@ -6,23 +6,27 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import ues.edu.sv.education.dto.auth.CustomUserDetails;
-import ues.edu.sv.education.dto.auth.UserLoginDto;
-import ues.edu.sv.education.dto.auth.UserResponseDto;
-import ues.edu.sv.education.entity.User;
+import ues.edu.sv.education.model.dto.User.UserRequestDto;
+import ues.edu.sv.education.model.dto.auth.CustomUserDetails;
+import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
+import ues.edu.sv.education.model.dto.auth.UserLoginDto;
+import ues.edu.sv.education.model.dto.User.UserResponseDto;
+import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.mappers.RoleMapper;
+import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.repository.UserRepository;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
     private final UserRepository userRepository;
-    private final UserService service;
+    private final UserAuthService service;
     private final JwtService jwtService;
     private final AuthenticationManager authManager;
     private final PasswordEncoder passwordEncoder;
 
 
-    public UserResponseDto loging(UserLoginDto loginDto) {
+    public LoginResponseDto loging(UserLoginDto loginDto) {
         Authentication auth = authManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         loginDto.email(),
@@ -33,13 +37,17 @@ public class AuthService {
         CustomUserDetails user =
                 (CustomUserDetails) auth.getPrincipal();
 
-        return new UserResponseDto(
+        assert user != null;
+        return new LoginResponseDto(
                 auth.getName(),
                 jwtService.generateToken(user),
-                jwtService.generateRefreshToken(user));
+                jwtService.generateRefreshToken(user),
+                auth.getAuthorities().stream().map(a -> RoleMapper.toDto(a.getAuthority())).toList()
+        );
     }
 
-    public UserResponseDto refresh(String authHeader) {
+    public LoginResponseDto refresh(String authHeader) {
+        System.out.println(authHeader);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new IllegalArgumentException("Token invalido");
         }
@@ -52,12 +60,15 @@ public class AuthService {
             throw new IllegalArgumentException("fecha expirada");
         }
         User u = service.getUser(userEmail);
-        CustomUserDetails user=new CustomUserDetails(u);
-        return new UserResponseDto(u.getName(), jwtService.generateToken(user), jwtService.generateRefreshToken(user));
+        CustomUserDetails user = new CustomUserDetails(u);
+        return new LoginResponseDto( u.getName(), jwtService.generateToken(user), jwtService.generateRefreshToken(user),
+                user.getAuthorities().stream().map(a -> RoleMapper.toDto(a.getAuthority())).toList()
+        );
     }
 
-    public User createUser(User user) {
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        return this.userRepository.save(user);
+    public User createUser(UserRequestDto user) {
+        User userToSave= UserMapper.toEntity(user);
+        userToSave.setPassword(passwordEncoder.encode(userToSave.getPassword()));
+        return this.userRepository.save(userToSave);
     }
 }

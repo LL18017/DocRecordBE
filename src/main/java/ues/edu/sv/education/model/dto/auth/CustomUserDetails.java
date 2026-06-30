@@ -1,9 +1,11 @@
-package ues.edu.sv.education.dto.auth;
+package ues.edu.sv.education.model.dto.auth;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-import ues.edu.sv.education.entity.User;
+import ues.edu.sv.education.model.entity.Role;
+import ues.edu.sv.education.model.entity.User;
 
 import java.util.Collection;
 import java.util.List;
@@ -16,7 +18,16 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        return this.user.getRoles()
+                .stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_"+role.getName()))
+                .toList();
+    }
+    public List<String> getRoles() {
+        return this.user.getRoles()
+                .stream()
+                .map(Role::getName)
+                .toList();
     }
 
     @Override

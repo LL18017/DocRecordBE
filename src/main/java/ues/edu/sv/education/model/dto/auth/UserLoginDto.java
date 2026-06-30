@@ -1,4 +1,4 @@
-package ues.edu.sv.education.dto.auth;
+package ues.edu.sv.education.model.dto.auth;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

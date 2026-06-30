@@ -1,14 +1,17 @@
-package ues.edu.sv.education.entity;
+package ues.edu.sv.education.model.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
-import lombok.Getter;
-import lombok.Setter;
-import org.hibernate.validator.constraints.UniqueElements;
+import lombok.*;
+
+import java.util.Set;
 
 @Entity
 @Table(name = "users")
 @Getter @Setter
+@RequiredArgsConstructor
+@AllArgsConstructor
+@Builder
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
@@ -25,4 +28,11 @@ public class User {
     @Size(max = 255)
     @Column(name = "password")
     private String password;
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<Role> roles;
 }

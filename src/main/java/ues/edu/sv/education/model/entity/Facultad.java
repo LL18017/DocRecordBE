@@ -1,16 +1,13 @@
-package ues.edu.sv.education.entity;
+package ues.edu.sv.education.model.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
-import ues.edu.sv.education.dto.Carrera.CarreraDto;
-import ues.edu.sv.education.dto.Facultad.FacultadDto;
-import ues.edu.sv.education.dto.Facultad.FacultadRequestDto;
+import ues.edu.sv.education.model.dto.Carrera.CarreraDto;
+import ues.edu.sv.education.model.dto.Facultad.FacultadDto;
+import ues.edu.sv.education.model.dto.Facultad.FacultadRequestDto;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
