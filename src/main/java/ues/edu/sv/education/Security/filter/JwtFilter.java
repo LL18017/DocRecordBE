@@ -28,7 +28,10 @@ public class JwtFilter extends OncePerRequestFilter {
         String path = req.getRequestURI();
 
         //  Permitir rutas públicas
-        if (path.startsWith("/auth/")) {
+        if (path.startsWith("/auth/") || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/swagger-resources")
+                || path.startsWith("/webjars")) {
             chain.doFilter(req, res);
             return;
         }

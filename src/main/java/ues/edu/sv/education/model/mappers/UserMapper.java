@@ -3,7 +3,9 @@ package ues.edu.sv.education.model.mappers;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.entity.UserType;
 
+import java.util.HashSet;
 import java.util.stream.Collectors;
 
 public class UserMapper {
@@ -12,7 +14,8 @@ public class UserMapper {
                 user.getUserID(),
                 user.getEmail(),
                 user.getName(),
-                user.getRoles().stream().map(RoleMapper::toDto).toList()
+                user.getRoles().stream().map(RoleMapper::toDto).toList(),
+                user.getUserType().getName()
         );
     }
 
@@ -22,7 +25,9 @@ public class UserMapper {
                 user.userName(),
                 user.email(),
                 user.password(),
-                user.roles().stream().map(RoleMapper::toEntity).collect(Collectors.toSet())
+                false,
+                new HashSet<>(),
+                null
         );
     }
 }

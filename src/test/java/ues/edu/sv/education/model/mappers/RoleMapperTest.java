@@ -1,14 +1,9 @@
 package ues.edu.sv.education.model.mappers;
 
-import jdk.swing.interop.SwingInterOpUtils;
-import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import ues.edu.sv.education.model.dto.roles.RoleDto;
 import ues.edu.sv.education.model.entity.Role;
-import ues.edu.sv.education.model.enums.RolesEnum;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 
 class RoleMapperTest {

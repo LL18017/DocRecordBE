@@ -21,5 +21,8 @@ public record UserResponseDto(
         @NotNull(message = "El usuario no puede ser nula")
         @NotBlank(message = "El usuario no puede estar vacia")
         String userName,
-        List<RoleDto> roles) {
+        List<RoleDto> roles,
+        @Email(message = "formato no valido para tipo de usuario")
+        @NotNull(message = "el tipo de usuario no puede ser nulo")
+        String type) {
 }

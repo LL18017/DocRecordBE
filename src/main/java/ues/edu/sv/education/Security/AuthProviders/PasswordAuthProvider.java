@@ -41,7 +41,7 @@ public class PasswordAuthProvider implements AuthenticationProvider {
         UserDetails userDetails = new CustomUserDetails(user);
 
         if (!userDetails.isEnabled())
-            throw new CustomAuthenticationException("Usuario deshabilitado", 401) {
+            throw new CustomAuthenticationException("Usuario no ha confirmado su cuenta aun", 401) {
             };
 
         if (!userDetails.isAccountNonExpired())

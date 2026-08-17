@@ -28,6 +28,8 @@ public class User {
     @Size(max = 255)
     @Column(name = "password")
     private String password;
+    @Column(nullable = false)
+    private boolean enabled = false;
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",
@@ -35,4 +37,12 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "user_type_id",
+            referencedColumnName = "user_type_id",
+            nullable = false
+    )
+
+    private UserType userType;
 }

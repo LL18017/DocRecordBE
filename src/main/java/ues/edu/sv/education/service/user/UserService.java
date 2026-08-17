@@ -53,4 +53,8 @@ public class UserService {
         userRepository.save(user);
         return UserMapper.toDto(user);
     }
+    public void deleteUser(String userEmail) {
+        User user = userRepository.findByEmailContainingIgnoreCase(userEmail).orElseThrow(()-> new NoResourceFoundException("Usuario no encontrado","404"));
+        userRepository.delete(user);
+    }
 }
