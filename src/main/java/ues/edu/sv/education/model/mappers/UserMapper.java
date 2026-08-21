@@ -27,6 +27,7 @@ public class UserMapper {
                 user.password(),
                 false,
                 new HashSet<>(),
+                null,
                 null
         );
     }

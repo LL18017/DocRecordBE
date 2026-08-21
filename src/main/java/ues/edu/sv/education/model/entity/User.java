@@ -45,4 +45,7 @@ public class User {
     )
 
     private UserType userType;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private Set<Clinicas> clinicas;
 }

@@ -56,6 +56,35 @@ public class GlobalExceptionHandler {
                         "message", ex.getMessage()
                 ));
     }
+    /*
+     * ============================================================
+     * 404 - RECURSO NO ENCONTRADO
+     * ============================================================
+     *
+     * Se utiliza cuando intentamos obtener un registro que
+     * no existe en la base de datos.
+     *
+     * Ejemplo:
+     *
+     * GET /users/999
+     *
+     * Si el usuario 999 no existe y el servicio lanza:
+     *
+     * throw new EntityNotFoundException("Usuario no encontrado");
+     *
+     * se devuelve HTTP 404.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNoResourceFoundException(
+            NoResourceFoundException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                        "error", "Recurso no encontrado",
+                        "message", ex.getMessage()
+                ));
+    }
 
 
     /*
