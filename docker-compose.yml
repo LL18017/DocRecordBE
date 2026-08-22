@@ -1,26 +1,67 @@
+# ============================================================================
+# DocRecord — servicios de desarrollo
+#
+#   docker compose up -d      levanta PostgreSQL y pgAdmin
+#   docker compose down       detiene (los datos se conservan en el volumen)
+#   docker compose down -v    detiene y BORRA los datos
+#
+# Los valores por defecto coinciden con los de application.properties, de modo
+# que `docker compose up -d` + `./mvnw spring-boot:run` funciona sin tocar nada.
+# Para cambiarlos, crear un archivo .env junto a este compose (ver .env.example).
+# ============================================================================
+
 services:
   db:
     image: postgres:15.3-alpine
-    container_name: db
+    container_name: docrecord-db
+    restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: 12345
+      # Sin POSTGRES_DB el contenedor solo crea la base "postgres" y la
+      # aplicacion falla al arrancar porque busca "datadoc".
+      POSTGRES_DB: ${DB_NAME:-datadoc}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-9902}
+      # Evita que el locale del host altere el ordenamiento de los indices.
+      LANG: C.UTF-8
     ports:
-      - 5432:5432
+      - "5432:5432"
     volumes:
-      - ./webProject:/postgresql/data
+      # Ruta real de datos de la imagen oficial de PostgreSQL. La ruta anterior
+      # (/postgresql/data) no era la del servidor, asi que nada persistia.
+      - docrecord-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Permite esperar a que PostgreSQL acepte conexiones, no solo a que el
+      # contenedor exista.
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-datadoc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       - my_network
+
   pgadmin4:
     image: dpage/pgadmin4:7.5
-    container_name: pgadmin4
+    container_name: docrecord-pgadmin
+    restart: unless-stopped
     environment:
-      - PGADMIN_DEFAULT_EMAIL=ll18017@ues.edu.sv
-      - PGADMIN_DEFAULT_PASSWORD=12345
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@docrecord.sv}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin}
       - PGADMIN_LISTEN_PORT=5050
     ports:
       - "5050:5050"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - docrecord-pgadmin:/var/lib/pgadmin
     networks:
       - my_network
+
+volumes:
+  docrecord-pgdata:
+  docrecord-pgadmin:
+
 networks:
   my_network:
     driver: bridge
