@@ -38,7 +38,7 @@ class RolesEnumTest {
                 .collect(Collectors.toSet());
 
         assertEquals(
-                Set.of("ADMIN", "MEDICO", "ENFERMERA", "PACIENTE"),
+                Set.of("ADMIN", "MEDICO", "ENFERMERA", "PACIENTE", "ROTO_A_PROPOSITO_PARA_PROBAR_CI"),
                 declarados,
                 "RolesEnum debe declarar solo los roles de DocRecord. Si aparecen "
                         + "DIRECTOR, PROFESOR o ESTUDIANTE, son restos del proyecto academico previo.");
