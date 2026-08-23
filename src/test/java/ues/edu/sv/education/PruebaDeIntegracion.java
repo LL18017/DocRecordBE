@@ -1,8 +1,10 @@
 package ues.edu.sv.education;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -40,9 +42,36 @@ import java.sql.Statement;
  * PostgreSQL del docker-compose este arriba.
  *
  *   docker compose up -d      (desde DocRecordBE/)
+ *
+ * ── Por que el correo esta simulado ───────────────────────────────────────
+ * Ver el campo correoDePruebas, mas abajo.
  */
 @SpringBootTest
 public abstract class PruebaDeIntegracion {
+
+    /**
+     * El unico JavaMailSender del contexto de pruebas, y es falso.
+     *
+     * Cada registro de usuario manda un correo de confirmacion, y el trabajo
+     * programado de EventProcessorService manda otro por cada inicio de sesion.
+     * Con el emisor real, una corrida de la suite abria decenas de conexiones
+     * SMTP contra la cuenta compartida del proyecto. Eso hacia las pruebas
+     * lentas (~3 s por registro), fragiles y dependientes de un tercero: Gmail
+     * termino bloqueando la cuenta con "454-4.7.0 Too many login attempts" y
+     * dejo la suite entera en rojo por algo que no era del codigo. Ademas cada
+     * corrida gastaba cuota real de una cuenta que usa todo el equipo.
+     *
+     * Va aqui, en la clase base, y no en cada prueba: asi cubre de una vez a
+     * TODAS las pruebas de integracion, las de hoy y las que se agreguen, sin
+     * que nadie tenga que acordarse. Al ser el bean que sustituye al real, el
+     * emisor verdadero ni siquiera se instancia; ninguna prueba puede mandar
+     * un correo aunque quiera.
+     *
+     * Al ser un mock ademas se puede interrogar (verify) y forzar a fallar
+     * (doThrow) desde las pruebas; ver RegistroSinCorreoIT.
+     */
+    @MockitoBean
+    protected JavaMailSender correoDePruebas;
 
     private static final String HOST = System.getProperty("test.db.host", "localhost");
     private static final String PUERTO = System.getProperty("test.db.port", "5432");
@@ -90,5 +119,13 @@ public abstract class PruebaDeIntegracion {
         registro.add("spring.datasource.url", () -> URL_PRUEBAS);
         registro.add("spring.datasource.username", () -> USUARIO);
         registro.add("spring.datasource.password", () -> CLAVE);
+
+        // Segunda barrera, por si algun dia alguien quita el mock de arriba:
+        // la configuracion de correo de las pruebas no apunta a ningun servidor
+        // que exista. Si un envio real se colara, moriria contra un host
+        // inexistente en vez de llegar a Gmail con la cuenta del proyecto.
+        registro.add("spring.mail.host", () -> "smtp.invalido.pruebas");
+        registro.add("spring.mail.username", () -> "pruebas@invalido.local");
+        registro.add("spring.mail.password", () -> "sin-clave");
     }
 }
