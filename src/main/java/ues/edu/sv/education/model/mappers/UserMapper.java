@@ -14,14 +14,13 @@ public class UserMapper {
                 user.getUserID(),
                 user.getEmail(),
                 persona.getNombres() + " " + persona.getApellidos(),
-                user.getRoles().stream().map(RoleMapper::toDto).toList(),
-                user.getUserType().getName()
+                user.getRoles().stream().map(RoleMapper::toDto).toList()
         );
     }
 
     // La persona ya debe existir (guardada) antes de llamar esto: User solo
     // guarda la referencia, no crea su propia identidad. Ver
-    // AuthService.createUser / UserService.createUser.
+    // AuthService.registrarMedico / UserService.createUser.
     public static User toEntity(UserRequestDto request, Persona persona) {
         return new User(
                 null,
@@ -30,7 +29,6 @@ public class UserMapper {
                 request.password(),
                 false,
                 new HashSet<>(),
-                null,
                 null
         );
     }

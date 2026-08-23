@@ -5,18 +5,17 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
+import ues.edu.sv.education.model.dto.auth.RegistroMedicoRequestDto;
+import ues.edu.sv.education.model.dto.auth.RegistroMedicoResponseDto;
 import ues.edu.sv.education.model.dto.auth.UserLoginDto;
-import ues.edu.sv.education.model.dto.User.UserRequestDto;
-import ues.edu.sv.education.model.dto.User.UserResponseDto;
-import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.service.auth.AuthService;
 import ues.edu.sv.education.service.auth.UserAuthService;
 
@@ -60,18 +59,20 @@ public class AuthController {
     }
 
     @Operation(
-            summary = "Registrar usuario",
-            description = "Autogestion publica: crea un nuevo usuario con rol MEDICO. El rol no es configurable por el cliente."
+            summary = "Registrar médico",
+            description = "Autogestion publica: crea persona + usuario + medico con rol MEDICO. El rol no es configurable por el cliente."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Usuario creado exitosamente"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (email, contraseña o tipo de usuario faltantes/incorrectos)"),
-            @ApiResponse(responseCode = "409", description = "El email ya está registrado")
+            @ApiResponse(responseCode = "201", description = "Cuenta creada exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (nombres, apellidos, email, contraseña o especialidad faltantes/incorrectos)"),
+            @ApiResponse(responseCode = "404", description = "La especialidad indicada no existe"),
+            @ApiResponse(responseCode = "409", description = "El email ya está registrado y confirmado")
     })
     @PostMapping("/register")
-    @Transactional
-    public ResponseEntity<UserResponseDto> createUser(@Valid @RequestBody UserRequestDto user) {
-        return ResponseEntity.ok(UserMapper.toDto(authService.createUser(user)));
+    public ResponseEntity<RegistroMedicoResponseDto> registrarMedico(@Valid @RequestBody RegistroMedicoRequestDto request) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(authService.registrarMedico(request));
     }
 
     @Operation(summary = "Confirmar registro por correo")

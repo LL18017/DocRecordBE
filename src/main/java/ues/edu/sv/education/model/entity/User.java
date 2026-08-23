@@ -36,14 +36,6 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles;
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "user_type_id",
-            referencedColumnName = "user_type_id",
-            nullable = false
-    )
-
-    private UserType userType;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<Clinicas> clinicas;

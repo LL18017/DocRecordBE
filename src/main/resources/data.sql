@@ -47,15 +47,6 @@ INSERT INTO public.role (role_id, name) VALUES
 ON CONFLICT (role_id) DO NOTHING;
 
 -- =========================
--- user_type
--- =========================
-INSERT INTO public.user_type (user_type_id, name) VALUES
-    (1, 'DOCTOR'),
-    (2, 'ENFERMERA'),
-    (3, 'EMPLEADO')
-ON CONFLICT (user_type_id) DO NOTHING;
-
--- =========================
 -- Ajuste de secuencias: tras insertar IDs explicitos, las secuencias deben
 -- continuar despues del maximo para no chocar con los catalogos.
 -- COALESCE cubre el caso de una tabla vacia (setval no acepta NULL).
@@ -64,4 +55,3 @@ SELECT setval('public.event_status_seq', COALESCE((SELECT MAX(event_status_id) F
 SELECT setval('public.event_types_seq',  COALESCE((SELECT MAX(event_type_id)   FROM public.event_types),  1));
 SELECT setval('public.events_seq',       COALESCE((SELECT MAX(event_id)        FROM public.events),       1));
 SELECT setval('public.role_role_id_seq', COALESCE((SELECT MAX(role_id)         FROM public.role),         1));
-SELECT setval('public.user_type_seq',    COALESCE((SELECT MAX(user_type_id)    FROM public.user_type),    1));
