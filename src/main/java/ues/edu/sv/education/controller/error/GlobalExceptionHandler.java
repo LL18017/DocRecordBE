@@ -86,6 +86,60 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    /*
+     * ============================================================
+     * 404 - RUTA SIN CONTROLLER (Spring, no la excepcion propia)
+     * ============================================================
+     *
+     * Desde Spring Framework 6.1 una URL sin handler ya no dispara
+     * NoHandlerFoundException (el handler de mas abajo): el propio
+     * framework lanza org.springframework.web.servlet.resource.
+     * NoResourceFoundException. Sin este handler cae en el generico de
+     * Exception.class y una URL mal escrita responde 500 en vez de 404.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> handleSpringNoResourceFoundException(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                        "error", "Endpoint no encontrado",
+                        "message", "La URL solicitada no existe"
+                ));
+    }
+
+    /*
+     * ============================================================
+     * CODIGO VARIABLE - GeneralException
+     * ============================================================
+     *
+     * A diferencia de NoResourceFoundException (siempre 404),
+     * GeneralException carga su propio codigo HTTP como String (403,
+     * 409, 422, ...) porque se usa para varias reglas de negocio
+     * distintas -propiedad, conflicto, validacion cruzada de tablas-.
+     * Sin este handler caia en el generico de Exception.class y
+     * cualquier uso de GeneralException respondia 500 sin importar el
+     * codigo que llevara.
+     */
+    @ExceptionHandler(GeneralException.class)
+    public ResponseEntity<Map<String, String>> handleGeneralException(GeneralException ex) {
+
+        HttpStatus status;
+        try {
+            status = HttpStatus.valueOf(Integer.parseInt(ex.getErrorCode()));
+        } catch (IllegalArgumentException e) {
+            status = HttpStatus.BAD_REQUEST;
+        }
+
+        return ResponseEntity
+                .status(status)
+                .body(Map.of(
+                        "error", "Error",
+                        "message", ex.getMessage()
+                ));
+    }
+
 
     /*
      * ============================================================
