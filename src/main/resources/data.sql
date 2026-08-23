@@ -35,15 +35,15 @@ ON CONFLICT (event_type_id) DO NOTHING;
 -- =========================
 -- role
 --
--- PENDIENTE DE DECISION DEL EQUIPO: esta tabla debe mantenerse sincronizada con
--- el enum RolesEnum, que hoy declara ADMIN(1), DIRECTOR(2), PROFESOR(3) y
--- ESTUDIANTE(4) — roles heredados del proyecto academico anterior, no de
--- DocRecord. Insertar aqui MEDICO/ENFERMERA/PACIENTE sin cambiar el enum
--- provocaria que RoleMapper.toEntity(2) devolviera "DIRECTOR" para una fila
--- llamada "MEDICO". Por eso se deja solo ADMIN hasta que se corrija el enum.
+-- Debe mantenerse sincronizada con el enum RolesEnum: RoleMapper.toEntity(Integer)
+-- construye el Role a partir del enum, no de esta tabla, asi que un id aqui
+-- que no coincida con el enum se mapearia con el nombre equivocado.
 -- =========================
 INSERT INTO public.role (role_id, name) VALUES
-    (1, 'ADMIN')
+    (1, 'ADMIN'),
+    (2, 'MEDICO'),
+    (3, 'ENFERMERA'),
+    (4, 'PACIENTE')
 ON CONFLICT (role_id) DO NOTHING;
 
 -- =========================

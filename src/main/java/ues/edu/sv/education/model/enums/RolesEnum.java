@@ -5,9 +5,9 @@ import lombok.Getter;
 @Getter
 public enum RolesEnum {
     ADMIN(1, "ADMIN"),
-    DIRECTOR(2, "DIRECTOR"),
-    PROFESOR(3, "PROFESOR"),
-    ESTUDIANTE(4, "ESTUDIANTE");
+    MEDICO(2, "MEDICO"),
+    ENFERMERA(3, "ENFERMERA"),
+    PACIENTE(4, "PACIENTE");
 
     RolesEnum(int id, String name) {
         this.id = id;
