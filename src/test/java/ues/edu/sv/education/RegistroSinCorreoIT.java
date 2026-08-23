@@ -1,6 +1,7 @@
 package ues.edu.sv.education;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.mail.internet.MimeMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailSendException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -80,7 +80,7 @@ class RegistroSinCorreoIT extends PruebaDeIntegracion {
     void siElCorreoFallaLaCuentaSeCreaIgual() throws Exception {
         // El servidor de correo esta caido, como lo estuvo Gmail.
         doThrow(new MailSendException("SMTP caido a proposito para esta prueba"))
-                .when(correoDePruebas).send(any(SimpleMailMessage.class));
+                .when(correoDePruebas).send(any(MimeMessage.class));
 
         String correo = "sin.correo." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
 
@@ -120,20 +120,22 @@ class RegistroSinCorreoIT extends PruebaDeIntegracion {
         assertTrue(respuesta.get("correoDeVerificacionEnviado").asBoolean(),
                 "con el emisor disponible la respuesta debe reportar el correo como enviado");
 
-        // Se revisan los mensajes entregados al emisor. Se usa atLeastOnce y se
-        // busca el que interesa porque el trabajo programado de
-        // EventProcessorService tambien manda correos por su cuenta.
-        ArgumentCaptor<SimpleMailMessage> mensajes = ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(correoDePruebas, atLeastOnce()).send(mensajes.capture());
+        // Se revisa el mensaje entregado al emisor. Ahora es exactamente uno: el
+        // trabajo programado de EventProcessorService ya no corre en pruebas
+        // (ver PruebaDeIntegracion), asi que no hay correos ajenos de por medio.
+        ArgumentCaptor<MimeMessage> mensajes = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(correoDePruebas, times(1)).send(mensajes.capture());
 
-        SimpleMailMessage confirmacion = mensajes.getAllValues().stream()
-                .filter(m -> m.getTo() != null && m.getTo().length > 0 && correo.equals(m.getTo()[0]))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no se envio ningun correo a " + correo));
+        MimeMessage confirmacion = mensajes.getValue();
+        assertEquals(correo, CorreosDePrueba.destinatario(confirmacion),
+                "el correo de confirmacion debe ir a quien se registro");
 
-        assertNotNull(confirmacion.getText(), "el correo de confirmacion no puede ir vacio");
-        assertTrue(confirmacion.getText().contains("/auth/confirm?token="),
-                "el correo debe llevar el enlace de confirmacion: " + confirmacion.getText());
+        // El detalle de lo que va dentro esta en CorreoDeConfirmacionIT; aqui
+        // basta con que el enlace este, que es lo que hace util al correo.
+        String texto = CorreosDePrueba.parteDeTexto(confirmacion);
+        assertNotNull(texto, "el correo de confirmacion no puede ir vacio");
+        assertTrue(texto.contains("/auth/confirm?token="),
+                "el correo debe llevar el enlace de confirmacion: " + texto);
     }
 
     @Test

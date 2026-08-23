@@ -7,6 +7,7 @@ import org.springframework.mail.MailException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -25,11 +26,14 @@ import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.model.mappers.RoleMapper;
 import ues.edu.sv.education.repository.*;
 import ues.edu.sv.education.service.EmailService;
+import ues.edu.sv.education.service.PlantillaDeCorreo;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -53,6 +57,15 @@ public class AuthService {
     private final AuthenticationManager authManager;
     private final PasswordEncoder passwordEncoder;
     private static final long TOKEN_EXPIRATION_MINUTES = 5;
+
+    /**
+     * Donde vive el formulario de registro, que es el mecanismo de reenvio del
+     * enlace de confirmacion: registrarse otra vez con el mismo correo
+     * sobreescribe la cuenta no confirmada y genera un token nuevo. El correo de
+     * "enlace vencido" manda ahi.
+     */
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String urlDelFrontend;
 
     public LoginResponseDto loging(UserLoginDto loginDto) {
         Authentication auth = authManager.authenticate(
@@ -200,7 +213,7 @@ public class AuthService {
 
         // Enviar correo de confirmacion. Si falla NO se propaga: la cuenta ya
         // esta creada y el token guardado, y eso vale mas que la notificacion.
-        boolean correoEnviado = enviarCorreoDeVerificacion(savedUser.getEmail(), token);
+        boolean correoEnviado = enviarCorreoDeVerificacion(savedUser.getEmail(), persona.getNombres(), token);
 
         return new RegistroMedicoResponseDto(
                 savedUser.getUserID(),
@@ -235,15 +248,21 @@ public class AuthService {
      *
      * @return true si el correo salio; false si el envio fallo.
      */
-    private boolean enviarCorreoDeVerificacion(String toEmail, String token) {
+    private boolean enviarCorreoDeVerificacion(String toEmail, String nombre, String token) {
         String link = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/auth/confirm")
                 .queryParam("token", token)
                 .toUriString();
+
+        // HashMap y no Map.of porque el nombre puede venir vacio y Map.of no
+        // acepta valores nulos; la plantilla ya sabe saludar sin nombre.
+        Map<String, Object> datos = new HashMap<>();
+        datos.put("nombre", nombre);
+        datos.put("enlace", link);
+        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+
         try {
-            emailService.sendEmail(toEmail, "Confirma tu registro",
-                    "Bienvenido. Para activar tu cuenta, haz clic en el siguiente enlace:\n" + link
-                            + "\n\nEste enlace expira en " + TOKEN_EXPIRATION_MINUTES + " minutos.");
+            emailService.enviarCorreo(toEmail, PlantillaDeCorreo.CONFIRMACION_DE_REGISTRO, datos);
             return true;
         } catch (MailException e) {
             // Nivel error y con la excepcion completa: el stack trace lleva la
@@ -271,6 +290,12 @@ public class AuthService {
         }
 
         if (verificationToken.isExpired()) {
+            // Se avisa por correo ANTES de cortar. Quien llega aqui viene de su
+            // bandeja de entrada, hizo clic y solo va a ver una pagina que dice
+            // "expirado"; el correo es lo que le explica que hacer para salir del
+            // atasco, y le queda guardado. El envio no puede tumbar la respuesta:
+            // el enlace sigue vencido con correo o sin el.
+            avisarQueElEnlaceVencio(verificationToken.getUser().getEmail());
             throw new GeneralException("El token ha expirado");
         }
 
@@ -280,5 +305,29 @@ public class AuthService {
 
         verificationToken.setUsed(true);
         verificationTokenRepository.save(verificationToken);
+    }
+
+    /**
+     * Avisa que el enlace de confirmacion ya no sirve y como conseguir otro.
+     *
+     * El "como" no es obvio y por eso hace falta decirlo: no hay endpoint de
+     * reenvio, el mecanismo es volver a llenar el formulario de registro con el
+     * mismo correo. Mientras la cuenta siga sin confirmar eso no da error de
+     * duplicado; la sobreescribe y emite un token nuevo (ver registrarMedico,
+     * mas arriba).
+     *
+     * Igual que en el registro, un fallo de correo se registra y se sigue: la
+     * respuesta al usuario no depende de que el SMTP este de buenas.
+     */
+    private void avisarQueElEnlaceVencio(String toEmail) {
+        Map<String, Object> datos = new HashMap<>();
+        datos.put("enlaceRegistro", urlDelFrontend + "/register");
+        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+        try {
+            emailService.enviarCorreo(toEmail, PlantillaDeCorreo.TOKEN_EXPIRADO, datos);
+        } catch (MailException e) {
+            log.error("No se pudo avisar a {} de que su enlace de confirmacion vencio. "
+                    + "Puede conseguir uno nuevo registrandose otra vez con el mismo correo.", toEmail, e);
+        }
     }
 }

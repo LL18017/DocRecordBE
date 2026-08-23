@@ -1,0 +1,20 @@
+Se abrió una sesión con tu cuenta de DocRecord Sv.
+
+Cuenta:        [(${correo})]
+Fecha y hora:  [(${fechaHora})]
+[# th:if="${ip}"]Dirección:     [(${ip})]
+[/]
+Si fuiste tú, no tienes que hacer nada.
+
+SI NO RECONOCES ESTE ACCESO, alguien más tiene tu contraseña y con ella puede
+ver expedientes de pacientes. Haz esto, en este orden:
+
+  1. Entra a DocRecord Sv y cambia tu contraseña de inmediato.
+  2. No repitas una contraseña que ya uses en otro sitio.
+  3. Avisa al administrador del sistema de tu clínica para que revise qué se
+     consultó con tu cuenta.
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

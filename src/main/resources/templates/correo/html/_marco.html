@@ -1,0 +1,43 @@
+<!--/*
+  Cabecera y pie compartidos por los tres correos de DocRecord Sv.
+
+  Estan aparte porque son la parte que DEBE verse igual en todos: si cada
+  plantilla se pinta su propio encabezado, al tercer correo el azul ya no es el
+  mismo y la identidad se pierde. Lo unico que cambia de un correo a otro es el
+  contenido del centro.
+
+  Reglas de este archivo (y de los tres correos):
+    - Tablas, no flexbox ni grid: Outlook usa el motor de Word para renderizar
+      y no soporta ninguna de las dos cosas.
+    - Estilos EN LINEA, no hojas externas ni <style>: Gmail descarta buena parte
+      de lo que no venga en el atributo style del propio elemento.
+    - bgcolor ademas de background-color, porque los clientes mas viejos solo
+      entienden el atributo.
+*/-->
+<table xmlns:th="http://www.thymeleaf.org" role="presentation" cellpadding="0" cellspacing="0" border="0">
+
+    <tr th:fragment="cabecera">
+        <td align="center" bgcolor="#1E3A5F"
+            style="background-color:#1E3A5F;padding:28px 24px 24px 24px;">
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:32px;font-weight:bold;color:#FFFFFF;">
+                DocRecord <span style="color:#E8A838;">Sv</span>
+            </div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#A9C0DC;padding-top:6px;">
+                Sistema de Gestión Clínica Ambulatoria
+            </div>
+        </td>
+    </tr>
+
+    <tr th:fragment="pie">
+        <td style="padding:20px 28px 28px 28px;border-top:1px solid #E2E8F0;">
+            <p style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#64748B;">
+                Este es un correo automático de DocRecord Sv. No respondas a esta dirección,
+                nadie lee el buzón desde el que se envía.
+            </p>
+            <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#94A3B8;">
+                Universidad de El Salvador &middot; Diseño de Sistemas II
+            </p>
+        </td>
+    </tr>
+
+</table>

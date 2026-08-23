@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--/*
+  Correo 1 de 3: confirmacion de registro.
+
+  Es el mas importante de los tres, porque sin el nadie entra al sistema: la
+  cuenta nace deshabilitada y solo este enlace la activa. De ahi que el enlace
+  aparezca DOS veces, como boton y como direccion escrita a la vista. Si el
+  cliente de correo bloquea los estilos, el boton se vuelve un enlace suelto
+  pero sigue siendo pulsable; y si ademas bloquea el HTML entero, queda la
+  version de texto (correo/texto/confirmacion-registro.txt).
+
+  Variables: nombre, enlace, minutos.
+*/-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Confirma tu cuenta de DocRecord Sv</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<!--/* Linea de vista previa: la que ensena la bandeja de entrada debajo del asunto. */-->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Activa tu cuenta con el enlace del correo. Vence en [[${minutos}]] minutos.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       bgcolor="#EEF2F7" style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+                   bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:10px;overflow:hidden;">
+
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+                <tr>
+                    <td bgcolor="#E8A838" height="4"
+                        style="background-color:#E8A838;height:4px;line-height:4px;font-size:0;">&nbsp;</td>
+                </tr>
+
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            Confirma tu cuenta
+                        </h1>
+                        <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Hola<span th:if="${nombre}" th:text="' ' + ${nombre}">
+                            </span>, se creó una cuenta en DocRecord Sv con este correo.
+                        </p>
+                        <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Para poder iniciar sesión falta un paso: confirmar que la dirección es tuya.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td align="center" style="padding:0 28px 24px 28px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                            <tr>
+                                <td align="center" bgcolor="#E8A838" style="background-color:#E8A838;border-radius:6px;">
+                                    <a th:href="${enlace}" href="#"
+                                       style="display:inline-block;padding:16px 34px;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;color:#1E3A5F;text-decoration:none;border-radius:6px;">
+                                        Activar mi cuenta
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:0 28px 24px 28px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                               bgcolor="#FDF6E7" style="background-color:#FDF6E7;border-radius:6px;">
+                            <tr>
+                                <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#7A5B12;">
+                                    El enlace vence en
+                                    <strong th:text="${minutos} + ' minutos'">5 minutos</strong>.
+                                    Después de eso deja de servir y hay que pedir uno nuevo.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:0 28px 28px 28px;">
+                        <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#475569;">
+                            ¿No se abre el botón? Copia esta dirección y pégala en tu navegador:
+                        </p>
+                        <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;word-break:break-all;">
+                            <a th:href="${enlace}" th:text="${enlace}" href="#"
+                               style="color:#1E3A5F;text-decoration:underline;">enlace</a>
+                        </p>
+                        <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#64748B;">
+                            Si no fuiste tú quien se registró, no hagas clic en nada. La cuenta no se
+                            activa sola y el enlace vence por su cuenta.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+            </table>
+
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

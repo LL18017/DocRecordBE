@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!--/*
+  Correo 2 de 3: aviso de inicio de sesion.
+
+  No es una felicitacion, es una alerta de seguridad, y una alerta que no dice
+  que hacer no sirve de nada. Antes el cuerpo entero era la frase "Se ha
+  detectado un nuevo inicio de sesión": quien la leyera sin reconocer el acceso
+  se quedaba igual de indefenso que antes de abrir el correo. Aqui se dice
+  cuando fue, desde donde si se sabe, y que hacer si no fue la persona.
+
+  Variables: correo, fechaHora, ip (puede venir vacia).
+*/-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nuevo inicio de sesión en DocRecord Sv</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Se abrió una sesión con tu cuenta el [[${fechaHora}]].
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       bgcolor="#EEF2F7" style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+                   bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:10px;overflow:hidden;">
+
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+                <tr>
+                    <td bgcolor="#E8A838" height="4"
+                        style="background-color:#E8A838;height:4px;line-height:4px;font-size:0;">&nbsp;</td>
+                </tr>
+
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            Se abrió una sesión con tu cuenta
+                        </h1>
+                        <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Te avisamos cada vez que alguien entra a DocRecord Sv con tu cuenta.
+                            Si fuiste tú, no tienes que hacer nada.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:0 28px 24px 28px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                               bgcolor="#F1F5F9" style="background-color:#F1F5F9;border-radius:6px;">
+                            <tr>
+                                <td style="padding:8px 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Cuenta
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 10px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;word-break:break-all;"
+                                    th:text="${correo}">medico@ues.edu.sv
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Fecha y hora
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 10px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${fechaHora}">22 de agosto de 2026, 09:14
+                                </td>
+                            </tr>
+                            <tr th:if="${ip}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Dirección desde la que se conectó
+                                </td>
+                            </tr>
+                            <tr th:if="${ip}">
+                                <td style="padding:0 16px 12px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${ip}">190.0.0.1
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:0 28px 28px 28px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                               bgcolor="#FDF6E7" style="background-color:#FDF6E7;border-radius:6px;">
+                            <tr>
+                                <td style="padding:16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#7A5B12;">
+                                    <strong style="color:#7A5B12;">Si no reconoces este acceso</strong>, alguien más
+                                    tiene tu contraseña y con ella puede ver expedientes de pacientes. Haz esto,
+                                    en este orden:
+                                    <br><br>
+                                    1. Entra a DocRecord Sv y cambia tu contraseña de inmediato.<br>
+                                    2. No repitas una contraseña que ya uses en otro sitio.<br>
+                                    3. Avisa al administrador del sistema de tu clínica para que revise qué se
+                                    consultó con tu cuenta.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+            </table>
+
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

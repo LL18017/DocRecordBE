@@ -1,5 +1,9 @@
 package ues.edu.sv.education;
 
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
+import org.junit.jupiter.api.BeforeEach;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -10,6 +14,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Properties;
 
 /**
  * Base de las pruebas de integracion: levanta el contexto de Spring contra una
@@ -73,6 +78,27 @@ public abstract class PruebaDeIntegracion {
     @MockitoBean
     protected JavaMailSender correoDePruebas;
 
+    /**
+     * Le ensena al emisor simulado a fabricar mensajes.
+     *
+     * Desde que los correos se mandan como MimeMessage (multipart/alternative,
+     * ver EmailService), EmailService pide el mensaje con
+     * mailSender.createMimeMessage(). Un mock devuelve null en todo lo que no se
+     * le haya ensenado, asi que sin esto CUALQUIER envio moriria con un
+     * NullPointerException que no tiene nada que ver con lo que se esta
+     * probando. El mensaje que se devuelve es real y vacio; lo que interesa es
+     * que despues se pueda leer con verify() lo que se escribio en el.
+     *
+     * Va aqui y no en cada prueba por lo mismo que el mock: para que cubra a
+     * todas sin que nadie tenga que acordarse. Mockito reinicia el mock entre
+     * pruebas, de ahi que se vuelva a ensenar antes de cada una.
+     */
+    @BeforeEach
+    void prepararElEmisorSimulado() {
+        Mockito.doAnswer(invocacion -> new MimeMessage(Session.getInstance(new Properties())))
+                .when(correoDePruebas).createMimeMessage();
+    }
+
     private static final String HOST = System.getProperty("test.db.host", "localhost");
     private static final String PUERTO = System.getProperty("test.db.port", "5432");
     private static final String USUARIO = System.getProperty("test.db.user", "postgres");
@@ -127,5 +153,14 @@ public abstract class PruebaDeIntegracion {
         registro.add("spring.mail.host", () -> "smtp.invalido.pruebas");
         registro.add("spring.mail.username", () -> "pruebas@invalido.local");
         registro.add("spring.mail.password", () -> "sin-clave");
+
+        // El trabajo programado de EventProcessorService NO arranca en pruebas.
+        // Corriendo de fondo cada 15 segundos se llevaba los eventos que las
+        // pruebas acababan de crear, y el resultado dependia de quien llegara
+        // primero: por eso hasta ahora habia que revisar los correos con
+        // atLeastOnce() en vez de con un numero exacto. Las pruebas que quieren
+        // ver el procesador funcionando lo llaman a mano, que ademas es la unica
+        // forma de saber CUANDO termino.
+        registro.add("app.eventos.retraso-inicial-ms", () -> 24 * 60 * 60 * 1000L);
     }
 }

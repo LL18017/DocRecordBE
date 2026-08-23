@@ -11,12 +11,18 @@ import ues.edu.sv.education.repository.*;
 import ues.edu.sv.education.service.user.UserService;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class EventProcessorService {
+
+    private static final DateTimeFormatter FECHA_LEGIBLE =
+            DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("es-SV"));
 
     private final EventRepository eventRepository;
     private final VerificationTokenRepository verificationTokenRepository;
@@ -25,7 +31,12 @@ public class EventProcessorService {
     private final UserService userService;
     private final EventTypeRepository eventTypeRepository;
     private final EventStatusRepository eventStatusRepository;
-    @Scheduled(fixedDelay = 15000)
+
+    // El intervalo y el retraso inicial pasan a ser configurables: las pruebas
+    // ponen un retraso enorme para que el trabajo no arranque solo y no compita
+    // con los correos que ellas mismas quieren revisar.
+    @Scheduled(fixedDelayString = "${app.eventos.intervalo-ms:15000}",
+               initialDelayString = "${app.eventos.retraso-inicial-ms:0}")
     @Transactional
     public void processLoginEvents() {
 
@@ -44,29 +55,19 @@ public class EventProcessorService {
                 EventCodeEnums eventCode = EventCodeEnums.fromId(event.getEventType().getEventTypeId());
                 switch (eventCode){
                     case EventCodeEnums.LOGIN:
-                        emailService.sendEmail(event.getUserEmail(),event.getEventType().getDescription(), event.getDescription());
+                        // El cuerpo ya no sale de event_types.description: ese
+                        // texto era una etiqueta de catalogo, no un aviso de
+                        // seguridad. Ahora lo pone la plantilla.
+                        Map<String, Object> datos = new HashMap<>();
+                        datos.put("correo", event.getUserEmail());
+                        datos.put("fechaHora", FECHA_LEGIBLE.format(event.getCreatedAt()));
+                        datos.put("ip", event.getIpAddress());
+                        emailService.enviarCorreo(event.getUserEmail(),
+                                PlantillaDeCorreo.AVISO_DE_INICIO_DE_SESION, datos);
                         event.setEventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PROCESSED.getId()));
                         event.setProcessedAt(LocalDateTime.now());
                         eventRepository.save(event);
                         break;
-                        /*
-                    case EventCodeEnums.CONFIRM_ACOUNT:
-                        String id= event.getRef();
-                        VerificationToken token = verificationTokenRepository.getReferenceById(Integer.valueOf(id));
-                        if (token.getExpiresAt().isAfter(LocalDateTime.now())){
-                            event.setEventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.FAILED.getId()));
-                            emailService.sendEmail(event.getUserEmail(),event.getEventType().getDescription(), "EL token para confirmar su cuenta ha expirado , " +
-                                    "la informacion relacionda a esta ha sido eliminada ");
-                            event.setProcessedAt(LocalDateTime.now());
-                            eventRepository.save(event);
-                            //Borrar token
-                            verificationTokenRepository.delete(token);
-                            //BORRA INFO DE USUARIO
-                            userService.deleteUser(event.getUserEmail());
-                        }
-
-                        break;
-                        */
 
                 }
 

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!--/*
+  Correo 3 de 3: el enlace de confirmacion venció.
+
+  Un aviso de "expiró" sin salida deja a la persona atascada. El dato util es
+  que en DocRecord Sv volver a registrarse con el MISMO correo no da error:
+  mientras la cuenta siga sin confirmar, el registro la sobreescribe y genera
+  un enlace nuevo (ver AuthService.registrarMedico). Es decir, el propio
+  formulario de registro ES el boton de reenviar. Eso es lo que este correo
+  tiene que explicar.
+
+  Variables: enlaceRegistro, minutos.
+*/-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tu enlace de confirmación venció</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Regístrate de nuevo con el mismo correo y te llega un enlace nuevo.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       bgcolor="#EEF2F7" style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+                   bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:10px;overflow:hidden;">
+
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+                <tr>
+                    <td bgcolor="#E8A838" height="4"
+                        style="background-color:#E8A838;height:4px;line-height:4px;font-size:0;">&nbsp;</td>
+                </tr>
+
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            El enlace ya no sirve
+                        </h1>
+                        <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            El enlace para confirmar tu cuenta de DocRecord Sv venció. Dura
+                            <strong th:text="${minutos} + ' minutos'">5 minutos</strong> desde que se envía,
+                            y ese plazo ya pasó. Tu cuenta sigue creada, pero todavía sin activar.
+                        </p>
+                        <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Conseguir uno nuevo toma un minuto: llena otra vez el formulario de registro
+                            <strong>con este mismo correo</strong>. No te va a decir que ya existe: mientras la
+                            cuenta no esté confirmada, el registro la actualiza y te manda un enlace nuevo.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td align="center" style="padding:0 28px 24px 28px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                            <tr>
+                                <td align="center" bgcolor="#E8A838" style="background-color:#E8A838;border-radius:6px;">
+                                    <a th:href="${enlaceRegistro}" href="#"
+                                       style="display:inline-block;padding:16px 34px;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;color:#1E3A5F;text-decoration:none;border-radius:6px;">
+                                        Pedir un enlace nuevo
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:0 28px 28px 28px;">
+                        <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#475569;">
+                            ¿No se abre el botón? Copia esta dirección y pégala en tu navegador:
+                        </p>
+                        <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;word-break:break-all;">
+                            <a th:href="${enlaceRegistro}" th:text="${enlaceRegistro}" href="#"
+                               style="color:#1E3A5F;text-decoration:underline;">enlace</a>
+                        </p>
+                        <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#64748B;">
+                            Cuando te llegue el correo nuevo, ábrelo de una vez: el plazo vuelve a correr
+                            desde ese momento.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+            </table>
+
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

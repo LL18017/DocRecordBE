@@ -182,6 +182,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
+        <!--
+            Plantillas de los correos. Thymeleaf es el motor de plantillas de
+            Spring Boot y no arrastra nada nuevo: se integra solo, resuelve
+            desde src/main/resources/templates y sabe procesar tanto HTML como
+            texto plano, que es justo lo que necesita un correo
+            multipart/alternative. La alternativa era concatenar cadenas en
+            Java, que es de donde venimos.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
 
 
     </dependencies>
