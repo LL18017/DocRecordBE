@@ -3,9 +3,12 @@ package ues.edu.sv.education.controller.auth;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.User.AltaUsuarioResponseDto;
+import ues.edu.sv.education.model.dto.User.AsignarContrasenaRequestDto;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
 import ues.edu.sv.education.service.user.UserService;
@@ -65,9 +68,23 @@ public class UserControler {
     // tenia como marcar el campo culpable. Con @Valid el fallo se detiene en
     // el borde y el cuerpo del error habla de email, userName o password.
     @PostMapping()
-    public ResponseEntity<UserResponseDto> createRole(
+    public ResponseEntity<AltaUsuarioResponseDto> createRole(
             @Valid @RequestBody  UserRequestDto userRequestDto
     ) {
-        return ResponseEntity.ok(userService.createUser(userRequestDto));
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.createUser(userRequestDto));
+    }
+
+    // Asignacion directa de contrasena por un administrador. Ademas del
+    // hasRole('ADMIN') de clase, UserService.asignarContrasena vuelve a
+    // resolver quien opera desde el token via AdminAutenticado -misma
+    // defensa en profundidad que ConsultaService/MedicoAutenticado- y ahi
+    // vive tambien la regla de que un admin no puede tocar la contrasena de
+    // otro admin.
+    @PostMapping("/{userId}/password")
+    public ResponseEntity<UserResponseDto> asignarContrasena(
+            @PathVariable(required = true) int userId,
+            @Valid @RequestBody AsignarContrasenaRequestDto request
+    ) {
+        return ResponseEntity.ok(userService.asignarContrasena(userId, request.password()));
     }
 }

@@ -4,12 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import ues.edu.sv.education.model.entity.User;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +44,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class AltaDeUsuarioIT extends PruebaClinica {
 
+    @Autowired private JdbcTemplate jdbc;
+
     private String tokenDeAdmin;
 
     @BeforeEach
@@ -56,7 +61,7 @@ class AltaDeUsuarioIT extends PruebaClinica {
                         .content("""
                                 {"email":"%s","userName":"Personal De Turno","password":"%s"}
                                 """.formatted(correo, clave)))
-                .andExpect(status().is2xxSuccessful())
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(cuerpo);
     }
@@ -64,6 +69,16 @@ class AltaDeUsuarioIT extends PruebaClinica {
     private User leerDeLaBase(String correo) {
         return usuarios.findByEmailContainingIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("POST /user no creo el usuario " + correo));
+    }
+
+    /** El token de verificacion sin usar que quedo para esta cuenta. Ver CorreoDeConfirmacionIT. */
+    private String tokenGuardadoDe(String correo) {
+        List<String> tokens = jdbc.queryForList(
+                "select t.token from verification_token t join users u on u.user_id = t.user_id "
+                        + "where upper(u.email) = upper(?) and t.used = false",
+                String.class, correo);
+        assertEquals(1, tokens.size(), "la cuenta debe quedar con un solo token sin usar");
+        return tokens.get(0);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -92,19 +107,22 @@ class AltaDeUsuarioIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("la cuenta creada por POST /user puede iniciar sesion una vez habilitada")
+    @DisplayName("la cuenta creada por POST /user puede iniciar sesion una vez confirmada por correo")
     void laCuentaCreadaPuedeAutenticarseSiSeHabilita() throws Exception {
-        // El cifrado no sirve de nada si rompe el inicio de sesion. Se habilita
-        // a mano porque POST /user todavia crea la cuenta con enabled = false y
-        // sin token de verificacion (ver el comentario de UserService.
-        // createUser): sin este paso el login responde "Usuario no ha
-        // confirmado su cuenta aun" y no se llegaria a comprobar la contrasena.
+        // El cifrado no sirve de nada si rompe el inicio de sesion. Se confirma
+        // por el mismo enlace que recibiria la persona -GET /auth/confirm- y no
+        // fijando enabled a mano: eso probaria una cuenta habilitada por un
+        // atajo que /auth/login nunca ve en produccion.
         String correo = correoUnico("alta.login");
-        crearCuenta(correo, CLAVE);
+        JsonNode alta = crearCuenta(correo, CLAVE);
+        assertTrue(alta.get("correoDeVerificacionEnviado").asBoolean(),
+                "con el emisor simulado funcionando, el correo debe reportarse como enviado");
 
-        User creado = leerDeLaBase(correo);
-        creado.setEnabled(true);
-        usuarios.saveAndFlush(creado);
+        mockMvc.perform(get("/auth/confirm").param("token", tokenGuardadoDe(correo)))
+                .andExpect(status().is3xxRedirection());
+
+        assertTrue(leerDeLaBase(correo).isEnabled(),
+                "GET /auth/confirm con un token valido debe habilitar la cuenta");
 
         String respuesta = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
