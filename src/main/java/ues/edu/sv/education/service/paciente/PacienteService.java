@@ -58,7 +58,10 @@ public class PacienteService {
 
     @Transactional(readOnly = true)
     public java.util.List<PacienteResponseDto> buscar(String texto) {
-        return pacienteRepository.buscar(texto).stream().map(this::toDto).toList();
+        // Nunca null contra la query: ver el comentario en
+        // PacienteRepository.buscar sobre por que.
+        String filtro = texto == null ? "" : texto;
+        return pacienteRepository.buscar(filtro).stream().map(this::toDto).toList();
     }
 
     private Persona resolverPersona(PersonaRequestDto request) {
