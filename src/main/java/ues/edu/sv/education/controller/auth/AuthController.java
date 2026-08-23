@@ -61,11 +61,11 @@ public class AuthController {
 
     @Operation(
             summary = "Registrar usuario",
-            description = "Crea un nuevo usuario en el sistema con su email, contraseña, roles y tipo de usuario."
+            description = "Autogestion publica: crea un nuevo usuario con rol MEDICO. El rol no es configurable por el cliente."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Usuario creado exitosamente"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (email, contraseña, roles o tipo de usuario faltantes/incorrectos)"),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (email, contraseña o tipo de usuario faltantes/incorrectos)"),
             @ApiResponse(responseCode = "409", description = "El email ya está registrado")
     })
     @PostMapping("/register")

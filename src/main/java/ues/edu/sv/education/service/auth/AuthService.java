@@ -19,6 +19,7 @@ import ues.edu.sv.education.model.dto.User.UserResponseDto;
 import ues.edu.sv.education.model.entity.*;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
+import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.model.mappers.RoleMapper;
 import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.repository.*;
@@ -29,7 +30,6 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -133,11 +133,13 @@ public class AuthService {
         UserType userType = userTypeRepository.getReferenceById(request.userType());
         userToSave.setUserType(userType);
 
-        Set<Role> roles = request.roles()
-                .stream()
-                .map(roleRepository::getReferenceById)
-                .collect(Collectors.toSet());
-        userToSave.setRoles(roles);
+        // El rol NUNCA sale del request: /auth/register es autogestion publica
+        // (permitAll en BasicConfiguration), asi que un cliente que controlara
+        // ese campo podria autoasignarse ADMIN. Este endpoint es alta de
+        // medicos; cualquier otro rol lo asigna despues un administrador por
+        // un endpoint autenticado.
+        Role medico = roleRepository.getReferenceById(RolesEnum.MEDICO.getId());
+        userToSave.setRoles(Set.of(medico));
 
         // El usuario queda deshabilitado hasta que confirme el correo
         userToSave.setEnabled(false);
