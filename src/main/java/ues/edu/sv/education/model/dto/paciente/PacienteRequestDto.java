@@ -15,10 +15,6 @@ public record PacienteRequestDto(
         @Valid
         PersonaRequestDto persona,
 
-        @Schema(description = "Numero de expediente", example = "P-000001")
-        @NotBlank(message = "El expediente no puede estar vacio")
-        @Size(max = 12, message = "El expediente no puede superar los 12 caracteres")
-        String expediente,
 
         @Schema(description = "Tipo de sangre", example = "O+")
         @Size(max = 3, message = "El tipo de sangre no puede superar los 3 caracteres")

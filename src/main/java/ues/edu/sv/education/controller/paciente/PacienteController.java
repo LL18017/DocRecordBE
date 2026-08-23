@@ -57,4 +57,32 @@ public class PacienteController {
     ) {
         return ResponseEntity.ok(pacienteService.buscar(buscar));
     }
+
+    @Operation(summary = "Ver un paciente", description = "404 si no existe.")
+    @GetMapping("/{personaId}")
+    public ResponseEntity<PacienteResponseDto> obtener(@PathVariable("personaId") Long personaId) {
+        return ResponseEntity.ok(pacienteService.obtener(personaId));
+    }
+
+    @Operation(
+            summary = "Actualizar un paciente",
+            description = "Completa sin destruir: un campo null significa 'no lo estoy tocando'. "
+                    + "El expediente no se puede cambiar; 409 si el DUI no coincide con el registrado."
+    )
+    @PutMapping("/{personaId}")
+    public ResponseEntity<PacienteResponseDto> actualizar(
+            @PathVariable("personaId") Long personaId,
+            @Valid @RequestBody PacienteRequestDto request) {
+        return ResponseEntity.ok(pacienteService.actualizar(personaId, request));
+    }
+
+    @Operation(
+            summary = "Dar de baja a un paciente",
+            description = "Borra solo su condicion de paciente. La persona se conserva, porque puede ser ademas medico o enfermera."
+    )
+    @DeleteMapping("/{personaId}")
+    public ResponseEntity<Void> eliminar(@PathVariable("personaId") Long personaId) {
+        pacienteService.eliminar(personaId);
+        return ResponseEntity.noContent().build();
+    }
 }

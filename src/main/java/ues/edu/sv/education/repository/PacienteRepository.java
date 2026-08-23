@@ -26,4 +26,9 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     ORDER BY per.apellidos, per.nombres
 """)
     List<Paciente> buscar(@Param("buscar") String buscar);
+
+    // El correlativo lo entrega una secuencia de PostgreSQL, no MAX+1: dos
+    // altas simultaneas leerian el mismo maximo y chocarian contra el UNIQUE.
+    @Query(value = "SELECT nextval('expediente_seq')", nativeQuery = true)
+    Long siguienteCorrelativoDeExpediente();
 }

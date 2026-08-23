@@ -46,7 +46,7 @@ public class PacienteService {
 
         Paciente paciente = Paciente.builder()
                 .persona(persona)
-                .expediente(request.expediente())
+                .expediente(generarExpediente())
                 .tipoSangre(request.tipoSangre())
                 .creadoEn(LocalDateTime.now())
                 .build();
@@ -62,6 +62,86 @@ public class PacienteService {
         // PacienteRepository.buscar sobre por que.
         String filtro = texto == null ? "" : texto;
         return pacienteRepository.buscar(filtro).stream().map(this::toDto).toList();
+    }
+
+    /**
+     * Numero de expediente correlativo, con el formato EXP-000001.
+     *
+     * Lo genera el sistema y no quien registra: un humano no puede saber cual
+     * es el siguiente numero libre, y si lo adivina mal choca contra el UNIQUE
+     * de la columna despues de haber llenado todo el formulario.
+     */
+    private String generarExpediente() {
+        Long correlativo = pacienteRepository.siguienteCorrelativoDeExpediente();
+        return String.format("EXP-%06d", correlativo);
+    }
+
+
+    @Transactional(readOnly = true)
+    public PacienteResponseDto obtener(Long personaId) {
+        return toDto(buscarPacienteOFallar(personaId));
+    }
+
+    /**
+     * Actualiza los datos del paciente y los de su persona.
+     *
+     * Sigue la misma regla que el alta: completar nunca destruye. Un campo que
+     * llegue null se interpreta como "no lo estoy tocando", no como "borralo".
+     * Sin eso, un formulario que solo edita el telefono borraria la direccion.
+     *
+     * El expediente NO se toca: es un correlativo emitido por el sistema y
+     * cambiarlo romperia cualquier referencia en papel al mismo expediente.
+     */
+    @Transactional
+    public PacienteResponseDto actualizar(Long personaId, PacienteRequestDto request) {
+
+        Paciente paciente = buscarPacienteOFallar(personaId);
+        Persona persona = paciente.getPersona();
+        PersonaRequestDto datos = request.persona();
+
+        if (datos != null) {
+            // El DUI es la identidad que sostiene el mecanismo de no duplicar
+            // personas. Cambiarlo en silencio convertiria a esta persona en
+            // otra, asi que se rechaza en vez de aceptarlo.
+            if (!isBlank(datos.dui())
+                    && persona.getDui() != null
+                    && !datos.dui().equals(persona.getDui())) {
+                throw new GeneralException(
+                        "El DUI no coincide con el de la persona registrada", "409");
+            }
+            if (!isBlank(datos.dui()) && persona.getDui() == null) persona.setDui(datos.dui());
+            if (!isBlank(datos.nombres())) persona.setNombres(datos.nombres());
+            if (!isBlank(datos.apellidos())) persona.setApellidos(datos.apellidos());
+            if (datos.fechaNacimiento() != null) persona.setFechaNacimiento(datos.fechaNacimiento());
+            if (!isBlank(datos.sexo())) persona.setSexo(datos.sexo());
+            if (!isBlank(datos.telefono())) persona.setTelefono(datos.telefono());
+            if (!isBlank(datos.direccion())) persona.setDireccion(datos.direccion());
+        }
+
+        if (!isBlank(request.tipoSangre())) paciente.setTipoSangre(request.tipoSangre());
+
+        personaRepository.save(persona);
+        pacienteRepository.save(paciente);
+
+        return toDto(paciente);
+    }
+
+    /**
+     * Da de baja al paciente.
+     *
+     * Se borra SOLO la fila de `pacientes`, nunca la persona: esa misma
+     * identidad puede ser ademas medico o enfermera del sistema, y borrarla
+     * arrastraria sus otros papeles. Dejar de ser paciente no es dejar de
+     * existir.
+     */
+    @Transactional
+    public void eliminar(Long personaId) {
+        pacienteRepository.delete(buscarPacienteOFallar(personaId));
+    }
+
+    private Paciente buscarPacienteOFallar(Long personaId) {
+        return pacienteRepository.findById(personaId)
+                .orElseThrow(() -> new NoResourceFoundException("Paciente no encontrado", "404"));
     }
 
     private Persona resolverPersona(PersonaRequestDto request) {
