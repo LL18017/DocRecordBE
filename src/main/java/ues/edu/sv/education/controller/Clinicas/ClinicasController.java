@@ -63,7 +63,7 @@ public class ClinicasController {
     @PutMapping("/{clinicaId}")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<ClinicasResponseDto> editar(
-            @PathVariable Integer clinicaId,
+            @PathVariable("clinicaId") Integer clinicaId,
             @Valid @RequestBody ClinicasRequestDto dto
     ) {
 
@@ -82,7 +82,7 @@ public class ClinicasController {
     @DeleteMapping("/{clinicaId}")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<Void> eliminar(
-            @PathVariable Integer clinicaId
+            @PathVariable("clinicaId") Integer clinicaId
     ) {
 
         log.info("Eliminando clínica {}", clinicaId);

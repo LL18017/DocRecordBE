@@ -30,7 +30,7 @@ public class PersonaController {
             description = "Devuelve la persona y que papeles clinicos ya tiene (esMedico, esEnfermera, esPaciente). 404 si no existe."
     )
     @GetMapping
-    public ResponseEntity<PersonaConRolesResponseDto> buscarPorDui(@RequestParam String dui) {
+    public ResponseEntity<PersonaConRolesResponseDto> buscarPorDui(@RequestParam("dui") String dui) {
         return ResponseEntity.ok(personaService.buscarPorDui(dui));
     }
 }

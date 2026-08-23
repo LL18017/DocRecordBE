@@ -11,11 +11,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.net.URI;
 import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
 import ues.edu.sv.education.model.dto.auth.RegistroMedicoRequestDto;
 import ues.edu.sv.education.model.dto.auth.RegistroMedicoResponseDto;
 import ues.edu.sv.education.model.dto.auth.UserLoginDto;
+import ues.edu.sv.education.controller.error.GeneralException;
+import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.service.auth.AuthService;
 import ues.edu.sv.education.service.auth.UserAuthService;
 
@@ -28,6 +34,13 @@ public class AuthController {
 
     private final UserAuthService service;
     private final AuthService authService;
+
+    /**
+     * Donde vive el frontend. En desarrollo es localhost:3000; en el despliegue
+     * sera otro dominio, de ahi la variable de entorno.
+     */
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String urlDelFrontend;
 
     @Operation(
             summary = "Iniciar sesión",
@@ -75,10 +88,44 @@ public class AuthController {
                 .body(authService.registrarMedico(request));
     }
 
-    @Operation(summary = "Confirmar registro por correo")
+    /**
+     * Confirma una cuenta desde el enlace enviado por correo.
+     *
+     * A diferencia del resto de la API, este endpoint lo abre UNA PERSONA en su
+     * navegador, no un cliente HTTP. Por eso nunca devuelve cuerpo: siempre
+     * redirige al frontend con el resultado en la URL, tanto si sale bien como
+     * si sale mal. Devolver texto plano dejaba al usuario mirando una pagina en
+     * blanco servida por la API, con el puerto del backend a la vista.
+     *
+     * Por la misma razon las excepciones se capturan aqui en vez de dejarlas
+     * subir al GlobalExceptionHandler: un JSON de error no le sirve a alguien
+     * que viene de su bandeja de entrada.
+     */
+    @Operation(summary = "Confirmar registro por correo",
+            description = "Redirige al frontend con el resultado; no devuelve cuerpo.")
     @GetMapping("/confirm")
-    public ResponseEntity<String> confirmAccount(@RequestParam String token) {
-        authService.confirmToken(token);
-        return ResponseEntity.ok("Cuenta confirmada exitosamente");
+    public ResponseEntity<Void> confirmAccount(@RequestParam("token") String token) {
+        String estado;
+        try {
+            authService.confirmToken(token);
+            estado = "ok";
+        } catch (IllegalStateException e) {
+            // El token ya se habia usado. NO es un error de cara al usuario:
+            // pasa cuando alguien hace clic dos veces, o cuando el cliente de
+            // correo pre-visita el enlace. La cuenta ya esta activa.
+            estado = "ya-confirmada";
+        } catch (GeneralException e) {
+            estado = "expirado";
+        } catch (NoResourceFoundException e) {
+            estado = "invalido";
+        }
+
+        URI destino = UriComponentsBuilder.fromUriString(urlDelFrontend)
+                .path("/confirmar")
+                .queryParam("estado", estado)
+                .build()
+                .toUri();
+
+        return ResponseEntity.status(HttpStatus.FOUND).location(destino).build();
     }
 }
