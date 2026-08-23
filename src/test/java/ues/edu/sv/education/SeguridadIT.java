@@ -16,9 +16,12 @@ import ues.edu.sv.education.repository.UserRepository;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -163,9 +166,35 @@ class SeguridadIT extends PruebaDeIntegracion {
         mockMvc.perform(get("/pacientes")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/personas").param("dui", "01234567-8"))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/especialidades")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/clinics/mias")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/user/all")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("el catalogo de especialidades SI es publico, porque lo usa el registro")
+    void elCatalogoDeEspecialidadesEsPublico() throws Exception {
+        // Excepcion deliberada a "todo requiere token": /register es una
+        // pantalla publica y necesita este catalogo para llenar su selector.
+        // Exigirle sesion dejaba el <select> en "Cargando especialidades..."
+        // para siempre y hacia imposible crear una cuenta desde la interfaz.
+        //
+        // Es seguro: son nombres de especialidades medicas, sin dato personal.
+        // Esta prueba existe para que nadie lo "corrija" cerrandolo de nuevo
+        // sin darse cuenta de que rompe el registro.
+        mockMvc.perform(get("/especialidades"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(7))))
+                .andExpect(jsonPath("$[0].nombre").exists());
+    }
+
+    @Test
+    @DisplayName("solo la lectura del catalogo es publica, no su modificacion")
+    void soloLaLecturaDelCatalogoEsPublica() throws Exception {
+        // Abrir GET no debe abrir el resto del recurso.
+        mockMvc.perform(post("/especialidades")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombre\":\"Especialidad Intrusa\",\"activa\":true}"))
+                .andExpect(status().is4xxClientError());
     }
 
     @Test

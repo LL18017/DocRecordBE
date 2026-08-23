@@ -28,6 +28,14 @@ public class JwtFilter extends OncePerRequestFilter {
         String path = req.getRequestURI();
 
         //  Permitir rutas públicas
+        // GET /especialidades es publico: lo consume el formulario de registro,
+        // donde todavia no hay sesion. Sin esta linea el filtro rechaza antes
+        // de que las reglas de autorizacion lleguen a permitirlo.
+        if (path.equals("/especialidades") && "GET".equalsIgnoreCase(req.getMethod())) {
+            chain.doFilter(req, res);
+            return;
+        }
+
         if (path.startsWith("/auth/") || path.startsWith("/swagger-ui")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-resources")

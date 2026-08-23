@@ -3,6 +3,7 @@ package ues.edu.sv.education.Security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -59,6 +60,13 @@ public class BasicConfiguration {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(request -> request
                         .requestMatchers("/auth/**").permitAll()
+                        // El catalogo de especialidades lo consume el formulario
+                        // publico de registro de medicos, donde todavia no hay
+                        // sesion. Exigirle token deja el <select> vacio y hace
+                        // imposible crear una cuenta desde la interfaz.
+                        // Es seguro abrirlo: son nombres de especialidades
+                        // medicas, sin dato personal alguno.
+                        .requestMatchers(HttpMethod.GET, "/especialidades").permitAll()
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
