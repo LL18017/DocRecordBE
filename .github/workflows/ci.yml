@@ -44,10 +44,10 @@ jobs:
 
     steps:
       - name: Descargar el codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configurar JDK 21 (Temurin) y cachear ~/.m2
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
