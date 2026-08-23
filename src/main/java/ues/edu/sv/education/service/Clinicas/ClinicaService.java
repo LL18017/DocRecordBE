@@ -32,6 +32,8 @@ public class ClinicaService {
                 .toList();
     }
 
+    // Las coordenadas pueden llegar null: la columna las admite y una clinica
+    // se da de alta con su nombre mucho antes de que alguien le tome el GPS.
     @Transactional
     public ClinicasResponseDto crear(ClinicasRequestDto dto) {
 
@@ -49,6 +51,19 @@ public class ClinicaService {
         return toResponseDto(clinica);
     }
 
+    /**
+     * Modifica una clinica existente.
+     *
+     * Sigue la misma regla que PacienteService.actualizar: completar nunca
+     * destruye. Una coordenada que llega null significa "no la estoy tocando",
+     * no "borrala". Sin esto, un formulario que solo corrige el nombre de la
+     * clinica dejaria su ubicacion en blanco, y la ubicacion se pierde justo
+     * cuando ya costo salir a tomarla.
+     *
+     * Para borrar unas coordenadas ya guardadas no basta con omitirlas: hace
+     * falta un endpoint explicito, porque borrar debe ser algo que se pide, no
+     * algo que pasa por descuido.
+     */
     @Transactional
     public ClinicasResponseDto editar(
             Integer clinicaId,
@@ -62,9 +77,11 @@ public class ClinicaService {
 
         exigirPropietarioOAdmin(clinica);
 
+        // El nombre es @NotBlank en el DTO, asi que siempre llega con valor.
         clinica.setName(dto.name());
-        clinica.setLatitud(dto.latitud());
-        clinica.setLongitud(dto.longitud());
+
+        if (dto.latitud() != null) clinica.setLatitud(dto.latitud());
+        if (dto.longitud() != null) clinica.setLongitud(dto.longitud());
 
         return toResponseDto(clinicasRepository.save(clinica));
     }
