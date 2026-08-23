@@ -156,8 +156,9 @@ public class EventProcessorService {
         Map<String, Object> datos = new HashMap<>();
         datos.put("correo", evento.getUserEmail());
         datos.put("fechaHora", FECHA_LEGIBLE.format(evento.getCreatedAt()));
-        // Hoy el login todavia no la guarda; la plantilla omite el dato si viene
-        // vacio en vez de ensenar un hueco.
+        // El login SI la guarda ahora (ver AuthService.loging). Puede seguir
+        // viniendo vacia en eventos creados antes de que se llenara, y la
+        // plantilla omite el bloque en ese caso en vez de ensenar un hueco.
         datos.put("ip", evento.getIpAddress());
 
         emailService.enviarCorreo(evento.getUserEmail(), PlantillaDeCorreo.AVISO_DE_INICIO_DE_SESION, datos);

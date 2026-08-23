@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,8 +53,38 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Credenciales incorrectas")
     })
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDto> getUser(@Valid @RequestBody UserLoginDto user) {
-        return ResponseEntity.ok(authService.loging(user));
+    public ResponseEntity<LoginResponseDto> getUser(@Valid @RequestBody UserLoginDto user,
+                                                    HttpServletRequest peticion) {
+        return ResponseEntity.ok(authService.loging(user, ipDeOrigen(peticion)));
+    }
+
+    /**
+     * IP desde la que se hizo la peticion, para el aviso de inicio de sesion.
+     *
+     * Es getRemoteAddr() a secas y no una lectura manual de X-Forwarded-For, y
+     * eso es deliberado. Detras del proxy inverso del despliegue, getRemoteAddr()
+     * devolveria la IP del proxy; quien lo arregla es
+     * server.forward-headers-strategy=native (application.properties), que hace
+     * que Tomcat sustituya ese valor por el del cliente PERO solo cuando la
+     * conexion viene de un proxy de su lista de confianza.
+     *
+     * Leer la cabecera aqui a mano seria creersela siempre, incluso en una
+     * peticion directa contra el puerto de la aplicacion: cualquiera podria
+     * decidir que IP queda escrita en un aviso de seguridad. Delegarlo en la
+     * valve es lo que mantiene el dato utilizable.
+     *
+     * Aun asi, esta IP vale lo que valga el proxy: solo es fiable si el proxy
+     * SOBRESCRIBE o ANADE la cabecera en vez de reenviar la que mando el
+     * cliente (ver la nota de application.properties). Se guarda como pista
+     * para el usuario, no como prueba.
+     *
+     * Se toma en el controller y se pasa como argumento en vez de que el
+     * servicio la busque en un RequestContextHolder: asi AuthService no depende
+     * de que exista una peticion HTTP en el hilo, y en la firma se ve que el
+     * dato viene de fuera.
+     */
+    private String ipDeOrigen(HttpServletRequest peticion) {
+        return peticion.getRemoteAddr();
     }
 
     @Operation(

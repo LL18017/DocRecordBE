@@ -67,7 +67,17 @@ public class AuthService {
     @Value("${app.frontend.url:http://localhost:3000}")
     private String urlDelFrontend;
 
-    public LoginResponseDto loging(UserLoginDto loginDto) {
+    /**
+     * Autentica y deja registrado el evento que disparara el aviso por correo.
+     *
+     * @param ipDeOrigen desde donde se conecto quien inicio sesion, ya resuelta
+     *                   por el controller. Ver AuthController.ipDeOrigen: detras
+     *                   de un proxy inverso solo es la IP del usuario si Tomcat
+     *                   la reescribio (server.forward-headers-strategy=native),
+     *                   y solo es fiable si el proxy sobrescribe la cabecera.
+     *                   Es una pista para el usuario, no una prueba.
+     */
+    public LoginResponseDto loging(UserLoginDto loginDto, String ipDeOrigen) {
         Authentication auth = authManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         loginDto.email(),
@@ -95,6 +105,11 @@ public class AuthService {
                 .eventStatus(
                         eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId())
                 )
+                // La columna existia desde V1 y nunca se llenaba, asi que el
+                // aviso de seguridad no decia desde donde se entro -- que es lo
+                // unico que permite reconocer un acceso ajeno. La plantilla ya
+                // sabia pintarla y omitirla si venia vacia; solo faltaba el dato.
+                .ipAddress(ipDeOrigen)
                 .userEmail(user.getUsername())
                 .createdAt(LocalDateTime.now())
                 .build();
