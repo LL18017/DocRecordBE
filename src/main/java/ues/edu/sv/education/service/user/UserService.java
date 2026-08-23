@@ -3,6 +3,7 @@ package ues.edu.sv.education.service.user;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
@@ -26,6 +27,9 @@ public class UserService {
     private final UserRepository userRepository;
     private final PersonaRepository personaRepository;
     private final RoleRepository roleRepository;
+    // El mismo bean que usa /auth/register: Argon2PasswordEncoder, definido en
+    // Security/BasicConfiguration.passwordEncoder().
+    private final PasswordEncoder passwordEncoder;
 
     public List<UserResponseDto> getAll(Integer inicio, Integer fin) {
         Pageable pageable = PageRequest.of(inicio, fin);
@@ -51,6 +55,43 @@ public class UserService {
         return UserMapper.toDto(user);
     }
 
+    /**
+     * Alta directa de una cuenta por un administrador (POST /user).
+     *
+     * ── La contrasena se cifra ANTES de guardarla ─────────────────────────
+     * Este metodo guardaba la contrasena tal como llegaba en el cuerpo de la
+     * peticion: la columna users.password quedaba con el texto legible, y se
+     * comprobo en la base de desarrollo leyendo "Docrecord2026!" sin cifrar.
+     * Cualquiera con acceso de lectura a la tabla -un SELECT, un volcado, una
+     * copia de seguridad mal guardada- se llevaba las credenciales de todo el
+     * personal de un expediente clinico; y como la gente reusa contrasenas, el
+     * dano no se habria quedado en este sistema. Ahora pasa por el mismo
+     * PasswordEncoder (argon2) que /auth/register, que es el unico flujo que
+     * lo hacia bien.
+     *
+     * ── PENDIENTE: la cuenta que crea este metodo todavia NO sirve ────────
+     * Nace con enabled = false -lo fija UserMapper.toEntity- y NO se le emite
+     * fila en verification_token, asi que no existe enlace de confirmacion
+     * que abrir y /auth/login le responde siempre "Usuario no ha confirmado
+     * su cuenta aun". Es decir: el administrador crea la cuenta, el cifrado ya
+     * es correcto, y aun asi nadie puede entrar con ella.
+     *
+     * NO se arregla aqui porque falta una decision de producto, no codigo:
+     * hay que definir quien da de alta al personal y si un medico dueno de su
+     * clinica puede registrar a sus enfermeras. Segun como se responda, la
+     * salida es una de estas y son incompatibles entre si:
+     *
+     *   a) emitir el token de verificacion y mandar el correo, igual que
+     *      AuthService.registrarMedico (ahi esta el patron completo: generar
+     *      el UUID, guardar VerificationToken y llamar al EmailService), o
+     *   b) crear la cuenta ya habilitada, porque el alta la hace un
+     *      administrador identificado y confirmar el correo sobra.
+     *
+     * Quien lo retome: el metodo esta a un paso de (a). Falta inyectar
+     * VerificationTokenRepository y EmailService, y repetir el bloque de
+     * AuthService.registrarMedico; el cifrado, que era el requisito previo,
+     * ya esta hecho.
+     */
     public UserResponseDto createUser(UserRequestDto userRequest) {
         String[] nombreDividido = dividirNombreCompleto(userRequest.userName());
         Persona persona = personaRepository.save(
@@ -59,7 +100,8 @@ public class UserService {
                         .apellidos(nombreDividido[1])
                         .build()
         );
-        User user = UserMapper.toEntity(userRequest, persona);
+        User user = UserMapper.toEntity(userRequest, persona,
+                passwordEncoder.encode(userRequest.password()));
         userRepository.save(user);
         return UserMapper.toDto(user);
     }

@@ -49,9 +49,16 @@ public class UserControler {
     ) {
         return ResponseEntity.ok(userService.addRole(userId,roleId));
     }
+    // @Valid, y no solo @RequestBody: sin el, las anotaciones de
+    // UserRequestDto (@Email, @NotBlank, @Size) no se evaluaban y un cuerpo
+    // invalido llegaba hasta el guardado de la Persona. El 400 salia entonces
+    // de las restricciones de la ENTIDAD, asi que nombraba campos que el
+    // cliente nunca envio -{"nombres":...,"apellidos":...}- y el frontend no
+    // tenia como marcar el campo culpable. Con @Valid el fallo se detiene en
+    // el borde y el cuerpo del error habla de email, userName o password.
     @PostMapping()
     public ResponseEntity<UserResponseDto> createRole(
-            @RequestBody  UserRequestDto userRequestDto
+            @Valid @RequestBody  UserRequestDto userRequestDto
     ) {
         return ResponseEntity.ok(userService.createUser(userRequestDto));
     }
