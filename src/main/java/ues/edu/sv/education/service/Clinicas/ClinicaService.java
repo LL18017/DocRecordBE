@@ -1,6 +1,7 @@
 package ues.edu.sv.education.service.Clinicas;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
@@ -11,22 +12,21 @@ import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.UserRepository;
-import ues.edu.sv.education.repository.UserTypeRepository;
 
 import java.util.List;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class ClinicaService {
     private final UserRepository userRepository;
-    private final UserTypeRepository userTypeRepository;
     private final ClinicaRepository clinicasRepository;
 
     @Transactional(readOnly = true)
-    public List<ClinicasResponseDto> obtenerPorUsuario(Integer userId) {
+    public List<ClinicasResponseDto> obtenerPorUsuarioActual() {
 
-        return clinicasRepository.findByUser(userId)
+        User user = usuarioActual();
+
+        return clinicasRepository.findByUser(user.getUserID())
                 .stream()
                 .map(this::toResponseDto)
                 .toList();
@@ -35,7 +35,7 @@ public class ClinicaService {
     @Transactional
     public ClinicasResponseDto crear(ClinicasRequestDto dto) {
 
-        User user = obtenerUsuarioAutorizado(dto.userId());
+        User user = usuarioActual();
 
         Clinicas clinica = Clinicas.builder()
                 .name(dto.name())
@@ -57,54 +57,62 @@ public class ClinicaService {
 
         Clinicas clinica = clinicasRepository.findById(clinicaId)
                 .orElseThrow(() ->
-                        new RuntimeException("Clínica no encontrada")
+                        new NoResourceFoundException("Clínica no encontrada", "404")
                 );
 
-        User user = obtenerUsuarioAutorizado(dto.userId());
+        exigirPropietarioOAdmin(clinica);
 
         clinica.setName(dto.name());
         clinica.setLatitud(dto.latitud());
         clinica.setLongitud(dto.longitud());
-        clinica.setUser(user);
 
         return toResponseDto(clinicasRepository.save(clinica));
     }
 
     @Transactional
-    public void eliminar(Integer clinicaId, Integer userId) {
-
-        User user = obtenerUsuarioAutorizado(userId);
+    public void eliminar(Integer clinicaId) {
 
         Clinicas clinica = clinicasRepository.findById(clinicaId)
                 .orElseThrow(() ->
-                        new NoResourceFoundException("Clínica no encontrada")
+                        new NoResourceFoundException("Clínica no encontrada", "404")
                 );
 
-        if (!clinica.getUser().getUserID().equals(user.getUserID())) {
-            throw new GeneralException(
-                    "El usuario no tiene permiso para eliminar esta clínica"
-            );
-        }
+        exigirPropietarioOAdmin(clinica);
 
         clinicasRepository.delete(clinica);
     }
 
-    private User obtenerUsuarioAutorizado(Integer userId) {
+    // ADMIN administra cualquier clinica; MEDICO solo las suyas. Que el
+    // usuario tenga rol ADMIN o MEDICO ya lo exige @PreAuthorize en el
+    // controller -- esto solo decide de QUIEN es la clinica.
+    private void exigirPropietarioOAdmin(Clinicas clinica) {
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                   new NoResourceFoundException("Usuario no encontrado","404")
-                );
+        User actual = usuarioActual();
 
-        Integer userTypeId = user.getUserType().getUserTypeID();
+        boolean esAdmin = actual.getRoles().stream()
+                .anyMatch(rol -> "ADMIN".equals(rol.getName()));
 
-        if (userTypeId != 1 && userTypeId != 2) {
-            throw new NoResourceFoundException(
-                    "El usuario no tiene permisos para administrar clínicas","403"
+        if (!esAdmin && !clinica.getUser().getUserID().equals(actual.getUserID())) {
+            throw new GeneralException(
+                    "El usuario no tiene permiso para modificar esta clínica", "403"
             );
         }
+    }
 
-        return user;
+    // La identidad sale del JWT ya verificado (JwtFilter deja el user_id como
+    // name() del Authentication), nunca del cuerpo ni de la ruta de la
+    // petición -- de lo contrario cualquier usuario autenticado podria operar
+    // clinicas de otro con solo cambiar un id en el request.
+    private User usuarioActual() {
+
+        String userId = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        return userRepository.findById(Integer.valueOf(userId))
+                .orElseThrow(() ->
+                        new NoResourceFoundException("Usuario no encontrado", "404")
+                );
     }
 
     private ClinicasResponseDto toResponseDto(Clinicas clinica) {

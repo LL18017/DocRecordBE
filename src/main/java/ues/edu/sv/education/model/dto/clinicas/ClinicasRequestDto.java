@@ -28,14 +28,11 @@ public record ClinicasRequestDto(
                 example = "-89.5597"
         )
         @NotNull(message = "La longitud es obligatoria")
-        Double longitud,
+        Double longitud
 
-        @Schema(
-                description = "ID del usuario propietario de la clínica",
-                example = "1"
-        )
-        @NotNull(message = "El usuario es obligatorio")
-        Integer userId
+        // Sin `userId`: el propietario de una clinica nueva es siempre el
+        // usuario autenticado (ver ClinicaService.usuarioActual()), nunca un id
+        // que mande el cliente.
 
 ) {
 }

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
@@ -27,31 +28,26 @@ public class ClinicasController {
     private final ClinicaService clinicasService;
 
     @Operation(
-            summary = "Obtener clínicas de un usuario",
-            description = "Devuelve todas las clínicas asociadas al usuario indicado"
+            summary = "Obtener mis clínicas",
+            description = "Devuelve las clínicas del usuario autenticado"
     )
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<ClinicasResponseDto>> obtenerPorUsuario(
-            @PathVariable Integer userId
-    ) {
-
-        log.info("Obteniendo clínicas del usuario: {}", userId);
-
+    @GetMapping("/mias")
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
+    public ResponseEntity<List<ClinicasResponseDto>> obtenerMias() {
         return ResponseEntity.ok(
-                clinicasService.obtenerPorUsuario(userId)
+                clinicasService.obtenerPorUsuarioActual()
         );
     }
 
     @Operation(
             summary = "Crear una clínica",
-            description = "Crea una clínica asociada a un usuario autorizado"
+            description = "Crea una clínica para el usuario autenticado"
     )
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<ClinicasResponseDto> crear(
             @Valid @RequestBody ClinicasRequestDto dto
     ) {
-
-        log.info("Creando clínica para el usuario: {}", dto.userId());
 
         ClinicasResponseDto response = clinicasService.crear(dto);
 
@@ -62,9 +58,10 @@ public class ClinicasController {
 
     @Operation(
             summary = "Editar una clínica",
-            description = "Modifica los datos de una clínica existente"
+            description = "Modifica los datos de una clínica existente. Un MEDICO solo puede editar las suyas; un ADMIN puede editar cualquiera."
     )
     @PutMapping("/{clinicaId}")
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<ClinicasResponseDto> editar(
             @PathVariable Integer clinicaId,
             @Valid @RequestBody ClinicasRequestDto dto
@@ -80,21 +77,17 @@ public class ClinicasController {
 
     @Operation(
             summary = "Eliminar una clínica",
-            description = "Elimina una clínica existente"
+            description = "Elimina una clínica existente. Un MEDICO solo puede eliminar las suyas; un ADMIN puede eliminar cualquiera."
     )
     @DeleteMapping("/{clinicaId}")
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<Void> eliminar(
-            @PathVariable Integer clinicaId,
-            @RequestParam Integer userId
+            @PathVariable Integer clinicaId
     ) {
 
-        log.info(
-                "Eliminando clínica {} solicitada por usuario {}",
-                clinicaId,
-                userId
-        );
+        log.info("Eliminando clínica {}", clinicaId);
 
-        clinicasService.eliminar(clinicaId, userId);
+        clinicasService.eliminar(clinicaId);
 
         return ResponseEntity.noContent().build();
     }
