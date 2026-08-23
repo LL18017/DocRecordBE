@@ -1,0 +1,129 @@
+name: CI
+
+# Integracion continua: solo compila y corre las pruebas (./mvnw -B test).
+# No hay despliegue, ni Docker, ni publicacion de artefactos en este workflow.
+on:
+  push:
+    branches:
+      - dev-naun
+      - dev
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Pruebas (./mvnw -B test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Postgres real como servicio del job (no Testcontainers: docker-java
+    # negocia una API vieja contra el Docker del runner y falla). Ver el
+    # comentario de PruebaDeIntegracion.java para el detalle.
+    #
+    # El usuario/clave de aqui NO son secretos: son el mismo par por defecto
+    # (postgres/9902) que ya trae application.properties y docker-compose.yml
+    # para desarrollo local, y viven solo dentro de este contenedor efimero.
+    services:
+      postgres:
+        image: postgres:15.3-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 9902
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin) y cachear ~/.m2
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # PruebaDeIntegracion.java lee estas system properties (con estos
+      # mismos valores como default si se omiten); se pasan explicitas para
+      # que el workflow no dependa de ese default si algun dia cambia.
+      # No se exportan MAIL_PASSWORD ni JWT_SECRET: application.properties ya
+      # trae valores por defecto pensados para que la suite arranque sin
+      # secretos configurados.
+      - name: Ejecutar ./mvnw -B test contra el Postgres del servicio
+        run: >-
+          ./mvnw -B
+          -Dtest.db.host=localhost
+          -Dtest.db.port=5432
+          -Dtest.db.user=postgres
+          -Dtest.db.password=9902
+          test
+
+      # Vuelca el resumen de Surefire al job summary para no tener que abrir
+      # el log completo cuando algo falla. Corre con "always()" para que se
+      # publique tambien cuando ./mvnw test termino en rojo.
+      - name: Publicar resumen de pruebas en el job summary
+        if: always()
+        run: |
+          REPORTES="target/surefire-reports"
+
+          {
+            echo "## Resultado de \`./mvnw -B test\`"
+            echo
+
+            if [ ! -d "$REPORTES" ] || [ -z "$(ls -A "$REPORTES"/*.txt 2>/dev/null)" ]; then
+              echo "No se encontraron reportes de Surefire en \`$REPORTES\`."
+              echo "Probablemente fallo la compilacion antes de llegar a ejecutar las pruebas."
+            else
+              TOTAL=0
+              FALLOS=0
+              ERRORES=0
+              OMITIDAS=0
+
+              echo "| Clase de prueba | Ejecutadas | Fallos | Errores | Omitidas | Tiempo |"
+              echo "|---|---|---|---|---|---|"
+
+              for f in "$REPORTES"/*.txt; do
+                LINEA=$(grep -m1 "^Tests run:" "$f")
+                CLASE=$(grep -m1 "^Test set:" "$f" | sed 's/Test set: //')
+                T=$(echo "$LINEA" | sed -n 's/.*Tests run: \([0-9]*\).*/\1/p')
+                F=$(echo "$LINEA" | sed -n 's/.*Failures: \([0-9]*\).*/\1/p')
+                E=$(echo "$LINEA" | sed -n 's/.*Errors: \([0-9]*\).*/\1/p')
+                S=$(echo "$LINEA" | sed -n 's/.*Skipped: \([0-9]*\).*/\1/p')
+                TIEMPO=$(echo "$LINEA" | sed -n 's/.*Time elapsed: \([0-9.]* s\).*/\1/p')
+
+                TOTAL=$((TOTAL + T))
+                FALLOS=$((FALLOS + F))
+                ERRORES=$((ERRORES + E))
+                OMITIDAS=$((OMITIDAS + S))
+
+                MARCA=""
+                if [ "$F" != "0" ] || [ "$E" != "0" ]; then
+                  MARCA=" (FALLA)"
+                fi
+
+                echo "| ${CLASE}${MARCA} | $T | $F | $E | $S | $TIEMPO |"
+              done
+
+              echo
+              echo "**Total: ${TOTAL} pruebas, ${FALLOS} fallos, ${ERRORES} errores, ${OMITIDAS} omitidas.**"
+
+              if [ "$FALLOS" != "0" ] || [ "$ERRORES" != "0" ]; then
+                echo
+                echo "### Detalle de las pruebas que fallaron"
+                echo
+                echo '```'
+                grep -B1 -A25 -h "<<<" "$REPORTES"/*.txt || true
+                echo '```'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
