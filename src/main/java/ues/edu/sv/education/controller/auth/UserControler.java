@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
@@ -13,10 +14,16 @@ import ues.edu.sv.education.service.user.UserService;
 
 import java.util.List;
 
+// Administracion de cuentas: alta directa, listado y asignacion de roles.
+// Todo el controller es hasRole('ADMIN') porque cada endpoint expone algo
+// que un usuario cualquiera no deberia poder hacer ni ver: crear cuentas,
+// asignarse roles (incluido ADMIN, sin este guard en un solo paso), o leer
+// el correo de todo el personal.
 @Slf4j
 @RestController
 @RequestMapping("/user")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class UserControler {
     private  final UserAuthService service;
     private final UserService userService;
