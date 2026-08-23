@@ -76,7 +76,10 @@ public class AuthController {
             description = "Autogestion publica: crea persona + usuario + medico con rol MEDICO. El rol no es configurable por el cliente."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Cuenta creada exitosamente"),
+            @ApiResponse(responseCode = "201", description = "Cuenta creada exitosamente. Revisar "
+                    + "correoDeVerificacionEnviado: si viene en false la cuenta existe pero el correo "
+                    + "de confirmacion no se pudo enviar, y hay que decirselo al usuario en vez de "
+                    + "mandarlo a revisar una bandeja donde no va a llegar nada"),
             @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (nombres, apellidos, email, contraseña o especialidad faltantes/incorrectos)"),
             @ApiResponse(responseCode = "404", description = "La especialidad indicada no existe"),
             @ApiResponse(responseCode = "409", description = "El email ya está registrado y confirmado")

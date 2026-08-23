@@ -24,7 +24,18 @@ public record RegistroMedicoResponseDto(
         List<String> roles,
 
         @Schema(description = "Especialidad medica")
-        EspecialidadResponseDto especialidad
+        EspecialidadResponseDto especialidad,
+
+        // La cuenta se crea aunque el correo de confirmacion no salga (ver
+        // AuthService.registrarMedico). Este campo es lo unico que distingue
+        // los dos casos desde el cliente: con true la persona debe revisar su
+        // bandeja; con false NO le va a llegar nada y hay que decirselo, e
+        // invitarla a reenviar el mismo formulario para reintentar el envio.
+        @Schema(description = "true si el correo de confirmacion salio. Si es false la cuenta "
+                + "existe pero el correo NO se envio: el cliente debe avisarlo y ofrecer reintentar "
+                + "el registro con los mismos datos, que genera un token nuevo.",
+                example = "true")
+        boolean correoDeVerificacionEnviado
 
 ) {
 }

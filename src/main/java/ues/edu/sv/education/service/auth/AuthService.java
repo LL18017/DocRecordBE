@@ -2,7 +2,8 @@ package ues.edu.sv.education.service.auth;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.mail.SimpleMailMessage;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.mail.MailException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -196,8 +198,9 @@ public class AuthService {
         );
         verificationTokenRepository.save(verificationToken);
 
-        // Enviar correo de confirmación
-        sendVerificationEmail(savedUser.getEmail(), token);
+        // Enviar correo de confirmacion. Si falla NO se propaga: la cuenta ya
+        // esta creada y el token guardado, y eso vale mas que la notificacion.
+        boolean correoEnviado = enviarCorreoDeVerificacion(savedUser.getEmail(), token);
 
         return new RegistroMedicoResponseDto(
                 savedUser.getUserID(),
@@ -209,17 +212,51 @@ public class AuthService {
                         especialidad.getEspecialidadId(),
                         especialidad.getNombre(),
                         especialidad.isActiva()
-                )
+                ),
+                correoEnviado
         );
     }
 
-    private void sendVerificationEmail(String toEmail, String token) {
+    /**
+     * Envia el correo de confirmacion y responde si salio o no.
+     *
+     * Crear la cuenta y avisar por correo NO valen lo mismo: la cuenta es el
+     * dato, el correo es una notificacion. Antes el envio iba dentro de la
+     * transaccion de alta y sin proteccion, asi que cualquier tropiezo de
+     * Gmail (credenciales rotadas, cuota agotada, SMTP caido) subia hasta el
+     * GlobalExceptionHandler y devolvia 500: nadie podia registrarse mientras
+     * un servicio EXTERNO estuviera mal. Aqui el fallo se absorbe y la cuenta
+     * sobrevive, deshabilitada y con su token valido, igual que siempre.
+     *
+     * Se captura MailException -la jerarquia de Spring para el envio, que
+     * envuelve las jakarta.mail.*Exception- y nada mas. Un catch de Exception
+     * o de RuntimeException se tragaria tambien los fallos de base de datos o
+     * los de programacion, que SI deben tumbar el registro y verse.
+     *
+     * @return true si el correo salio; false si el envio fallo.
+     */
+    private boolean enviarCorreoDeVerificacion(String toEmail, String token) {
         String link = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/auth/confirm")
                 .queryParam("token", token)
                 .toUriString();
-        emailService.sendEmail(toEmail,"Confirma tu registro","Bienvenido. Para activar tu cuenta, haz clic en el siguiente enlace:\n" + link
-                + "\n\nEste enlace expira en " + TOKEN_EXPIRATION_MINUTES + " minutos.");
+        try {
+            emailService.sendEmail(toEmail, "Confirma tu registro",
+                    "Bienvenido. Para activar tu cuenta, haz clic en el siguiente enlace:\n" + link
+                            + "\n\nEste enlace expira en " + TOKEN_EXPIRATION_MINUTES + " minutos.");
+            return true;
+        } catch (MailException e) {
+            // Nivel error y con la excepcion completa: el stack trace lleva la
+            // respuesta del servidor SMTP (el "535-5.7.8 Username and Password
+            // not accepted" o el "454-4.7.0 Too many login attempts"), que es
+            // justo lo que hace falta para saber si hay que rotar la clave,
+            // esperar la cuota o revisar la red.
+            log.error("No se pudo enviar el correo de confirmacion a {}. La cuenta quedo creada y "
+                    + "deshabilitada, con token de verificacion valido por {} minutos; el usuario "
+                    + "puede reintentar el registro para generar uno nuevo.",
+                    toEmail, TOKEN_EXPIRATION_MINUTES, e);
+            return false;
+        }
     }
 
 
