@@ -162,6 +162,23 @@ class AltaDeUsuarioIT extends PruebaClinica {
                 "el listado devuelve contrasenas en claro");
     }
 
+    @Test
+    @DisplayName("GET /user ya no existe: el listado de entidades crudas se elimino")
+    void elListadoDeEntidadesCrudasYaNoSeExpone() throws Exception {
+        // Era el mismo listado que /user/all pero devolviendo List<User>, la
+        // entidad JPA: incluia el hash argon2 de todos los usuarios y ademas
+        // reventaba al serializar el ciclo user -> roles -> users. Se elimino
+        // en vez de convertirlo a DTO porque /user/all ya cubria el caso y
+        // nadie lo llamaba.
+        //
+        // Responde 405 y no 404 porque la ruta /user sigue mapeada para POST.
+        // Lo que importa no es el codigo exacto sino que NO sea 200: si
+        // alguien reintroduce el @GetMapping, esta prueba se pone en rojo.
+        mockMvc.perform(get("/user")
+                        .header("Authorization", bearer(tokenDeAdmin)))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // El cuerpo invalido se rechaza nombrando los campos del cliente
     // ══════════════════════════════════════════════════════════════════════

@@ -8,8 +8,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
-import ues.edu.sv.education.model.entity.User;
-import ues.edu.sv.education.service.auth.UserAuthService;
 import ues.edu.sv.education.service.user.UserService;
 
 import java.util.List;
@@ -25,16 +23,26 @@ import java.util.List;
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class UserControler {
-    private  final UserAuthService service;
     private final UserService userService;
 
-
-    @GetMapping
-    public List<User> getUsers(){
-        return service.getAllUser();
-    }
-
-
+    // Aqui vivia un segundo listado, `@GetMapping` sin ruta, que devolvia
+    // List<User>: la ENTIDAD JPA cruda. Se elimino, no se convirtio a DTO,
+    // porque /user/all -- justo abajo -- ya hace lo mismo bien y nadie lo
+    // llamaba: el frontend documenta en services/usuarios.ts que lo evita a
+    // proposito, y en este repositorio getAllUser() no tenia otro uso.
+    // Mantener dos listados equivalentes solo dejaba abierto el peligroso.
+    //
+    // Devolvia la entidad tal cual, y eso tenia dos consecuencias medidas
+    // contra la API en marcha:
+    //   1. serializaba el campo `password`, o sea el hash argon2 de TODOS los
+    //      usuarios, en un endpoint que responde con la lista completa;
+    //   2. entraba en el ciclo user -> roles -> users -> roles..., asi que
+    //      respondia 200 con un JSON truncado de ~53 KB, invalido, con el
+    //      error del servidor pegado al final. Inservible, ademas de inseguro.
+    //
+    // La regla que deja: por este controller salen DTOs, nunca entidades. Un
+    // DTO decide que se publica; una entidad publica todo lo que tenga la
+    // tabla hoy y todo lo que alguien le agregue manana.
     @GetMapping("/all")
     public ResponseEntity<List<UserResponseDto>> getAll(
             @RequestParam(defaultValue = "0") int inicio,
