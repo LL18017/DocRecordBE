@@ -36,6 +36,7 @@ import java.util.UUID;
 public class AuthService {
     private final UserRepository userRepository;
     private final UserTypeRepository userTypeRepository;
+    private final PersonaRepository personaRepository;
     private final RoleRepository roleRepository;
     private final EventRepository eventRepository;
     private final EventTypeRepository eventTypeRepository;
@@ -99,7 +100,8 @@ public class AuthService {
         }
         User u = service.getUser(userEmail);
         CustomUserDetails user = new CustomUserDetails(u);
-        return new LoginResponseDto(u.getName(), jwtService.generateToken(user), jwtService.generateRefreshToken(user),
+        Persona persona = u.getPersona();
+        return new LoginResponseDto(persona.getNombres() + " " + persona.getApellidos(), jwtService.generateToken(user), jwtService.generateRefreshToken(user),
                 user.getAuthorities().stream().map(a -> RoleMapper.toDto(a.getAuthority())).toList()
         );
     }
@@ -119,14 +121,25 @@ public class AuthService {
 
             // Cuenta no confirmada: se sobreescribe con los datos nuevos
             userToSave = existingUser;
-            userToSave.setName(request.userName());
+            String[] nombreDividido = dividirNombreCompleto(request.userName());
+            Persona persona = existingUser.getPersona();
+            persona.setNombres(nombreDividido[0]);
+            persona.setApellidos(nombreDividido[1]);
+            personaRepository.save(persona);
             userToSave.setPassword(passwordEncoder.encode(request.password()));
 
             // Invalida cualquier token anterior de esta cuenta
             verificationTokenRepository.deleteAllByUser(existingUser);
 
         } else {
-            userToSave = UserMapper.toEntity(request);
+            String[] nombreDividido = dividirNombreCompleto(request.userName());
+            Persona persona = personaRepository.save(
+                    Persona.builder()
+                            .nombres(nombreDividido[0])
+                            .apellidos(nombreDividido[1])
+                            .build()
+            );
+            userToSave = UserMapper.toEntity(request, persona);
             userToSave.setPassword(passwordEncoder.encode(request.password()));
         }
 
@@ -193,5 +206,21 @@ public class AuthService {
 
         verificationToken.setUsed(true);
         verificationTokenRepository.save(verificationToken);
+    }
+
+    // UserRequestDto.userName sigue siendo un solo campo de texto libre; se
+    // divide en la primera palabra (-> nombres) y el resto (-> apellidos),
+    // igual que la migracion de datos historicos de V2. Provisional: cuando
+    // el registro publico pida nombres/apellidos por separado esto deja de
+    // usarse aqui.
+    private String[] dividirNombreCompleto(String nombreCompleto) {
+        String limpio = nombreCompleto.trim();
+        int espacio = limpio.indexOf(' ');
+        if (espacio < 0) {
+            return new String[]{limpio, limpio};
+        }
+        String nombres = limpio.substring(0, espacio);
+        String apellidos = limpio.substring(espacio + 1).trim();
+        return new String[]{nombres, apellidos.isEmpty() ? nombres : apellidos};
     }
 }

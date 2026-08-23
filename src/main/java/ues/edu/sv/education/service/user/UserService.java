@@ -8,9 +8,11 @@ import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
+import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.Role;
 import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.mappers.UserMapper;
+import ues.edu.sv.education.repository.PersonaRepository;
 import ues.edu.sv.education.repository.RoleRepository;
 import ues.edu.sv.education.repository.UserRepository;
 
@@ -22,6 +24,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
+    private final PersonaRepository personaRepository;
     private final RoleRepository roleRepository;
 
     public List<UserResponseDto> getAll(Integer inicio, Integer fin) {
@@ -49,12 +52,32 @@ public class UserService {
     }
 
     public UserResponseDto createUser(UserRequestDto userRequest) {
-        User user = UserMapper.toEntity(userRequest);
+        String[] nombreDividido = dividirNombreCompleto(userRequest.userName());
+        Persona persona = personaRepository.save(
+                Persona.builder()
+                        .nombres(nombreDividido[0])
+                        .apellidos(nombreDividido[1])
+                        .build()
+        );
+        User user = UserMapper.toEntity(userRequest, persona);
         userRepository.save(user);
         return UserMapper.toDto(user);
     }
     public void deleteUser(String userEmail) {
         User user = userRepository.findByEmailContainingIgnoreCase(userEmail).orElseThrow(()-> new NoResourceFoundException("Usuario no encontrado","404"));
         userRepository.delete(user);
+    }
+
+    // Ver el mismo helper en AuthService: userName sigue siendo un solo campo
+    // hasta que este endpoint tambien pida nombres/apellidos por separado.
+    private String[] dividirNombreCompleto(String nombreCompleto) {
+        String limpio = nombreCompleto.trim();
+        int espacio = limpio.indexOf(' ');
+        if (espacio < 0) {
+            return new String[]{limpio, limpio};
+        }
+        String nombres = limpio.substring(0, espacio);
+        String apellidos = limpio.substring(espacio + 1).trim();
+        return new String[]{nombres, apellidos.isEmpty() ? nombres : apellidos};
     }
 }

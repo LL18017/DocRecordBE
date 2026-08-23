@@ -17,11 +17,10 @@ public class User {
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
     @Column(name = "user_id")
     private  Integer UserID;
-    @NotBlank(message = "El nombre no puede estar vacio")
-    @NotNull(message = "El nombre es un propiedda obligatoria")
-    @Column(name = "name",nullable = false)
-    @Size(max = 100)
-    private  String name;
+    @NotNull(message = "La persona es obligatoria")
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "persona_id", nullable = false, unique = true)
+    private Persona persona;
     @Email
     @Column(name = "email", unique = true, nullable = false)
     private  String email;

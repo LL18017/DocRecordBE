@@ -44,7 +44,7 @@ public class JwtService {
         return Jwts.builder()
                 .id(user.getUser().getUserID().toString())
                 .claims(Map.of(
-                        "name", user.getUser().getName(),
+                        "name", user.getUser().getPersona().getNombres() + " " + user.getUser().getPersona().getApellidos(),
                         "authorities", authorities
                 ))
                 .subject(user.getUser().getEmail())
