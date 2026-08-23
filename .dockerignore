@@ -1,0 +1,36 @@
+# Compilados locales: la etapa de build del Dockerfile compila desde cero.
+target/
+*.class
+
+# Control de versiones y metadatos que no aportan nada dentro de la imagen.
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Secretos y config local: nunca deben terminar dentro de una imagen.
+.env
+.env.*
+!.env.example
+
+# IDEs.
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.factorypath
+.project
+.settings/
+
+# Wrapper de Maven: distributionType=only-script en este repo, asi que no
+# hay jar del wrapper, pero por si alguna vez aparece uno no debe copiarse.
+.mvn/wrapper/maven-wrapper.jar
+
+# Servicios de desarrollo (Postgres/pgAdmin), no forman parte de la imagen.
+docker-compose.yml
+
+# Documentacion.
+README.md
+LICENSE

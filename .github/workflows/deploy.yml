@@ -1,0 +1,127 @@
+name: Deploy
+
+# Despliegue a produccion. Disparo MANUAL unicamente: nada de push ni de
+# pull_request, para que no pueda correr solo.
+#
+# ESTADO: inerte a proposito. Todavia no existe el VPS de produccion ni esta
+# decidida la estrategia de despliegue (imagen publicada en un registro de
+# contenedores + `docker pull` en el VPS via SSH, o build directo en el VPS).
+# El paso real de despliegue se deja como placeholder comentado al final del
+# job. El trabajo de este workflow, por ahora, es fallar de forma clara y
+# temprana si alguien lo dispara sin los secretos de produccion configurados,
+# en vez de fallar a mitad de camino con un error criptico de SSH o de
+# `docker login`.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Desplegar a produccion
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Requiere el Environment "production" configurado en GitHub (Settings >
+    # Environments). Este archivo solo lo referencia por nombre; la
+    # aprobacion manual y los secretos scoped al environment los configura el
+    # equipo desde la UI de GitHub, no se pueden crear desde este workflow.
+    environment: production
+
+    steps:
+      # Primer paso, antes de tocar nada de SSH ni de Docker: si falta algun
+      # secreto de produccion, el job debe morir aqui mismo con un mensaje
+      # que diga exactamente cual secreto falta y que nombre exacto crearle,
+      # no fallar a mitad de camino con un error de conexion.
+      - name: Validar que los secretos de produccion esten configurados
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          FALTANTES=()
+
+          registrar_si_falta() {
+            # $1 = valor, $2 = nombre exacto del secreto, $3 = para que sirve
+            if [ -z "$1" ]; then
+              FALTANTES+=("$2 — $3")
+            fi
+          }
+
+          registrar_si_falta "$VPS_HOST" "VPS_HOST" "host o IP del VPS de produccion"
+          registrar_si_falta "$VPS_USER" "VPS_USER" "usuario SSH en el VPS"
+          registrar_si_falta "$VPS_SSH_KEY" "VPS_SSH_KEY" "clave privada SSH para conectarse al VPS"
+          registrar_si_falta "$DB_PASSWORD" "DB_PASSWORD" "contrasena de PostgreSQL de produccion"
+          registrar_si_falta "$MAIL_PASSWORD" "MAIL_PASSWORD" "contrasena de aplicacion de Gmail, rotada (la anterior quedo comprometida en el historial publico)"
+          registrar_si_falta "$JWT_SECRET" "JWT_SECRET" "clave de firma de tokens JWT de produccion (Base64URL, minimo 32 bytes)"
+          registrar_si_falta "$ADMIN_EMAIL" "ADMIN_EMAIL" "correo del usuario administrador que crea el arranque (bootstrap) de la aplicacion"
+          registrar_si_falta "$ADMIN_PASSWORD" "ADMIN_PASSWORD" "contrasena del usuario administrador que crea el arranque (bootstrap) de la aplicacion"
+
+          if [ "${#FALTANTES[@]}" -eq 0 ]; then
+            echo "Todos los secretos de produccion esperados estan configurados."
+            exit 0
+          fi
+
+          {
+            echo "## Despliegue detenido: faltan secretos de produccion"
+            echo
+            echo "Este workflow no va a intentar conectarse a nada hasta que existan todos estos secretos en el Environment **production** (Settings > Environments > production > Environment secrets):"
+            echo
+            for F in "${FALTANTES[@]}"; do
+              echo "- \`$F\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::Faltan secretos de produccion. El despliegue se detiene antes de conectarse a nada. Crear en el Environment 'production' (Settings > Environments > production):"
+          for F in "${FALTANTES[@]}"; do
+            echo "::error::  - $F"
+          done
+
+          exit 1
+
+      # ------------------------------------------------------------------
+      # A partir de aqui va el despliegue real, una vez exista el VPS y el
+      # equipo decida la estrategia. Se deja sin implementar a proposito: el
+      # objetivo de esta tanda es que el workflow exista, estructuralmente
+      # correcto, y que si alguien lo dispara hoy sin secretos falle de
+      # inmediato explicando que falta — no que intente un despliegue real.
+      #
+      # Referencia de como podria verse (NO funcional, solo orientacion para
+      # cuando se implemente):
+      #
+      # - name: Desplegar por SSH
+      #   uses: appleboy/ssh-action@v1
+      #   with:
+      #     host: ${{ secrets.VPS_HOST }}
+      #     username: ${{ secrets.VPS_USER }}
+      #     key: ${{ secrets.VPS_SSH_KEY }}
+      #     script: |
+      #       cd /opt/docrecordbe
+      #       git pull
+      #       docker build -t docrecordbe .
+      #       docker stop docrecordbe || true
+      #       docker rm docrecordbe || true
+      #       docker run -d --name docrecordbe --restart unless-stopped \
+      #         -p 8080:8080 \
+      #         -e DB_HOST=... -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+      #         -e MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }} \
+      #         -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+      #         -e ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
+      #         -e ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
+      #         docrecordbe
+      #
+      # Si en vez de construir en el VPS se termina publicando la imagen en
+      # un registro de contenedores (Docker Hub, GHCR, etc.), hacen falta
+      # ademas credenciales del registro como secretos nuevos (por ejemplo
+      # REGISTRY_USERNAME y REGISTRY_PASSWORD, o un token), y un paso previo
+      # de `docker login` + `docker push`. GHCR con GITHUB_TOKEN no
+      # necesitaria un secreto nuevo; un registro externo si.
+      - name: "PENDIENTE: paso real de despliegue"
+        run: |
+          echo "Aqui va el paso real de despliegue una vez que exista el VPS de produccion."
+          echo "Ver los comentarios de este archivo para una referencia de como podria verse."
