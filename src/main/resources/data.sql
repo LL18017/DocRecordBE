@@ -35,16 +35,17 @@ ON CONFLICT (event_type_id) DO NOTHING;
 -- =========================
 -- role
 --
--- Debe mantenerse sincronizada con el enum RolesEnum: RoleMapper.toEntity(Integer)
--- construye el Role a partir del enum, no de esta tabla, asi que un id aqui
--- que no coincida con el enum se mapearia con el nombre equivocado.
+-- Ya NO se siembra aqui: el catalogo de roles se mudo a la migracion
+-- V7__catalogo_de_roles_cerrado.sql, junto con el NOT NULL, el UNIQUE y el
+-- CHECK que lo cierran a los cuatro valores de RolesEnum.
+--
+-- El motivo es que la semilla y la restriccion que esa semilla debe cumplir
+-- tienen que viajar juntas. Separadas, este archivo podia insertar un nombre
+-- que la restriccion rechazara y tumbar el arranque, o peor, quedarse
+-- desincronizado del enum sin que nada lo detectara. Ademas data.sql corre en
+-- cada arranque y no esta versionado: no habia forma de saber que catalogo
+-- tiene una base concreta.
 -- =========================
-INSERT INTO public.role (role_id, name) VALUES
-    (1, 'ADMIN'),
-    (2, 'MEDICO'),
-    (3, 'ENFERMERA'),
-    (4, 'PACIENTE')
-ON CONFLICT (role_id) DO NOTHING;
 
 -- =========================
 -- Ajuste de secuencias: tras insertar IDs explicitos, las secuencias deben
@@ -64,4 +65,4 @@ ON CONFLICT (role_id) DO NOTHING;
 SELECT setval('public.event_status_seq', GREATEST(COALESCE((SELECT MAX(event_status_id) FROM public.event_status), 1), (SELECT last_value FROM public.event_status_seq)));
 SELECT setval('public.event_types_seq',  GREATEST(COALESCE((SELECT MAX(event_type_id)   FROM public.event_types),  1), (SELECT last_value FROM public.event_types_seq)));
 SELECT setval('public.events_seq',       GREATEST(COALESCE((SELECT MAX(event_id)        FROM public.events),       1), (SELECT last_value FROM public.events_seq)));
-SELECT setval('public.role_role_id_seq', GREATEST(COALESCE((SELECT MAX(role_id)         FROM public.role),         1), (SELECT last_value FROM public.role_role_id_seq)));
+-- role_role_id_seq no aparece aqui: su ajuste se fue con la semilla a la V7.

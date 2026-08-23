@@ -27,6 +27,25 @@ class RoleMapperTest {
     }
 
     @Test
+    // La autoridad se recorta con startsWith, no con un substring(5) a ciegas.
+    // Con el substring fijo, una autoridad SIN el prefijo se quedaba con los
+    // caracteres equivocados: de "ADMIN" salia "" y el id venia nulo.
+    void testAutoridadSinPrefijoRoleSigueResolviendoElId() {
+        RoleDto dto = RoleMapper.toDto("ADMIN");
+        Assertions.assertEquals(1, dto.getId());
+        Assertions.assertEquals("ADMIN", dto.getName());
+    }
+
+    @Test
+    // Y si de verdad no es un rol, tiene que decirlo con la excepcion del
+    // dominio. El substring(5) sobre una cadena mas corta que el prefijo
+    // reventaba antes con StringIndexOutOfBoundsException, que no explica nada.
+    void testAutoridadQueNoEsUnRolLanzaIllegalArgument() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> RoleMapper.toDto("X"));
+    }
+
+    @Test
     void testDtoToEntity() {
         RoleDto dto=new RoleDto(1,"ADMIN");
         Role entity=RoleMapper.toEntity(dto);

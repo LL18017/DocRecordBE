@@ -13,7 +13,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -83,11 +82,30 @@ class RolesEnumTest {
         assertEquals(1, RolesEnum.getIdByName(variante));
     }
 
-    @ParameterizedTest(name = "getIdByName(\"{0}\") = null")
+    @ParameterizedTest(name = "getIdByName(\"{0}\") lanza")
     @ValueSource(strings = {"JEFASO", "DIRECTOR", "PROFESOR", "ESTUDIANTE", ""})
-    @DisplayName("devuelve null para un rol que no existe, incluidos los heredados")
-    void devuelveNullParaRolInexistente(String nombre) {
-        assertNull(RolesEnum.getIdByName(nombre));
+    @DisplayName("lanza para un rol que no existe, incluidos los heredados, en vez de devolver null")
+    void getIdByNameLanzaParaRolInexistente(String nombre) {
+        // Antes devolvia null. Ese null no lo miraba ningun llamador: se metia
+        // tal cual en el RoleDto y salia por la API como `id: null`, hasta que
+        // el frontend tuvo que defenderse de el. Un nombre que no es un rol es
+        // un defecto de programacion y tiene que verse aqui.
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> RolesEnum.getIdByName(nombre));
+
+        assertEquals("Rol no válido: " + nombre, error.getMessage(),
+                "El mensaje debe nombrar el valor rechazado; sin el no se sabe que llego.");
+    }
+
+    @ParameterizedTest
+    @EnumSource(RolesEnum.class)
+    @DisplayName("getIdByName y fromName aceptan exactamente lo mismo")
+    void getIdByNameYFromNameCoinciden(RolesEnum rol) {
+        // Las dos busquedas se diferenciaban solo en como fallaban, y esa
+        // diferencia era la que permitia elegir la que no molestaba. Deben
+        // seguir siendo la misma pregunta.
+        assertEquals(RolesEnum.fromName(rol.getName()).getId(), RolesEnum.getIdByName(rol.getName()));
     }
 
     // -------------------------------------------------------------- fromName
