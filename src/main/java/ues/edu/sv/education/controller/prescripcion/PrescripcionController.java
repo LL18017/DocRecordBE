@@ -5,15 +5,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.common.PaginaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.service.prescripcion.PrescripcionService;
 
-import java.util.List;
+import java.time.LocalDate;
 
 /**
  * Prescripciones (epica E7).
@@ -58,15 +60,27 @@ public class PrescripcionController {
 
     @Operation(
             summary = "Listar recetas",
-            description = "Por consultaId (las de esa consulta) o por pacienteId (todas las del paciente). "
-                    + "Hay que indicar uno de los dos."
+            description = "Historico de recetas, paginado. pacienteId, medicoId, consultaId, desde y "
+                    + "hasta son TODOS opcionales y COMBINABLES entre si (p. ej. pacienteId y "
+                    + "medicoId a la vez). Sin ningun filtro devuelve el historico completo, "
+                    + "paginado, de la receta mas reciente a la mas antigua. desde/hasta son "
+                    + "fechas (yyyy-MM-dd); hasta incluye el dia completo (hasta las 23:59:59.999 "
+                    + "de ese dia). Un pacienteId/medicoId/consultaId que no exista no da 404: da "
+                    + "una pagina vacia, porque aqui son filtros de una busqueda, no la "
+                    + "identificacion de un recurso unico (ver PrescripcionService.listar)."
     )
     @GetMapping
-    public ResponseEntity<List<PrescripcionResponseDto>> listar(
+    public ResponseEntity<PaginaDto<PrescripcionResponseDto>> listar(
             @RequestParam(required = false) Long consultaId,
-            @RequestParam(required = false) Long pacienteId
+            @RequestParam(required = false) Long pacienteId,
+            @RequestParam(required = false) Long medicoId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false, defaultValue = "0") Integer pagina,
+            @RequestParam(required = false, defaultValue = "20") Integer tamano
     ) {
-        return ResponseEntity.ok(prescripcionService.listar(consultaId, pacienteId));
+        return ResponseEntity.ok(prescripcionService.listar(
+                consultaId, pacienteId, medicoId, desde, hasta, pagina, tamano));
     }
 
     @Operation(summary = "Ver una receta", description = "404 si no existe.")

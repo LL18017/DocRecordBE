@@ -1,10 +1,16 @@
 package ues.edu.sv.education.service.prescripcion;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
+import ues.edu.sv.education.model.dto.common.PaginaDto;
+import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicamentoRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicamentoResponseDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
@@ -12,14 +18,15 @@ import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.model.entity.Consulta;
 import ues.edu.sv.education.model.entity.Medico;
+import ues.edu.sv.education.model.entity.Paciente;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.Prescripcion;
 import ues.edu.sv.education.model.entity.PrescripcionMedicamento;
 import ues.edu.sv.education.repository.ConsultaRepository;
-import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.PrescripcionRepository;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +44,6 @@ public class PrescripcionService {
 
     private final PrescripcionRepository prescripcionRepository;
     private final ConsultaRepository consultaRepository;
-    private final PacienteRepository pacienteRepository;
     private final MedicoAutenticado medicoAutenticado;
 
     /**
@@ -84,38 +90,108 @@ public class PrescripcionService {
         return toDto(prescripcionRepository.save(prescripcion));
     }
 
+    // Tope de tamano de pagina: sin el, "todos" seguiria siendo posible con un
+    // solo ?tamano=999999999, que es exactamente el problema que el filtro
+    // obligatorio original queria evitar (ver el javadoc de listar).
+    private static final int TAMANO_PAGINA_MAXIMO = 100;
+    private static final int TAMANO_PAGINA_POR_DEFECTO = 20;
+
     /**
-     * Recetas de una consulta o de un paciente.
+     * Historico de recetas, filtrado y paginado.
      *
-     * Se exige uno de los dos filtros. Sin filtro esto devolveria la
-     * medicacion de todos los pacientes del sistema en una sola respuesta, y
-     * un listado asi no responde a ninguna pregunta real: solo sirve para
-     * sacar datos.
+     * ── Por que ya no exige un filtro ─────────────────────────────────────
+     * Antes se obligaba a elegir consultaId O pacienteId (nunca los dos, ni
+     * ninguno), con el argumento de que sin filtro la respuesta seria la
+     * medicacion de TODOS los pacientes del sistema en una sola llamada. Ese
+     * argumento sigue siendo cierto, pero la respuesta correcta a "no
+     * devuelvas demasiado" es PAGINAR, no prohibir la pregunta: "el historico
+     * completo de recetas" (para un panel, una auditoria, la tarjeta
+     * "prescripciones hoy") es una pregunta legitima que el 400 anterior no
+     * dejaba hacer. Ahora los cinco filtros (pacienteId, medicoId,
+     * consultaId, desde, hasta) son opcionales y COMBINABLES entre si: "por
+     * paciente Y por medico a la vez" -el caso que antes daba 400- es
+     * justo lo que se pidio.
+     *
+     * ── Decision 1: forma de la paginacion ────────────────────────────────
+     * La respuesta es un PaginaDto: contenido + paginaActual + tamanoPagina +
+     * totalElementos + totalPaginas. Esto evita reproducir la trampa que ya
+     * existe en UserService.getAll(inicio, fin): ese metodo hace
+     * PageRequest.of(inicio, fin) -es decir, "fin" se usa como TAMANO de
+     * pagina, no como filas hasta la fila fin- y devuelve un List<> plano sin
+     * ningun total, asi que una llamada descuidada se queda con las primeras
+     * "fin" filas sin que nada le avise que falta el resto. Aqui el cliente
+     * nunca tiene que adivinar: el total viaja siempre en la misma respuesta.
+     *
+     * ── Decision 2: desde/hasta son FECHAS, el filtro trabaja en fecha-hora ─
+     * prescripciones.fecha es LocalDateTime (el instante exacto en que se
+     * firmo la receta), pero pedirle al cliente fecha-hora para "que se
+     * receto esta semana" es pedirle un detalle que no tiene por que conocer.
+     * desde/hasta llegan como LocalDate (yyyy-MM-dd) y se convierten aqui:
+     * desde arranca a las 00:00:00.000000000 de ese dia (inclusive) y hasta
+     * se compara contra el INICIO DEL DIA SIGUIENTE con "<" (exclusivo). Un
+     * hasta tratado ingenuamente como "fecha <= hasta" en SQL/JPQL compara
+     * contra las 00:00:00 de ese mismo dia y se COME el dia entero de hasta:
+     * una receta firmada a las 23:59 de ese dia quedaria fuera del rango
+     * aunque el usuario pidio "hasta ese dia". Con
+     * fecha < hasta.plusDays(1) esa receta si entra, sin importar la hora.
+     *
+     * ── Decision 3: id que no existe -> pagina vacia, no 404 ──────────────
+     * ConsultaService.buscarPacienteOFallar responde 404 para un pacienteId
+     * inexistente, con el argumento de que una lista vacia se leeria como
+     * "existe pero no tiene nada". Ese argumento vale cuando hay UN filtro
+     * obligatorio: el pacienteId ES la pregunta completa ("el historial de
+     * ESTA persona"), y si esa persona no existe la pregunta en si no tiene
+     * sentido -es mas parecido a pedir /pacientes/{id} que a filtrar una
+     * lista.
+     *
+     * Aqui es distinto a proposito, y no por capricho: los filtros son
+     * varios, opcionales y combinables, y lo que se pregunta es "dame las
+     * recetas que cumplan estas condiciones", no "dame el recurso
+     * identificado por este id". Un pacienteId que no existe es, para ese
+     * proposito, una condicion que ningun registro cumple -exactamente igual
+     * que un rango de fechas sin coincidencias, donde nadie esperaria un 404.
+     * El 404 ademas no compone: con pacienteId Y medicoId a la vez, si solo
+     * uno de los dos no existe, ¿cual "gana" el 404? La respuesta uniforme
+     * (pagina vacia, totalElementos=0) es la unica que se generaliza sin
+     * casos raros a cualquier combinacion de filtros -incluido consultaId,
+     * que hasta ahora si daba 404 por ser entonces el unico filtro posible.
      */
     @Transactional(readOnly = true)
-    public List<PrescripcionResponseDto> listar(Long consultaId, Long pacienteId) {
+    public PaginaDto<PrescripcionResponseDto> listar(
+            Long consultaId,
+            Long pacienteId,
+            Long medicoId,
+            LocalDate desde,
+            LocalDate hasta,
+            Integer pagina,
+            Integer tamano) {
 
-        if (consultaId == null && pacienteId == null) {
+        int paginaSolicitada = pagina == null ? 0 : pagina;
+        int tamanoSolicitado = tamano == null ? TAMANO_PAGINA_POR_DEFECTO : tamano;
+
+        if (paginaSolicitada < 0) {
+            throw new GeneralException("La pagina no puede ser negativa", "400");
+        }
+        if (tamanoSolicitado < 1 || tamanoSolicitado > TAMANO_PAGINA_MAXIMO) {
             throw new GeneralException(
-                    "Indique consultaId o pacienteId para listar recetas", "400");
-        }
-        if (consultaId != null && pacienteId != null) {
-            throw new GeneralException(
-                    "Indique consultaId o pacienteId, no ambos", "400");
+                    "El tamano de pagina debe estar entre 1 y " + TAMANO_PAGINA_MAXIMO, "400");
         }
 
-        if (consultaId != null) {
-            buscarConsultaOFallar(consultaId);
-            return prescripcionRepository.buscarPorConsulta(consultaId).stream().map(this::toDto).toList();
-        }
+        // Ver decision 2 en el javadoc: desde arranca al inicio del dia,
+        // hasta se compara EXCLUSIVO contra el inicio del dia siguiente para
+        // no comerse el dia entero de "hasta".
+        LocalDateTime desdeFechaHora = desde == null ? null : desde.atStartOfDay();
+        LocalDateTime hastaFechaHora = hasta == null ? null : hasta.plusDays(1).atStartOfDay();
 
-        // Igual que en el historial de consultas: un paciente inexistente es
-        // 404, no una lista vacia que se leeria como "no toma nada".
-        if (!pacienteRepository.existsById(pacienteId)) {
-            throw new NoResourceFoundException("Paciente no encontrado", "404");
-        }
+        Pageable pageable = PageRequest.of(
+                paginaSolicitada,
+                tamanoSolicitado,
+                Sort.by(Sort.Order.desc("fecha"), Sort.Order.desc("prescripcionId")));
 
-        return prescripcionRepository.buscarPorPaciente(pacienteId).stream().map(this::toDto).toList();
+        Page<Prescripcion> resultado = prescripcionRepository.buscar(
+                pacienteId, medicoId, consultaId, desdeFechaHora, hastaFechaHora, pageable);
+
+        return PaginaDto.de(resultado.map(this::toDto));
     }
 
     @Transactional(readOnly = true)
@@ -140,7 +216,11 @@ public class PrescripcionService {
     // ══════════════════════════════════════════════════════════════════════
 
     private Consulta buscarConsultaOFallar(Long consultaId) {
-        return consultaRepository.findById(consultaId)
+        // buscarConDetalle (no findById) porque toDto() ahora necesita
+        // consulta.getPaciente().getPersona() para armar el campo paciente
+        // del DTO; con findById esa cadena se cargaria perezosamente en dos
+        // consultas mas, en vez de venir ya resuelta en esta.
+        return consultaRepository.buscarConDetalle(consultaId)
                 .orElseThrow(() -> new NoResourceFoundException("Consulta no encontrada", "404"));
     }
 
@@ -156,6 +236,8 @@ public class PrescripcionService {
     private PrescripcionResponseDto toDto(Prescripcion prescripcion) {
 
         Persona personaMedico = prescripcion.getMedico().getPersona();
+        Paciente paciente = prescripcion.getConsulta().getPaciente();
+        Persona personaPaciente = paciente.getPersona();
 
         List<MedicamentoResponseDto> medicamentos = prescripcion.getMedicamentos() == null
                 ? List.of()
@@ -172,6 +254,12 @@ public class PrescripcionService {
                 prescripcion.getPrescripcionId(),
                 prescripcion.getFecha(),
                 prescripcion.getConsulta().getConsultaId(),
+                new PacienteResumenDto(
+                        paciente.getPersonaId(),
+                        paciente.getExpediente(),
+                        personaPaciente.getNombres(),
+                        personaPaciente.getApellidos()
+                ),
                 new MedicoFirmaDto(
                         prescripcion.getMedico().getPersonaId(),
                         personaMedico.getNombres(),
