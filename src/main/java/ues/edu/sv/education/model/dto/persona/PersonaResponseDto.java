@@ -29,7 +29,10 @@ public record PersonaResponseDto(
         String telefono,
 
         @Schema(description = "Direccion, puede ser null")
-        String direccion
+        String direccion,
+
+        @Schema(description = "Correo de contacto, puede ser null")
+        String email
 
 ) {
 }

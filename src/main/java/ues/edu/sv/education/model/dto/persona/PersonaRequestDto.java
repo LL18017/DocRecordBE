@@ -1,6 +1,7 @@
 package ues.edu.sv.education.model.dto.persona;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -37,7 +38,12 @@ public record PersonaRequestDto(
 
         @Schema(description = "Direccion")
         @Size(max = 255, message = "La direccion no puede superar los 255 caracteres")
-        String direccion
+        String direccion,
+
+        @Schema(description = "Correo de contacto")
+        @Email(message = "El correo no tiene un formato valido")
+        @Size(max = 255, message = "El correo no puede superar los 255 caracteres")
+        String email
 
 ) {
 }

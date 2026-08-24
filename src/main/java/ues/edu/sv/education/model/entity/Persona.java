@@ -1,6 +1,7 @@
 package ues.edu.sv.education.model.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -61,4 +62,9 @@ public class Persona {
     @Size(max = 255)
     @Column(name = "direccion")
     private String direccion;
+
+    @Email(message = "El correo no tiene un formato valido")
+    @Size(max = 255)
+    @Column(name = "email")
+    private String email;
 }

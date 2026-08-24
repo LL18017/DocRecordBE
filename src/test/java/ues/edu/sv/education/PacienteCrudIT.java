@@ -212,6 +212,142 @@ class PacienteCrudIT extends PruebaDeIntegracion {
     }
 
     // ══════════════════════════════════════════════════════════════════════
+    // Correo de contacto (V8): prerequisito del portal del paciente
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("el alta guarda el correo de contacto de la persona")
+    void elAltaGuardaElCorreoDeContacto() throws Exception {
+        String cuerpo = mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"dui":"%s","nombres":"Con","apellidos":"Correo",
+                                            "fechaNacimiento":"1990-05-20","sexo":"F",
+                                            "email":"con.correo@ues.edu.sv"},
+                                 "tipoSangre":"O+"}
+                                """.formatted(duiUnico())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals("con.correo@ues.edu.sv",
+                json.readTree(cuerpo).get("persona").get("email").asText());
+    }
+
+    @Test
+    @DisplayName("el alta sin correo lo deja null, no lo inventa")
+    void elAltaSinCorreoLoDejaNull() throws Exception {
+        JsonNode creado = crearPaciente(duiUnico(), "Sin", "Correo");
+
+        assertTrue(creado.get("persona").get("email").isNull(),
+                "un paciente sin correo capturado no debe traer uno inventado");
+    }
+
+    @Test
+    @DisplayName("actualizar el correo no toca los demas datos, y no enviarlo no lo borra")
+    void actualizarElCorreoNoBorraLoDemasNiSeBorraSiNoSeEnvia() throws Exception {
+        JsonNode creado = crearPaciente(duiUnico(), "Correo", "Editable");
+        long personaId = creado.get("personaId").asLong();
+
+        // 1. Se agrega el correo que no traia el alta; el telefono no viaja
+        //    en esta peticion y no debe desaparecer.
+        String primeraRespuesta = mockMvc.perform(put("/pacientes/{id}", personaId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"persona\":{\"email\":\"nuevo@ues.edu.sv\"}}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode personaTrasPrimerPut = json.readTree(primeraRespuesta).get("persona");
+        assertEquals("nuevo@ues.edu.sv", personaTrasPrimerPut.get("email").asText());
+        assertEquals("7777-0000", personaTrasPrimerPut.get("telefono").asText(),
+                "el telefono no viajo en esta peticion y no debio borrarse");
+
+        // 2. Un PUT que NO menciona el correo (edita solo el telefono) no debe
+        //    borrar el que se acaba de guardar: null en el request significa
+        //    "no lo estoy tocando", nunca "borralo".
+        String segundaRespuesta = mockMvc.perform(put("/pacientes/{id}", personaId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"persona\":{\"telefono\":\"7000-1111\"}}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode personaTrasSegundoPut = json.readTree(segundaRespuesta).get("persona");
+        assertEquals("nuevo@ues.edu.sv", personaTrasSegundoPut.get("email").asText(),
+                "el correo guardado en el paso anterior no debio borrarse por no venir en este PUT");
+        assertEquals("7000-1111", personaTrasSegundoPut.get("telefono").asText());
+    }
+
+    @Test
+    @DisplayName("un correo con formato invalido se rechaza con 400, tanto al crear como al actualizar")
+    void unCorreoConFormatoInvalidoSeRechaza() throws Exception {
+        mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"dui":"%s","nombres":"Correo","apellidos":"Invalido",
+                                            "fechaNacimiento":"1990-05-20","sexo":"F",
+                                            "email":"no-es-un-correo"},
+                                 "tipoSangre":"O+"}
+                                """.formatted(duiUnico())))
+                .andExpect(status().isBadRequest());
+
+        JsonNode creado = crearPaciente(duiUnico(), "Correo", "ValidoAlCrear");
+        long personaId = creado.get("personaId").asLong();
+
+        mockMvc.perform(put("/pacientes/{id}", personaId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"persona\":{\"email\":\"tampoco-esto\"}}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("completar una persona existente sin correo le agrega el que llega en el alta")
+    void completarUnaPersonaSinCorreoLeAgregaElQueLlega() throws Exception {
+        // Igual que "una persona incompleta necesita fecha y sexo": una
+        // persona registrada antes como personal medico, sin correo, se
+        // completa al volverse paciente en la MISMA llamada.
+        var persona = personas.saveAndFlush(
+                ues.edu.sv.education.model.entity.Persona.builder()
+                        .dui(duiUnico())
+                        .nombres("Medico").apellidos("Que Se Atiende Con Correo")
+                        .build());
+
+        String cuerpo = mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"personaId":%d,"fechaNacimiento":"1988-08-08","sexo":"M",
+                                            "email":"medico.paciente@ues.edu.sv"},
+                                 "tipoSangre":"O+"}
+                                """.formatted(persona.getPersonaId())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals("medico.paciente@ues.edu.sv",
+                json.readTree(cuerpo).get("persona").get("email").asText());
+    }
+
+    @Test
+    @DisplayName("GET /personas?dui= trae el correo de contacto")
+    void buscarPorDuiTraeElCorreo() throws Exception {
+        String dui = duiUnico();
+        crearPaciente(dui, "Buscable", "ConCorreo");
+
+        String cuerpo = mockMvc.perform(get("/personas").param("dui", dui)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // crearPaciente no manda correo en este helper: se espera null, no
+        // que la busqueda por DUI se caiga o invente un valor.
+        assertTrue(json.readTree(cuerpo).get("email").isNull());
+        assertTrue(json.readTree(cuerpo).get("esPaciente").asBoolean());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     // Baja
     // ══════════════════════════════════════════════════════════════════════
 

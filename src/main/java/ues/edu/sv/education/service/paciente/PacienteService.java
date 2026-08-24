@@ -116,6 +116,7 @@ public class PacienteService {
             if (!isBlank(datos.sexo())) persona.setSexo(datos.sexo());
             if (!isBlank(datos.telefono())) persona.setTelefono(datos.telefono());
             if (!isBlank(datos.direccion())) persona.setDireccion(datos.direccion());
+            if (!isBlank(datos.email())) persona.setEmail(datos.email());
         }
 
         if (!isBlank(request.tipoSangre())) paciente.setTipoSangre(request.tipoSangre());
@@ -161,6 +162,7 @@ public class PacienteService {
                     .sexo(request.sexo())
                     .telefono(request.telefono())
                     .direccion(request.direccion())
+                    .email(request.email())
                     .build());
         }
 
@@ -186,6 +188,7 @@ public class PacienteService {
         if (request.sexo() != null) persona.setSexo(request.sexo());
         if (request.telefono() != null) persona.setTelefono(request.telefono());
         if (request.direccion() != null) persona.setDireccion(request.direccion());
+        if (request.email() != null) persona.setEmail(request.email());
 
         return personaRepository.save(persona);
     }
@@ -209,7 +212,8 @@ public class PacienteService {
                         persona.getFechaNacimiento(),
                         persona.getSexo(),
                         persona.getTelefono(),
-                        persona.getDireccion()
+                        persona.getDireccion(),
+                        persona.getEmail()
                 )
         );
     }

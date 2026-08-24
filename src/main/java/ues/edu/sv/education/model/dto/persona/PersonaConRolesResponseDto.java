@@ -15,6 +15,7 @@ public record PersonaConRolesResponseDto(
         String sexo,
         String telefono,
         String direccion,
+        String email,
 
         @Schema(description = "Si ya tiene fila en medicos")
         boolean esMedico,

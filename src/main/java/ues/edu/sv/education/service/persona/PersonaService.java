@@ -42,6 +42,7 @@ public class PersonaService {
                 persona.getSexo(),
                 persona.getTelefono(),
                 persona.getDireccion(),
+                persona.getEmail(),
                 medicoRepository.existsById(id),
                 enfermeraRepository.existsById(id),
                 pacienteRepository.existsById(id)
