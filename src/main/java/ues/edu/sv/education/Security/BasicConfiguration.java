@@ -1,6 +1,8 @@
 package ues.edu.sv.education.Security;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -83,6 +85,12 @@ public class BasicConfiguration {
                 )
                 .addFilterBefore(jwtFilter,
                         UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
+    @Bean
+    ChatMemory chatMemory() {
+        return MessageWindowChatMemory.builder()
+                .maxMessages(20)
                 .build();
     }
 

@@ -25,8 +25,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class JwtService {
     final String SECRET_KEY = "Pp66ApU5jFTa0Inys7eKQVGGUorowMahapH74X1Ho9W";
-    final Integer EXPIRATION_TIME = 15 * 60 * 1000;
-    final Integer REFRESH_EXPIRATION_TIME = 30 * 60 * 1000;
+    final Integer EXPIRATION_TIME = 60 * 60 * 1000;
+    final Integer REFRESH_EXPIRATION_TIME = 6000 * 60 * 1000;
 
     public String generateToken(@Valid @RequestBody CustomUserDetails user) {
         return buildToken(user, EXPIRATION_TIME);

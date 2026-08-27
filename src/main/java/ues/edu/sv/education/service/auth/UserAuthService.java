@@ -2,8 +2,11 @@ package ues.edu.sv.education.service.auth;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
+import ues.edu.sv.education.model.dto.User.UserResponseDto;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.repository.UserRepository;
 
 import java.util.List;
@@ -13,8 +16,9 @@ import java.util.List;
 public class UserAuthService {
     private final UserRepository repository;
 
-    public List<User> getAllUser() {
-        return repository.findAll();
+    @Tool(description = "obtiene una lista de todos los usarios independientemente su rol ademas de informacion importante sobre estos")
+    public List<UserResponseDto> getAllUser() {
+        return repository.findAll().stream().map(UserMapper::toDto).toList();
     }
 
     public User getUser(String email) {

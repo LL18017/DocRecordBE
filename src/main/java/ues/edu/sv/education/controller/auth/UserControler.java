@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.service.auth.UserAuthService;
 import ues.edu.sv.education.service.user.UserService;
 
@@ -23,7 +24,7 @@ public class UserControler {
 
 
     @GetMapping
-    public List<User> getUsers(){
+    public List<UserResponseDto> getUsers(){
         return service.getAllUser();
     }
 
