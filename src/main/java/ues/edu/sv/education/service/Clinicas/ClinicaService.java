@@ -1,6 +1,7 @@
 package ues.edu.sv.education.service.Clinicas;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
@@ -23,7 +24,11 @@ public class ClinicaService {
     private final UserTypeRepository userTypeRepository;
     private final ClinicaRepository clinicasRepository;
 
-    @Transactional(readOnly = true)
+    @Transactional()
+    @Tool(
+            description = "Obtiene las clínicas asociadas a un usuario específico. "
+                    + "Devuelve el identificador, nombre y ubicación de cada clínica."
+    )
     public List<ClinicasResponseDto> obtenerPorUsuario(Integer userId) {
 
         return clinicasRepository.findByUser(userId)

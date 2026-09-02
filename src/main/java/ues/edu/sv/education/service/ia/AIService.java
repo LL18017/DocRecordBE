@@ -11,6 +11,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
+import ues.edu.sv.education.service.Clinicas.ClinicaService;
 import ues.edu.sv.education.service.UserType.UserTypeService;
 import ues.edu.sv.education.service.auth.UserAuthService;
 import ues.edu.sv.education.service.roles.RolesService;
@@ -25,17 +26,20 @@ public class AIService {
 
     @Value("classpath:prompts/clinic-system-prompt.txt")
     Resource systemPrompt;
+            @Value("${ia.model}") String model;
     private final ChatClient chatClient;
     private final RolesService rolesService;
     private final UserAuthService userAuthService;
     private final UserTypeService userTypeService;
+    private final ClinicaService clinicaService;
 
     public AIService(ChatClient.Builder builder, ChatMemory chatMemory,RolesService rolesService,
-                     UserAuthService userAuthService,UserTypeService userTypeService) {
+                     UserAuthService userAuthService,UserTypeService userTypeService ,ClinicaService clinicaService) {
 
         this.rolesService=rolesService;
         this.userAuthService=userAuthService;
         this.userTypeService=userTypeService;
+        this.clinicaService=clinicaService;
 
         MessageChatMemoryAdvisor memoryAdvisor =
                 MessageChatMemoryAdvisor.builder(chatMemory)
@@ -50,14 +54,11 @@ public class AIService {
     }
 
     public String chat(String prompt, String userId) throws IOException {
-
         String system = systemPrompt.getContentAsString(StandardCharsets.UTF_8);
-
         Prompt aiPrompt = new Prompt(
                        prompt,
                 OllamaChatOptions.builder()
-
-                        .model("qwen3.5:4b")
+                        .model(model)
                         .disableThinking()
                         .build()
         );

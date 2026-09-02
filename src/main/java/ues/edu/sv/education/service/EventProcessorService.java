@@ -25,7 +25,7 @@ public class EventProcessorService {
     private final UserService userService;
     private final EventTypeRepository eventTypeRepository;
     private final EventStatusRepository eventStatusRepository;
-    @Scheduled(fixedDelay = 15000)
+//    @Scheduled(fixedDelay = 15000)
     @Transactional
     public void processLoginEvents() {
 

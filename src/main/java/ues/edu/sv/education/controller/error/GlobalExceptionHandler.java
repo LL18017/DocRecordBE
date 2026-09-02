@@ -3,33 +3,38 @@ package ues.edu.sv.education.controller.error;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.retry.NonTransientAiException;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.servlet.NoHandlerFoundException;
-
+import org.springframework.web.servlet.resource.NoResourceFoundException; // FIX: import faltante
 import ues.edu.sv.education.model.dto.error.ErrorResponseDTO;
-
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // FIX: Logger recomendado en vez de ex.printStackTrace() para producción.
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     /*
      * ============================================================
-     * 404 - RECURSO NO ENCONTRADO
+     * 404 - RECURSO NO ENCONTRADO (ENTIDAD)
      * ============================================================
      *
      * Se utiliza cuando intentamos obtener un registro que
@@ -56,23 +61,18 @@ public class GlobalExceptionHandler {
                         "message", ex.getMessage()
                 ));
     }
+
     /*
      * ============================================================
-     * 404 - RECURSO NO ENCONTRADO
+     * 404 - RECURSO ESTÁTICO NO ENCONTRADO
      * ============================================================
      *
-     * Se utiliza cuando intentamos obtener un registro que
-     * no existe en la base de datos.
+     * Se lanza cuando Spring MVC no encuentra un recurso estático
+     * (por ejemplo un archivo dentro de /static) o una ruta que
+     * no coincide con ningún handler ni recurso servible.
      *
-     * Ejemplo:
-     *
-     * GET /users/999
-     *
-     * Si el usuario 999 no existe y el servicio lanza:
-     *
-     * throw new EntityNotFoundException("Usuario no encontrado");
-     *
-     * se devuelve HTTP 404.
+     * NOTA (FIX): faltaba el import de NoResourceFoundException,
+     * por lo que esta clase NO compilaba.
      */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, String>> handleNoResourceFoundException(
@@ -99,10 +99,6 @@ public class GlobalExceptionHandler {
      *
      * Intentar eliminar un usuario que tiene información
      * relacionada que impide su eliminación.
-     *
-     * NOTA:
-     * Antes tenías NOT_FOUND (404) aquí.
-     * Para un conflicto es más correcto utilizar 409.
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, String>> handleIllegalStateException(
@@ -123,28 +119,7 @@ public class GlobalExceptionHandler {
      * ============================================================
      *
      * Captura errores producidos por:
-     *
-     * @Valid
-     * @NotBlank
-     * @NotNull
-     * @Email
-     * @Size
-     * @Min
-     * @Max
-     * etc.
-     *
-     * Ejemplo:
-     *
-     * @PostMapping
-     * public User create(
-     *     @Valid @RequestBody UserRequestDto request
-     * )
-     *
-     * Si el email está vacío, se devuelve:
-     *
-     * {
-     *     "email": "El correo no puede estar vacío"
-     * }
+     * @Valid @NotBlank @NotNull @Email @Size @Min @Max, etc.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationException(
@@ -172,19 +147,8 @@ public class GlobalExceptionHandler {
      * 400 - ERROR DE VALIDACIÓN DE PARÁMETROS
      * ============================================================
      *
-     * Se utiliza principalmente para validaciones realizadas
-     * directamente sobre parámetros del Controller.
-     *
-     * Ejemplo:
-     *
-     * @GetMapping("/{id}")
-     * public User getUser(
-     *     @PathVariable
-     *     @Min(1)
-     *     Integer id
-     * )
-     *
-     * Puede producir ConstraintViolationException.
+     * Validaciones realizadas directamente sobre parámetros
+     * del Controller (@PathVariable, @RequestParam con @Min, etc).
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, String>> handleConstraintViolationException(
@@ -211,30 +175,8 @@ public class GlobalExceptionHandler {
      * 409 - ERROR DE INTEGRIDAD DE BASE DE DATOS
      * ============================================================
      *
-     * Captura errores como:
-     *
-     * - Email duplicado
-     * - Username duplicado
-     * - Violación de UNIQUE
-     * - Violación de FOREIGN KEY
-     * - Violación de NOT NULL de la BD
-     *
-     * Ejemplo:
-     *
-     * @Column(unique = true)
-     * private String email;
-     *
-     * Si intentamos registrar:
-     *
-     * mario992lopez@gmail.com
-     *
-     * y ya existe, PostgreSQL genera:
-     *
-     * duplicate key value violates unique constraint
-     *
-     * Spring normalmente lo envuelve en:
-     *
-     * DataIntegrityViolationException
+     * Captura errores como email/username duplicado o violación
+     * de FOREIGN KEY / UNIQUE / NOT NULL.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(
@@ -242,11 +184,7 @@ public class GlobalExceptionHandler {
 
         String message = ex.getMostSpecificCause().getMessage();
 
-        /*
-         * Detectamos específicamente el caso de email duplicado.
-         */
         if (message != null && message.contains("(email)")) {
-
             return ResponseEntity
                     .status(HttpStatus.CONFLICT)
                     .body(Map.of(
@@ -255,12 +193,8 @@ public class GlobalExceptionHandler {
                     ));
         }
 
-        /*
-         * Cualquier otra violación de integridad.
-         *
-         * No devolvemos el mensaje completo de PostgreSQL porque
-         * podría revelar información interna de la base de datos.
-         */
+        // No devolvemos el mensaje completo de PostgreSQL: podría
+        // revelar información interna de la base de datos.
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(Map.of(
@@ -274,24 +208,6 @@ public class GlobalExceptionHandler {
      * ============================================================
      * 400 - JSON MAL FORMADO
      * ============================================================
-     *
-     * Captura errores cuando el cliente envía JSON inválido.
-     *
-     * Ejemplo:
-     *
-     * {
-     *     "email": "mario@gmail.com",
-     *     "userName": "mario"
-     *     "password": "123"
-     * }
-     *
-     * Falta una coma después de "mario".
-     *
-     * También puede ocurrir cuando se envía un tipo incorrecto:
-     *
-     * "userType": "ABC"
-     *
-     * cuando se espera Integer.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, String>> handleHttpMessageNotReadable(
@@ -310,18 +226,6 @@ public class GlobalExceptionHandler {
      * ============================================================
      * 405 - MÉTODO HTTP NO PERMITIDO
      * ============================================================
-     *
-     * Ejemplo:
-     *
-     * El endpoint solamente permite:
-     *
-     * POST /users
-     *
-     * pero el cliente realiza:
-     *
-     * GET /users
-     *
-     * Entonces se devuelve 405.
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<Map<String, String>> handleMethodNotSupported(
@@ -341,20 +245,11 @@ public class GlobalExceptionHandler {
      * 404 - ENDPOINT NO EXISTE
      * ============================================================
      *
-     * Captura solicitudes realizadas hacia una URL que no
-     * corresponde a ningún endpoint de nuestra aplicación.
-     *
-     * Ejemplo:
-     *
-     * GET /usuarios/123/abc
-     *
-     * cuando esa ruta no existe.
-     *
      * NOTA:
-     * Para que Spring lance NoHandlerFoundException en ciertas
-     * configuraciones puede ser necesario habilitar:
-     *
+     * Para que Spring lance NoHandlerFoundException es necesario
+     * configurar:
      * spring.mvc.throw-exception-if-no-handler-found=true
+     * spring.web.resources.add-mappings=false
      */
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<Map<String, String>> handleNoHandlerFound(
@@ -374,14 +269,9 @@ public class GlobalExceptionHandler {
      * 401 - ERROR DE AUTENTICACIÓN
      * ============================================================
      *
-     * Se utiliza cuando el usuario no está correctamente
-     * autenticado.
-     *
-     * En tu proyecto tienes una excepción personalizada:
-     *
-     * CustomAuthenticationException
-     *
-     * Por lo tanto conservamos tu implementación.
+     * NOTA (FIX): faltaba el import de CustomAuthenticationException.
+     * Ajusta el paquete al real de tu proyecto si es distinto de
+     * ues.edu.sv.education.exception.CustomAuthenticationException
      */
     @ExceptionHandler(CustomAuthenticationException.class)
     public ResponseEntity<ErrorResponseDTO> handleAuthenticationError(
@@ -406,20 +296,6 @@ public class GlobalExceptionHandler {
      *
      * El usuario está autenticado pero NO tiene permisos
      * suficientes para realizar la operación.
-     *
-     * Ejemplo:
-     *
-     * Usuario:
-     *
-     * ROLE_USER
-     *
-     * intenta acceder a:
-     *
-     * /admin/users
-     *
-     * que requiere:
-     *
-     * ROLE_ADMIN
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, String>> handleAccessDenied(
@@ -453,45 +329,98 @@ public class GlobalExceptionHandler {
 
     /*
      * ============================================================
-     * 500 - ERROR INESPERADO
+     * ERRORES RELACIONADOS AL SERVICIO DE IA (Spring AI / Ollama)
+     * ============================================================
+     */
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ErrorResponseDTO> handleIOException(IOException ex) {
+
+        ErrorResponseDTO error = new ErrorResponseDTO(
+                "No se pudo cargar la configuración del asistente.",
+                500
+        );
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(error);
+    }
+
+    @ExceptionHandler(TransientAiException.class)
+    public ResponseEntity<ErrorResponseDTO> handleTransientAiException(
+            TransientAiException ex) {
+
+        ErrorResponseDTO error = new ErrorResponseDTO(
+                "El servicio de inteligencia artificial no está disponible temporalmente.",
+                503
+        );
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(error);
+    }
+
+    @ExceptionHandler(NonTransientAiException.class)
+    public ResponseEntity<ErrorResponseDTO> handleNonTransientAiException(
+            NonTransientAiException ex) {
+
+        ErrorResponseDTO error = new ErrorResponseDTO(
+                "El servicio de inteligencia artificial rechazó la solicitud.",
+                502
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(error);
+    }
+
+    @ExceptionHandler(ResourceAccessException.class)
+    public ResponseEntity<ErrorResponseDTO> handleResourceAccessException(
+            ResourceAccessException ex) {
+
+        ErrorResponseDTO error = new ErrorResponseDTO(
+                "No se pudo conectar con el servicio de inteligencia artificial.",
+                503
+        );
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(error);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponseDTO> handleIllegalArgumentException(
+            IllegalArgumentException ex) {
+
+        ErrorResponseDTO error = new ErrorResponseDTO(
+                "Los datos enviados no son válidos.",
+                400
+        );
+
+        return ResponseEntity.badRequest().body(error);
+    }
+
+
+    /*
+     * ============================================================
+     * 500 - ERROR INESPERADO (ÚLTIMO RECURSO)
      * ============================================================
      *
-     * Este es el "último recurso".
-     *
-     * Si ocurre una excepción que NO fue manejada por ninguno
-     * de los handlers anteriores, llega aquí.
-     *
-     * MUY IMPORTANTE:
-     *
-     * NO devolvemos ex.getMessage() al cliente.
-     *
-     * El mensaje podría contener:
-     *
-     * - SQL
-     * - nombres de tablas
-     * - rutas internas
-     * - información de Hibernate
-     * - información sensible
-     *
-     * El detalle debe quedar únicamente en los logs del servidor.
+     * (handleGenericException y handleException). Eso es inválido:
+     * Spring lanza en el arranque
+     *   "Ambiguous @ExceptionHandler method mapped for [...]"
+     * porque no puede decidir cuál usar para Exception.class.
+     * Se dejó un único handler, unificado con ErrorResponseDTO
+     * para mantener consistencia con los handlers de IA/IO.
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, String>> handleGenericException(
-            Exception ex) {
+    public ResponseEntity<ErrorResponseDTO> handleGenericException(Exception ex) {
 
-        /*
-         * Esto aparecerá en los logs del servidor.
-         *
-         * En producción puedes utilizar Logger en lugar de
-         * System.err.
-         */
-        ex.printStackTrace();
+        // FIX: usar logger en vez de printStackTrace en producción.
+        log.error("Error interno no controlado", ex);
+
+        ErrorResponseDTO error = new ErrorResponseDTO(
+                "Ocurrió un error inesperado en el servidor.",
+                500
+        );
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of(
-                        "error", "Error interno",
-                        "message", "Ocurrió un error inesperado en el servidor"
-                ));
+                .body(error);
     }
 }

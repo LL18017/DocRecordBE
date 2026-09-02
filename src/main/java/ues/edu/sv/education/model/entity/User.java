@@ -14,7 +14,7 @@ import java.util.Set;
 @Builder
 public class User {
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private  Integer UserID;
     @NotBlank(message = "El nombre no puede estar vacio")

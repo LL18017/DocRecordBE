@@ -16,7 +16,7 @@ import lombok.*;
 public class Clinicas {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "clinica_id")
     private Integer clinicaId;
 

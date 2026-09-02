@@ -18,7 +18,7 @@ import java.util.Set;
 @NoArgsConstructor
 public class UserType {
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_type_id")
     private  Integer userTypeID;
     @NotBlank(message = "El nombre no puede estar vacio")

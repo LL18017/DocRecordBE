@@ -18,10 +18,13 @@ public class UserAuthService {
 
     @Tool(description = "obtiene una lista de todos los usarios independientemente su rol ademas de informacion importante sobre estos")
     public List<UserResponseDto> getAllUser() {
+
+        System.out.println("TOOL >>>  getAllUser EJECUTADA");
         return repository.findAll().stream().map(UserMapper::toDto).toList();
     }
 
     public User getUser(String email) {
+        System.out.println("TOOL >>>  getUser EJECUTADA");
         return repository.findByEmailContainingIgnoreCase(email).orElseThrow(
                 () -> new EntityNotFoundException("No se encontro al usuario")
         );
