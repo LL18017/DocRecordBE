@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import ues.edu.sv.education.model.dto.roles.RoleDto;
+import ues.edu.sv.education.model.dto.roles.RoleResponseDto;
 
 import java.util.List;
 
@@ -21,7 +21,7 @@ public record UserResponseDto(
         @NotNull(message = "El usuario no puede ser nula")
         @NotBlank(message = "El usuario no puede estar vacia")
         String userName,
-        List<RoleDto> roles,
+        List<RoleResponseDto> roles,
         @Email(message = "formato no valido para tipo de usuario")
         @NotNull(message = "el tipo de usuario no puede ser nulo")
         String type) {

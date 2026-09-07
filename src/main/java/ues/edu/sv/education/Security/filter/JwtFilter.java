@@ -7,37 +7,47 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ues.edu.sv.education.model.dto.auth.CustomUserDetails;
+import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.repository.UserRepository;
 import ues.edu.sv.education.service.auth.JwtService;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.stream.Collectors;
 
-@Component
 @RequiredArgsConstructor
+@Component
 public class JwtFilter extends OncePerRequestFilter {
+
     private final JwtService jwtService;
+    private final UserRepository userRepository;
+
     @Override
-    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest req,
+            HttpServletResponse res,
+            FilterChain chain
+    ) throws ServletException, IOException {
 
         String path = req.getRequestURI();
 
-        //  Permitir rutas públicas
-        if (path.startsWith("/auth/") || path.startsWith("/swagger-ui")
+        // Rutas públicas
+        if (path.startsWith("/auth/")
+                || path.startsWith("/swagger-ui")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-resources")
-                || path.startsWith("/webjars")
-        ) {
+                || path.startsWith("/webjars")) {
+
             chain.doFilter(req, res);
             return;
         }
-        //extraer el token
+
+        // Extraer token
         String header = req.getHeader("Authorization");
+
         if (header == null || !header.startsWith("Bearer ")) {
             res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             res.getWriter().write("Debe enviar token Bearer");
@@ -45,40 +55,57 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         String token = header.substring(7);
+
         try {
+
             Claims claims = jwtService.getClaims(token);
 
-            // Extraer id del token
+            // ID almacenado en el JWT
             String usuarioId = claims.getId();
-            List<String> rawAuthorities = claims.get("authorities", List.class);
 
-            List<GrantedAuthority> authorities = rawAuthorities == null
-                    ? List.of()
-                    : rawAuthorities.stream()
-                    .map(SimpleGrantedAuthority::new)   // String → GrantedAuthority
-                    .collect(Collectors.toList());
             if (usuarioId == null) {
                 res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 res.getWriter().write("Token no contiene id de usuario");
                 return;
             }
 
-            // Guardar en request
+            // Obtener usuario
+            User user = userRepository.findById(Integer.valueOf(usuarioId))
+                    .orElseThrow(() ->
+                            new UsernameNotFoundException(
+                                    "Usuario no encontrado"
+                            )
+                    );
+
+            // Crear UserDetails
+            CustomUserDetails userDetails =
+                    new CustomUserDetails(user);
+
+            // Usar las authorities del usuario
+            UsernamePasswordAuthenticationToken authToken =
+                    new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+
+            // Guardar usuario autenticado
+            SecurityContextHolder
+                    .getContext()
+                    .setAuthentication(authToken);
+
+            // Opcional: guardar ID en request
             req.setAttribute("usuarioId", usuarioId);
 
-            UsernamePasswordAuthenticationToken authToken =
-                    new UsernamePasswordAuthenticationToken(usuarioId,null, authorities);
-            SecurityContextHolder.getContext().setAuthentication(authToken);
-
-            System.out.println(authorities);
         } catch (Exception e) {
+
             System.out.println(e.getMessage());
+
             res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             res.getWriter().write("Token inválido o expirado");
             return;
         }
 
-        // Continuar con la cadena
         chain.doFilter(req, res);
     }
 }

@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
@@ -24,7 +25,10 @@ import ues.edu.sv.education.service.auth.UserAuthService;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
-@Tag(name = "Autenticación", description = "Endpoints para login, refresh de token y registro de usuarios")
+@Tag(
+        name = "3. Autenticación",
+        description = "Endpoints para autenticación, registro y gestión de tokens"
+)
 public class AuthController {
 
     private final UserAuthService service;
@@ -32,52 +36,108 @@ public class AuthController {
 
     @Operation(
             summary = "Iniciar sesión",
-            description = "Autentica a un usuario con email y contraseña, y devuelve un access token junto con un refresh token."
+            description = "Autentica a un usuario mediante su email y contraseña y devuelve un access token y un refresh token."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Login exitoso, retorna los tokens y los roles del usuario"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (email o contraseña con formato incorrecto)"),
-            @ApiResponse(responseCode = "401", description = "Credenciales incorrectas")
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Login exitoso, retorna los tokens y los roles del usuario"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Datos de entrada inválidos"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Credenciales incorrectas"
+            )
     })
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDto> getUser(@Valid @RequestBody UserLoginDto user) {
-        return ResponseEntity.ok(authService.loging(user));
+    public ResponseEntity<LoginResponseDto> getUser(
+            @Valid @RequestBody UserLoginDto user
+    ) {
+        return ResponseEntity.ok(
+                authService.loging(user)
+        );
     }
 
     @Operation(
             summary = "Refrescar token",
-            description = "Genera un nuevo access token a partir de un refresh token válido enviado en el header Authorization."
+            description = "Genera un nuevo access token utilizando un refresh token válido enviado en el header Authorization."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Token renovado exitosamente"),
-            @ApiResponse(responseCode = "401", description = "Refresh token inválido, expirado o ausente")
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Token renovado exitosamente"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Refresh token inválido, expirado o ausente"
+            )
     })
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponseDto> refresh(
-            @Parameter(description = "Refresh token en formato 'Bearer {token}'", required = true)
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token) {
-        return ResponseEntity.ok(authService.refresh(token));
+            @Parameter(
+                    description = "Refresh token en formato Bearer {token}",
+                    required = true
+            )
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        return ResponseEntity.ok(
+                authService.refresh(token)
+        );
     }
 
     @Operation(
             summary = "Registrar usuario",
-            description = "Crea un nuevo usuario en el sistema con su email, contraseña, roles y tipo de usuario."
+            description = "Crea un nuevo usuario en el sistema con su información, roles y tipo de usuario."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Usuario creado exitosamente"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (email, contraseña, roles o tipo de usuario faltantes/incorrectos)"),
-            @ApiResponse(responseCode = "409", description = "El email ya está registrado")
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Usuario creado exitosamente"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Datos de entrada inválidos"
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "El email ya está registrado"
+            )
     })
     @PostMapping("/register")
     @Transactional
-    public ResponseEntity<UserResponseDto> createUser(@Valid @RequestBody UserRequestDto user) {
-        return ResponseEntity.ok(UserMapper.toDto(authService.createUser(user)));
+    public ResponseEntity<UserResponseDto> createUser(
+            @Valid @RequestBody UserRequestDto user
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(UserMapper.toDto(authService.createUser(user)));
     }
 
-    @Operation(summary = "Confirmar registro por correo")
+    @Operation(
+            summary = "Confirmar registro por correo",
+            description = "Confirma la cuenta de un usuario mediante el token enviado a su correo electrónico."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Cuenta confirmada exitosamente"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Token inválido o expirado"
+            )
+    })
     @GetMapping("/confirm")
-    public ResponseEntity<String> confirmAccount(@RequestParam String token) {
+    public ResponseEntity<String> confirmAccount(
+            @RequestParam String token
+    ) {
         authService.confirmToken(token);
-        return ResponseEntity.ok("Cuenta confirmada exitosamente");
+
+        return ResponseEntity.ok(
+                "Cuenta confirmada exitosamente"
+        );
     }
 }

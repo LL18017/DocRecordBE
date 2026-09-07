@@ -1,5 +1,9 @@
 package ues.edu.sv.education.Security;
 
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
@@ -53,6 +57,24 @@ public class BasicConfiguration {
                 encoder,
                 userAuthService
         );
+    }
+
+    @Bean
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("Education API")
+                        .version("1.0")
+                        .description("API para la gestión del sistema Education"))
+                .components(new Components()
+                        .addSecuritySchemes(
+                                "jwt",
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")
+                        )
+                );
     }
 
     @Bean

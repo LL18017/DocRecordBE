@@ -1,33 +1,13 @@
 package ues.edu.sv.education.model.dto.userType;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-import java.util.List;
-
-@Schema(description = "Datos requeridos para registrar un nuevo usuario")
 public record UserTypeRequestDto(
 
-        @Schema(description = "Correo electrónico del usuario", example = "juan.perez@ues.edu.sv")
-        @Email(message = "Formato no válido para email")
-        @Size(max = 100, message = "El email debe poseer menos de 100 caracteres")
-        @NotBlank(message = "El correo no puede estar vacío")
-        String email,
+        @NotBlank(message = "El nombre es obligatorio")
+        @Size(max = 100, message = "El nombre no puede superar los 100 caracteres")
+        String name
 
-        @Schema(description = "Nombre de usuario", example = "jperez")
-        @NotBlank(message = "El usuario no puede estar vacío")
-        String userName,
-
-        @Schema(description = "Contraseña del usuario", example = "MiClave123!")
-        @NotBlank(message = "La contraseña no puede estar vacía")
-        String password,
-
-        @Schema(description = "Lista de IDs de roles asignados al usuario", example = "[1, 2]")
-        @NotEmpty(message = "Debe seleccionar al menos un rol")
-        List<Integer> roles,
-
-        @Schema(description = "ID del tipo de usuario (ej. 1=DOCTOR, 2=ENFERMERA, 3=EMPLEADO)", example = "1")
-        @NotNull(message = "El tipo de usuario es obligatorio")
-        Integer userType
 ) {
 }

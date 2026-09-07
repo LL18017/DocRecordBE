@@ -2,7 +2,7 @@ package ues.edu.sv.education.model.mappers;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import ues.edu.sv.education.model.dto.roles.RoleDto;
+import ues.edu.sv.education.model.dto.roles.RoleResponseDto;
 import ues.edu.sv.education.model.entity.Role;
 
 
@@ -12,7 +12,7 @@ class RoleMapperTest {
     //TEST PARA CONVERTIR A UN dto dado un role
     void testRoleNameToDto() {
         String name = "ROLE_ADMIN";
-        RoleDto DTO = RoleMapper.toDto(name);
+        RoleResponseDto DTO = RoleMapper.toDto(name);
         Assertions.assertEquals(name, DTO.getName());
         Assertions.assertEquals(1, DTO.getId());
     }
@@ -20,7 +20,7 @@ class RoleMapperTest {
     @Test
     void testRoleToDto() {
         Role role=new Role(1,"ADMIN");
-        RoleDto DTO = RoleMapper.toDto(role);
+        RoleResponseDto DTO = RoleMapper.toDto(role);
         Assertions.assertEquals(Role.class, role.getClass());
         Assertions.assertEquals(1, DTO.getId());
         Assertions.assertEquals("ADMIN", DTO.getName());
@@ -28,7 +28,7 @@ class RoleMapperTest {
 
     @Test
     void testDtoToEntity() {
-        RoleDto dto=new RoleDto(1,"ADMIN");
+        RoleResponseDto dto=new RoleResponseDto(1,"ADMIN");
         Role entity=RoleMapper.toEntity(dto);
         Assertions.assertEquals(Role.class, entity.getClass());
     }
