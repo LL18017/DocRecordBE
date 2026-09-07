@@ -56,4 +56,20 @@ public class User {
             orphanRemoval = true
     )
     private Set<EnfermedadCronica> enfermedadesCronicas;
+
+    @OneToMany(
+            mappedBy = "user",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private Set<Alergia> alergias;
+
+    @OneToMany(
+            mappedBy = "user",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private Set<CondicionHereditaria> condicionesHereditarias;
 }
