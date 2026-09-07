@@ -19,8 +19,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.servlet.NoHandlerFoundException;
-import org.springframework.web.servlet.resource.NoResourceFoundException; // FIX: import faltante
+import org.springframework.web.servlet.NoHandlerFoundException; // FIX: import faltante
 import ues.edu.sv.education.model.dto.error.ErrorResponseDTO;
 import java.io.IOException;
 import java.util.HashMap;

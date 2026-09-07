@@ -45,6 +45,7 @@ public class UserMapper {
                 false,
                 new HashSet<>(),
                 null,
+                null,
                 null
         );
     }
