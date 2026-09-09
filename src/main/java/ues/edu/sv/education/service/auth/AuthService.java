@@ -156,7 +156,7 @@ public class AuthService {
         verificationTokenRepository.save(verificationToken);
 
         // Enviar correo de confirmación
-        sendVerificationEmail(savedUser.getEmail(), token);
+        // sendVerificationEmail(savedUser.getEmail(), token);
 
         return savedUser;
     }
