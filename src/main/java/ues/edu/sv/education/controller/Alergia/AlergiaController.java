@@ -1,4 +1,4 @@
-package ues.edu.sv.education.controller;
+package ues.edu.sv.education.controller.Alergia;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
