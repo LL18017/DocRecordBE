@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.clinicas.CambiarEstadoClinicaRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
 import ues.edu.sv.education.service.Clinicas.ClinicaService;
@@ -108,5 +109,20 @@ public class ClinicasController {
         clinicasService.eliminar(clinicaId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Dar de alta o de baja una clínica",
+            description = "Cambia el estado entre ACTIVA e INACTIVA. NO borra nada: las consultas "
+                    + "que se atendieron ahí ocurrieron ahí, y el personal asignado sigue asignado. "
+                    + "Una clínica inactiva solo deja de ofrecerse para atender."
+    )
+    @PatchMapping("/{clinicaId}/estado")
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
+    public ResponseEntity<ClinicasResponseDto> cambiarEstado(
+            @PathVariable("clinicaId") Integer clinicaId,
+            @Valid @RequestBody CambiarEstadoClinicaRequestDto request
+    ) {
+        return ResponseEntity.ok(clinicasService.cambiarEstado(clinicaId, request.estado()));
     }
 }

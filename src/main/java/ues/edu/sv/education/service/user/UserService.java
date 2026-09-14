@@ -23,6 +23,7 @@ import ues.edu.sv.education.model.entity.Role;
 import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.entity.VerificationToken;
 import ues.edu.sv.education.model.enums.RolesEnum;
+import ues.edu.sv.education.model.mappers.ClinicaMapper;
 import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.repository.MedicoRepository;
 import ues.edu.sv.education.repository.proyeccion.EspecialidadDePersona;
@@ -332,8 +333,7 @@ public class UserService {
 
         return user.getClinicasAsignadas().stream()
                 .sorted(Comparator.comparing(Clinicas::getClinicaId))
-                .map(c -> new ClinicasResponseDto(
-                        c.getClinicaId(), c.getName(), c.getLatitud(), c.getLongitud()))
+                .map(ClinicaMapper::toDto)
                 .toList();
     }
 

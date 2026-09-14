@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -285,10 +286,27 @@ class SeguridadIT extends PruebaDeIntegracion {
         String[] segmentos = tokenDeMedico.split("\\.");
         assertEquals(3, segmentos.length, "un JWT debe tener tres segmentos separados por punto");
 
-        char ultimo = segmentos[2].charAt(segmentos[2].length() - 1);
-        char alterado = ultimo == 'A' ? 'B' : 'A';
-        String firmaAlterada = segmentos[2].substring(0, segmentos[2].length() - 1) + alterado;
+        // Se altera el PRIMER caracter de la firma, no el ultimo, y la razon es
+        // aritmetica: la firma de HS256 son 32 bytes, que en base64url ocupan 43
+        // caracteres. 43 x 6 = 258 bits para 256 de datos, asi que al ULTIMO
+        // caracter solo le corresponden 2 bits significativos y los otros 4 son
+        // relleno. Cambiar 'A' (000000) por 'B' (000001) ahi no cambia ningun
+        // byte: los dos decodifican exactamente igual, el token sigue siendo
+        // valido y la prueba pasaba sin haber alterado nada.
+        //
+        // Esta prueba venia siendo no determinista por eso: el token cambia en
+        // cada ejecucion, y solo fallaba cuando el ultimo caracter caia en uno
+        // de esos pares que colisionan. En el primer caracter los seis bits son
+        // significativos y el cambio siempre llega al byte.
+        char primero = segmentos[2].charAt(0);
+        char alterado = primero == 'A' ? 'B' : 'A';
+        String firmaAlterada = alterado + segmentos[2].substring(1);
         String tokenAlterado = segmentos[0] + "." + segmentos[1] + "." + firmaAlterada;
+
+        // Y se comprueba que de verdad quedo alterado, en vez de darlo por
+        // hecho: si alguna vez vuelve a ser un cambio nulo, el fallo dira que
+        // la prueba no probo nada -- no que el sistema acepta firmas falsas.
+        assertNotEquals(tokenDeMedico, tokenAlterado, "la firma tenia que quedar distinta");
 
         mockMvc.perform(get("/pacientes").header("Authorization", "Bearer " + tokenAlterado))
                 .andExpect(status().isUnauthorized());

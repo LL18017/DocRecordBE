@@ -10,6 +10,7 @@ import ues.edu.sv.education.model.dto.clinicas.ClinicasRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
 import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.mappers.ClinicaMapper;
 import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.UserRepository;
@@ -96,10 +97,18 @@ public class ClinicaService {
 
         User user = usuarioActual();
 
+        exigirQueNoExistaEnElMunicipio(dto.name(), dto.municipio(), null);
+
         Clinicas clinica = Clinicas.builder()
                 .name(dto.name())
                 .latitud(dto.latitud())
                 .longitud(dto.longitud())
+                .departamento(dto.departamento())
+                .municipio(dto.municipio())
+                .direccion(dto.direccion())
+                .telefono(dto.telefono())
+                .horario(dto.horario())
+                .estado(Clinicas.ESTADO_ACTIVA)
                 .user(user)
                 .build();
 
@@ -134,11 +143,22 @@ public class ClinicaService {
 
         exigirPropietarioOAdmin(clinica);
 
+        // Se comprueba con el nombre y el municipio QUE VAN A QUEDAR, no con los
+        // que tenia: si se renombra a uno que ya existe en ese municipio, el
+        // choque es el mismo que al crearla. Se excluye a si misma, o guardarla
+        // sin cambiarle el nombre chocaria consigo.
+        exigirQueNoExistaEnElMunicipio(dto.name(), dto.municipio(), clinicaId);
+
         // El nombre es @NotBlank en el DTO, asi que siempre llega con valor.
         clinica.setName(dto.name());
 
         if (dto.latitud() != null) clinica.setLatitud(dto.latitud());
         if (dto.longitud() != null) clinica.setLongitud(dto.longitud());
+        if (dto.departamento() != null) clinica.setDepartamento(dto.departamento());
+        if (dto.municipio() != null) clinica.setMunicipio(dto.municipio());
+        if (dto.direccion() != null) clinica.setDireccion(dto.direccion());
+        if (dto.telefono() != null) clinica.setTelefono(dto.telefono());
+        if (dto.horario() != null) clinica.setHorario(dto.horario());
 
         return toResponseDto(clinicasRepository.save(clinica));
     }
@@ -195,13 +215,55 @@ public class ClinicaService {
                 );
     }
 
+    // Delega en el unico mapper que arma este DTO. Antes lo armaba aqui y
+    // ademas en UserService.clinicasAsignadas, y al anadirle campos a la
+    // clinica el segundo dejo de compilar. Ver ClinicaMapper.
     private ClinicasResponseDto toResponseDto(Clinicas clinica) {
+        return ClinicaMapper.toDto(clinica);
+    }
 
-        return new ClinicasResponseDto(
-                clinica.getClinicaId(),
-                clinica.getName(),
-                clinica.getLatitud(),
-                clinica.getLongitud()
-        );
+    /**
+     * Impide dos clinicas con el mismo nombre en el mismo municipio (HU-26
+     * criterio 4).
+     *
+     * Solo comprueba cuando hay municipio. Las clinicas registradas antes de
+     * V16 no lo tienen, y sin municipio no se puede decidir si dos chocan:
+     * inventar el conflicto seria peor que dejarlo pasar.
+     *
+     * El indice unico de V16 hace la misma guarda en la base. Esta existe
+     * ademas para que el error salga como un 409 que explica el choque, y no
+     * como un fallo de integridad convertido en 500.
+     */
+    private void exigirQueNoExistaEnElMunicipio(String nombre, String municipio, Integer excluirId) {
+        if (municipio == null || municipio.isBlank()) return;
+
+        if (clinicasRepository.existeEnElMunicipio(nombre, municipio, excluirId)) {
+            throw new GeneralException(
+                    "Ya existe una clinica con ese nombre en " + municipio, "409");
+        }
+    }
+
+    /**
+     * Da de alta o de baja una clinica (HU-27).
+     *
+     * No borra: las consultas que se atendieron ahi ocurrieron ahi, y el
+     * personal asignado sigue asignado. Una clinica inactiva deja de ofrecerse
+     * para atender, nada mas.
+     */
+    @Transactional
+    public ClinicasResponseDto cambiarEstado(Integer clinicaId, String estado) {
+        String limpio = estado == null ? "" : estado.trim().toUpperCase();
+
+        if (!Clinicas.ESTADO_ACTIVA.equals(limpio) && !Clinicas.ESTADO_INACTIVA.equals(limpio)) {
+            throw new GeneralException("Estado no valido: se espera ACTIVA o INACTIVA", "400");
+        }
+
+        Clinicas clinica = clinicasRepository.findById(clinicaId)
+                .orElseThrow(() -> new NoResourceFoundException("Clínica no encontrada", "404"));
+
+        exigirPropietarioOAdmin(clinica);
+
+        clinica.setEstado(limpio);
+        return toResponseDto(clinicasRepository.save(clinica));
     }
 }

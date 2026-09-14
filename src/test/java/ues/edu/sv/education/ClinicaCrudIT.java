@@ -101,11 +101,37 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         return json.readTree(cuerpo).get("token").asText();
     }
 
+    /**
+     * Completa un cuerpo de clinica con lo que HU-26 volvio obligatorio.
+     *
+     * Estas pruebas se escribieron cuando una clinica era un nombre y unas
+     * coordenadas. El criterio 1 de HU-26 anadio departamento, municipio,
+     * direccion, telefono y horario. En vez de reescribir veinte literales
+     * -- y desde luego en vez de aflojar el DTO, que seria borrar el criterio
+     * -- se inyecta aqui lo que falte.
+     *
+     * El municipio es DISTINTO en cada llamada a proposito: el criterio 4
+     * prohibe repetir nombre dentro de un mismo municipio, y varias de estas
+     * pruebas reutilizan el mismo nombre de clinica. Con un municipio fijo
+     * chocarian contra esa unicidad por una razon que no es la que prueban.
+     */
+    private String completar(String cuerpoJson) {
+        if (cuerpoJson.contains("\"municipio\"")) return cuerpoJson;
+
+        String extra = ",\"departamento\":\"Santa Ana\""
+                + ",\"municipio\":\"Municipio " + CONTADOR.incrementAndGet() + "\""
+                + ",\"direccion\":\"Calle Principal\""
+                + ",\"telefono\":\"2440-0000\""
+                + ",\"horario\":\"Lunes a viernes, 8:00 a 16:00\"";
+
+        return cuerpoJson.trim().replaceFirst("\\}\\s*$", extra + "}");
+    }
+
     private JsonNode crearClinica(String tokenDelDuenio, String cuerpoJson) throws Exception {
         String respuesta = mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + tokenDelDuenio)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(cuerpoJson))
+                        .content(completar(cuerpoJson)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(respuesta);
@@ -179,7 +205,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         String cuerpo = mockMvc.perform(put("/clinics/{id}", clinicaId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Clinica Bien Escrita\"}"))
+                        .content(completar("{\"name\":\"Clinica Bien Escrita\"}")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
@@ -208,7 +234,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         String cuerpo = mockMvc.perform(put("/clinics/{id}", clinicaId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Clinica Que Se Mide\",\"latitud\":14.5,\"longitud\":-88.1}"))
+                        .content(completar("{\"name\":\"Clinica Que Se Mide\",\"latitud\":14.5,\"longitud\":-88.1}")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
@@ -228,7 +254,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         String cuerpo = mockMvc.perform(put("/clinics/{id}", clinicaId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Clinica Por Ubicar\",\"latitud\":13.4,\"longitud\":-88.9}"))
+                        .content(completar("{\"name\":\"Clinica Por Ubicar\",\"latitud\":13.4,\"longitud\":-88.9}")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
@@ -252,23 +278,34 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         rechazaAlCrear("{\"name\":\"Clinica Imposible\",\"latitud\":13.7,\"longitud\":180.5}");
         rechazaAlCrear("{\"name\":\"Clinica Imposible\",\"latitud\":13.7,\"longitud\":-181.0}");
 
-        // Los limites exactos SI son coordenadas validas.
-        crearClinica(token, "{\"name\":\"Clinica Polar\",\"latitud\":-90.0,\"longitud\":180.0}");
+        // Desde HU-26 el rango ya no es el planeta entero sino El Salvador, asi
+        // que una coordenada polar -- perfectamente valida en la Tierra, y a
+        // 8.000 km de la red nacional -- tambien se rechaza. El caso que motivo
+        // el cambio esta en ClinicaGeorreferenciadaIT: latitud y longitud
+        // invertidas, que con el rango viejo pasaban sin que nadie lo notara.
+        rechazaAlCrear("{\"name\":\"Clinica Polar\",\"latitud\":-90.0,\"longitud\":180.0}");
+
+        // Los limites exactos DEL TERRITORIO si son validos.
+        crearClinica(token, "{\"name\":\"Clinica Limite Sur\",\"latitud\":13.0,\"longitud\":-90.2}");
+        crearClinica(token, "{\"name\":\"Clinica Limite Norte\",\"latitud\":14.5,\"longitud\":-87.6}");
 
         // Y la regla tambien vale al editar, no solo al crear.
         JsonNode creada = crearClinica(token, "{\"name\":\"Clinica Valida\",\"latitud\":13.7,\"longitud\":-89.2}");
         mockMvc.perform(put("/clinics/{id}", creada.get("clinicaId").asInt())
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Clinica Valida\",\"latitud\":999.0,\"longitud\":-89.2}"))
+                        .content(completar("{\"name\":\"Clinica Valida\",\"latitud\":999.0,\"longitud\":-89.2}")))
                 .andExpect(status().isBadRequest());
     }
 
     private void rechazaAlCrear(String cuerpoJson) throws Exception {
+        // Se completa igual que al crear: si el cuerpo llegara incompleto, el
+        // 400 saldria por los campos que faltan y la prueba pasaria sin haber
+        // comprobado nada sobre el rango de la coordenada.
         mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(cuerpoJson))
+                        .content(completar(cuerpoJson)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -287,7 +324,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"   \"}"))
+                        .content(completar("{\"name\":\"   \"}")))
                 .andExpect(status().isBadRequest());
     }
 
@@ -303,12 +340,12 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
 
         mockMvc.perform(post("/clinics")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Clinica Intrusa\"}"))
+                        .content(completar("{\"name\":\"Clinica Intrusa\"}")))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(put("/clinics/{id}", clinicaId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Renombrada Sin Permiso\"}"))
+                        .content(completar("{\"name\":\"Renombrada Sin Permiso\"}")))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(delete("/clinics/{id}", clinicaId))
@@ -334,7 +371,11 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         mockMvc.perform(put("/clinics/{id}", clinicaId)
                         .header("Authorization", "Bearer " + tokenIntruso)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Secuestrada\",\"latitud\":0.0,\"longitud\":0.0}"))
+                        // Coordenadas validas a proposito. Con 0.0/0.0 -- el golfo de
+                        // Guinea -- la validacion de HU-26 responde 400 antes de que
+                        // el servicio llegue a comprobar de quien es la clinica, y la
+                        // prueba pasaria sin haber ejercido la regla que le importa.
+                        .content(completar("{\"name\":\"Secuestrada\",\"latitud\":13.7,\"longitud\":-89.2}")))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(delete("/clinics/{id}", clinicaId)
@@ -370,7 +411,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         mockMvc.perform(put("/clinics/{id}", clinicaId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Clinica Propia Renombrada\"}"))
+                        .content(completar("{\"name\":\"Clinica Propia Renombrada\"}")))
                 .andExpect(status().isOk());
 
         mockMvc.perform(delete("/clinics/{id}", clinicaId)
@@ -388,7 +429,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         mockMvc.perform(put("/clinics/{id}", inexistente)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Fantasma\"}"))
+                        .content(completar("{\"name\":\"Fantasma\"}")))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(delete("/clinics/{id}", inexistente)

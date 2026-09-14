@@ -242,7 +242,14 @@ class ConsultaCrudIT extends PruebaClinica {
         String clinica = mockMvc.perform(post("/clinics")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Sucursal Santa Ana\"}"))
+                        // Desde HU-26 una clinica exige su direccion completa; lo
+                        // que esta prueba comprueba es otra cosa -- que la consulta
+                        // guarde la sucursal -- asi que se la da y sigue a lo suyo.
+                        .content("""
+                                {"name":"Sucursal Santa Ana","departamento":"Santa Ana",
+                                 "municipio":"Santa Ana","direccion":"Calle Principal",
+                                 "telefono":"2440-0000","horario":"Lunes a viernes, 8:00 a 16:00"}
+                                """))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         int clinicaId = json.readTree(clinica).get("clinicaId").asInt();
