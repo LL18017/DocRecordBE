@@ -1,0 +1,106 @@
+# ----------------------------------------------------------------------------
+# Unica puerta de entrada al despliegue, ahora con HTTPS.
+#
+# Caddy obtiene y renueva el certificado de Let's Encrypt por su cuenta: no hay
+# certbot, ni cron, ni un certificado que se vence en tres meses sin avisar.
+# Tambien redirige HTTP a HTTPS solo, sin que haya que escribirlo.
+#
+# El nombre viene de DOMINIO en el .env. Parametrizado y no escrito aqui para
+# que cambiar de dominio -- o anadir uno propio junto al de DuckDNS -- no
+# signifique tocar este archivo.
+#
+# Igual que antes, la aplicacion y la API se sirven desde el MISMO origen: el
+# bundle del navegador se compilo con NEXT_PUBLIC_API_URL=/api, una ruta
+# relativa. Por eso pasar de IP a dominio, y de HTTP a HTTPS, NO obliga a
+# reconstruir el frontend: el navegador resuelve /api contra el host que le
+# sirvio la pagina, sea cual sea.
+# ----------------------------------------------------------------------------
+
+{$DOMINIO} {
+	encode gzip
+
+	# La barra final en strip_prefix es lo que quita el /api: el backend expone
+	# /auth, /pacientes, /consultas... sin prefijo, de modo que
+	# /api/auth/login le llega como /auth/login.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy backend:8080 {
+			# El arranque de Spring Boot en esta maquina tarda bastante mas que
+			# en una de desarrollo; sin esto, la primera peticion despues de un
+			# despliegue responde 502.
+			transport http {
+				dial_timeout 60s
+				response_header_timeout 60s
+			}
+		}
+	}
+
+	# Los estaticos de Next.js llevan un hash en el nombre: si el contenido
+	# cambia, cambia el nombre. Son inmutables por definicion, y cachearlos un
+	# ano le ahorra a esta instancia -- que no sobra en nada -- servirlos en
+	# cada recarga.
+	handle /_next/static/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy frontend:3000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	# HSTS: una vez que el navegador ha visto este sitio por HTTPS, se niega a
+	# volver por HTTP aunque alguien manipule el enlace. Un ano, sin preload:
+	# preload es practicamente irreversible y este dominio es de DuckDNS.
+	header Strict-Transport-Security "max-age=31536000"
+
+	# Cabeceras que no cuestan nada y cierran clases enteras de problema.
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	header Referrer-Policy "strict-origin-when-cross-origin"
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# ----------------------------------------------------------------------------
+# La API, ademas, en su propio nombre.
+#
+# ── Que NO es esto ─────────────────────────────────────────────────────────
+# No reemplaza a /api del bloque de arriba, y la aplicacion sigue usando aquel.
+# Son dos formas de llegar al mismo backend, y la del mismo origen es la buena
+# para el navegador: sin peticiones entre origenes no hay preflight de CORS que
+# valga, y la URL no queda horneada en el bundle -- que es lo que permitio
+# cambiar de IP a dominio y de HTTP a HTTPS sin reconstruir nada.
+#
+# ── Para que sirve entonces ────────────────────────────────────────────────
+# Para lo que no es el navegador: Swagger, Postman, y cualquier cliente futuro
+# -- una app movil, una integracion -- al que darle "/api de la web" seria una
+# direccion rara. Ahi si conviene un nombre estable y propio.
+#
+# ── Aqui la raiz es la raiz ────────────────────────────────────────────────
+# Sin strip_prefix: en este nombre el backend se expone tal cual, de modo que
+# /auth/login es /auth/login. El prefijo /api solo existe en el otro bloque
+# porque alli comparte sitio con la aplicacion.
+# ----------------------------------------------------------------------------
+
+{$DOMINIO_API} {
+	encode gzip
+
+	reverse_proxy backend:8080 {
+		transport http {
+			dial_timeout 60s
+			response_header_timeout 60s
+		}
+	}
+
+	header Strict-Transport-Security "max-age=31536000"
+	header X-Content-Type-Options "nosniff"
+	header Referrer-Policy "strict-origin-when-cross-origin"
+
+	log {
+		output stdout
+		format console
+	}
+}
