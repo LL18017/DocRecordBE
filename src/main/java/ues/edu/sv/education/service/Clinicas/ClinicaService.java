@@ -10,6 +10,7 @@ import ues.edu.sv.education.model.dto.clinicas.ClinicasRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
 import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.UserRepository;
 
@@ -45,6 +46,23 @@ public class ClinicaService {
     public List<ClinicasResponseDto> obtenerPorUsuarioActual() {
 
         User user = usuarioActual();
+
+        // Un administrador opera sobre TODAS las sedes, sin que nadie tenga que
+        // asignarselas una por una.
+        //
+        // Los dos conjuntos de abajo describen a quien TRABAJA en una sede, y
+        // un administrador no trabaja en ninguna: administra el sistema entero.
+        // Con la regla general quedaba encallado en la misma pantalla que
+        // bloqueaba a enfermeria antes de V10 -- "todavia no tienes clinicas
+        // registradas" -- y el unico modo de salir era darse de alta a si mismo
+        // como personal de cada sede, que es papeleo que no describe nada real.
+        //
+        // Es la misma potestad que ya ejerce exigirPropietarioOAdmin al dejarle
+        // editar y borrar cualquier clinica: seria incoherente que pudiera
+        // modificar una sede que el selector no le deja ni ver.
+        if (esAdministrador(user)) {
+            return listarTodas();
+        }
 
         Map<Integer, Clinicas> porId = new LinkedHashMap<>();
         for (Clinicas propia : clinicasRepository.findByUser(user.getUserID())) {
@@ -145,14 +163,20 @@ public class ClinicaService {
 
         User actual = usuarioActual();
 
-        boolean esAdmin = actual.getRoles().stream()
-                .anyMatch(rol -> "ADMIN".equals(rol.getName()));
-
-        if (!esAdmin && !clinica.getUser().getUserID().equals(actual.getUserID())) {
+        if (!esAdministrador(actual) && !clinica.getUser().getUserID().equals(actual.getUserID())) {
             throw new GeneralException(
                     "El usuario no tiene permiso para modificar esta clínica", "403"
             );
         }
+    }
+
+    // Se compara sin distinguir mayusculas y tolerando roles nulos: la version
+    // anterior, "ADMIN".equals(rol.getName()) escrita a mano aqui dentro, daba
+    // false ante un "Administrador" guardado con otra caja y dejaba a un
+    // administrador real sin sus permisos, sin ningun error que lo delatara.
+    private boolean esAdministrador(User user) {
+        return user.getRoles() != null && user.getRoles().stream()
+                .anyMatch(rol -> RolesEnum.ADMIN.getName().equalsIgnoreCase(rol.getName()));
     }
 
     // La identidad sale del JWT ya verificado (JwtFilter deja el user_id como

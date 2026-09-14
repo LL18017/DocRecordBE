@@ -9,10 +9,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.repository.ClinicaRepository;
+import ues.edu.sv.education.repository.PersonaRepository;
+import ues.edu.sv.education.repository.RoleRepository;
 import ues.edu.sv.education.repository.UserRepository;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,6 +52,9 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository usuarios;
     @Autowired private ClinicaRepository clinicas;
+    @Autowired private PersonaRepository personas;
+    @Autowired private RoleRepository roles;
+    @Autowired private PasswordEncoder encoder;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -384,5 +394,87 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         mockMvc.perform(delete("/clinics/{id}", inexistente)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Alcance del selector de clinica
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Crea un ADMIN sin clinicas propias ni asignadas, y devuelve su token.
+     *
+     * Se fabrica por repositorio porque /auth/register solo da de alta medicos:
+     * no hay ningun endpoint que cree un administrador. Y se le deja a
+     * proposito sin una sola clinica, que es justo la situacion que esta prueba
+     * examina.
+     */
+    private String tokenDeAdminSinClinicas() throws Exception {
+        String correo = "crud.clinica.admin." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
+
+        Persona persona = personas.saveAndFlush(Persona.builder()
+                .nombres("Admin").apellidos("De Sedes")
+                .build());
+
+        usuarios.saveAndFlush(User.builder()
+                .persona(persona)
+                .email(correo)
+                .password(encoder.encode(CLAVE))
+                .enabled(true)
+                .roles(new HashSet<>(Set.of(roles.getReferenceById(RolesEnum.ADMIN.getId()))))
+                .build());
+
+        String cuerpo = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"%s"}
+                                """.formatted(correo, CLAVE)))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn().getResponse().getContentAsString();
+
+        return json.readTree(cuerpo).get("token").asText();
+    }
+
+    private boolean apareceEnMisClinicas(String tokenDeQuienMira, int clinicaId) throws Exception {
+        String cuerpo = mockMvc.perform(get("/clinics/mias")
+                        .header("Authorization", "Bearer " + tokenDeQuienMira))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        for (JsonNode clinica : json.readTree(cuerpo)) {
+            if (clinica.get("clinicaId").asInt() == clinicaId) return true;
+        }
+        return false;
+    }
+
+    @Test
+    @DisplayName("un admin ve en /clinics/mias las clinicas que no registro ni tiene asignadas")
+    void unAdminVeTodasLasClinicas() throws Exception {
+        // La sede la registra un medico; el admin no la toca ni se la asigna
+        // nadie. Con la regla general -dueño o personal asignado- su lista
+        // saldria vacia y el selector lo dejaria encallado en "todavia no
+        // tienes clinicas registradas", sin forma de entrar al sistema que
+        // administra.
+        JsonNode ajena = crearClinica(token, "{\"name\":\"Clinica De Otro Medico\"}");
+        int clinicaId = ajena.get("clinicaId").asInt();
+
+        String tokenAdmin = tokenDeAdminSinClinicas();
+
+        assertTrue(apareceEnMisClinicas(tokenAdmin, clinicaId),
+                "un administrador debe ver todas las sedes, tambien las que no registro");
+    }
+
+    @Test
+    @DisplayName("un medico NO ve en /clinics/mias la clinica de otro medico")
+    void unMedicoNoVeLaClinicaDeOtro() throws Exception {
+        // El contraste de la prueba anterior. Sin esto, "el admin las ve todas"
+        // se cumpliria igual si el endpoint devolviera el catalogo completo a
+        // cualquiera, que es exactamente lo que no debe pasar.
+        JsonNode ajena = crearClinica(token, "{\"name\":\"Clinica Reservada\"}");
+        int clinicaId = ajena.get("clinicaId").asInt();
+
+        String tokenDeOtroMedico = registrarMedicoYObtenerToken();
+
+        assertFalse(apareceEnMisClinicas(tokenDeOtroMedico, clinicaId),
+                "un medico solo debe ver las sedes donde opera");
     }
 }
