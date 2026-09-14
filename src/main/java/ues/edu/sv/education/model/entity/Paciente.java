@@ -41,4 +41,26 @@ public class Paciente {
 
     @Column(name = "creado_en", nullable = false)
     private LocalDateTime creadoEn;
+
+    /**
+     * ACTIVO o INACTIVO (ver V12).
+     *
+     * Dar de baja a un paciente lo saca de los listados de trabajo diario,
+     * pero NO borra nada: su expediente, sus consultas, sus constantes y sus
+     * recetas siguen existiendo y siguen siendo consultables. Un expediente
+     * clinico no se borra, y por eso esto es un estado y no un DELETE.
+     *
+     * Es String y no un enum de Java a proposito: el unico sitio donde el
+     * conjunto de valores debe estar cerrado es la base -- lo cierra el CHECK
+     * de V12 --, y un enum aqui obligaria a tocar codigo para anadir un tercer
+     * estado sin ganar nada a cambio.
+     */
+    @NotNull
+    @Size(max = 10)
+    @Column(name = "estado", nullable = false, length = 10)
+    @Builder.Default
+    private String estado = ESTADO_ACTIVO;
+
+    public static final String ESTADO_ACTIVO = "ACTIVO";
+    public static final String ESTADO_INACTIVO = "INACTIVO";
 }

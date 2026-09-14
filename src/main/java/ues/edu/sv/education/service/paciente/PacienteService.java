@@ -49,6 +49,11 @@ public class PacienteService {
                 .expediente(generarExpediente())
                 .tipoSangre(request.tipoSangre())
                 .creadoEn(LocalDateTime.now())
+                // Explicito y no apoyado en el DEFAULT de la columna: con
+                // ddl-auto=validate Hibernate manda el INSERT con todas las
+                // columnas, asi que un campo null aqui llegaria como null y
+                // chocaria contra el NOT NULL en vez de tomar el default.
+                .estado(Paciente.ESTADO_ACTIVO)
                 .build();
 
         pacienteRepository.save(paciente);
@@ -58,10 +63,45 @@ public class PacienteService {
 
     @Transactional(readOnly = true)
     public java.util.List<PacienteResponseDto> buscar(String texto) {
-        // Nunca null contra la query: ver el comentario en
-        // PacienteRepository.buscar sobre por que.
+        // Nunca null contra la consulta: un parametro null ligado en varios
+        // puntos del mismo WHERE impide a Postgres inferir su tipo, el driver
+        // lo manda como bytea y revienta con "function lower(bytea) does not
+        // exist". Para "sin filtro" se pasa "" -- LIKE '%%' coincide con
+        // cualquier valor no nulo.
         String filtro = texto == null ? "" : texto;
-        return pacienteRepository.buscar(filtro).stream().map(this::toDto).toList();
+
+        java.util.List<Long> ids = pacienteRepository.idsQueCoinciden(filtro);
+
+        // `IN ()` con la lista vacia no es SQL valido, asi que la busqueda sin
+        // resultados se corta aqui en vez de llegar a la base.
+        if (ids.isEmpty()) return java.util.List.of();
+
+        return pacienteRepository.conPersona(ids).stream().map(this::toDto).toList();
+    }
+
+    /**
+     * Da de alta o de baja a un paciente.
+     *
+     * No borra nada: un expediente clinico no se borra, y sus consultas,
+     * constantes y recetas siguen existiendo despues de la baja. Lo unico que
+     * cambia es que deja de aparecer en los listados de trabajo diario.
+     *
+     * El valor se valida contra los dos que admite la columna (ver el CHECK de
+     * V12). Sin esta comprobacion el error saldria de la base como un 500 sin
+     * explicacion, en vez de un 400 que nombra el valor aceptado.
+     */
+    @Transactional
+    public PacienteResponseDto cambiarEstado(Long personaId, String estado) {
+        String limpio = estado == null ? "" : estado.trim().toUpperCase();
+
+        if (!Paciente.ESTADO_ACTIVO.equals(limpio) && !Paciente.ESTADO_INACTIVO.equals(limpio)) {
+            throw new GeneralException(
+                    "Estado no valido: se espera ACTIVO o INACTIVO", "400");
+        }
+
+        Paciente paciente = buscarPacienteOFallar(personaId);
+        paciente.setEstado(limpio);
+        return toDto(pacienteRepository.save(paciente));
     }
 
     /**
@@ -204,6 +244,7 @@ public class PacienteService {
                 paciente.getExpediente(),
                 paciente.getTipoSangre(),
                 paciente.getCreadoEn(),
+                paciente.getEstado(),
                 new PersonaResponseDto(
                         persona.getPersonaId(),
                         persona.getDui(),

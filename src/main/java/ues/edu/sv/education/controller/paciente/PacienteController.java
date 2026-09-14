@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.paciente.CambiarEstadoRequestDto;
 import ues.edu.sv.education.model.dto.paciente.PacienteRequestDto;
 import ues.edu.sv.education.model.dto.paciente.PacienteResponseDto;
 import ues.edu.sv.education.service.paciente.PacienteService;
@@ -84,5 +85,25 @@ public class PacienteController {
     public ResponseEntity<Void> eliminar(@PathVariable("personaId") Long personaId) {
         pacienteService.eliminar(personaId);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Dar de alta o de baja a un paciente",
+            description = "Cambia el estado entre ACTIVO e INACTIVO. NO borra nada: el "
+                    + "expediente, las consultas, las constantes y las recetas del paciente "
+                    + "siguen existiendo. Un paciente inactivo solo deja de aparecer en los "
+                    + "listados de trabajo diario."
+    )
+    // No lo abre a ENFERMERA, a diferencia del resto de este controlador. Dar
+    // de baja a un paciente es una decision administrativa sobre el
+    // expediente, no parte de atenderlo; registrar y consultar si le tocan a
+    // enfermeria, decidir que un paciente deja de estar en seguimiento no.
+    @PatchMapping("/{personaId}/estado")
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
+    public ResponseEntity<PacienteResponseDto> cambiarEstado(
+            @PathVariable("personaId") Long personaId,
+            @Valid @RequestBody CambiarEstadoRequestDto request
+    ) {
+        return ResponseEntity.ok(pacienteService.cambiarEstado(personaId, request.estado()));
     }
 }

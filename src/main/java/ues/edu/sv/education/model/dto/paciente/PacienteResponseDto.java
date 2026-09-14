@@ -20,6 +20,11 @@ public record PacienteResponseDto(
         @Schema(description = "Fecha de alta como paciente")
         LocalDateTime creadoEn,
 
+        @Schema(description = "ACTIVO o INACTIVO. Un paciente inactivo conserva "
+                + "todo su expediente; solo deja de aparecer en los listados de "
+                + "trabajo diario.", example = "ACTIVO")
+        String estado,
+
         @Schema(description = "Datos de la persona")
         PersonaResponseDto persona
 
