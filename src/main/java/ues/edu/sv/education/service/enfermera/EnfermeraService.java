@@ -129,7 +129,10 @@ public class EnfermeraService {
         // registrando constantes a alguien que ya no trabaja aqui.
         User cuenta = cuentaDe(enfermera);
         if (cuenta != null) {
-            cuenta.setEnabled(false);
+            // `activo` y no `enabled`: su correo sigue confirmado -- eso no se
+            // deshace --; lo que cambia es que la organizacion ya no le
+            // permite entrar. Ver V15.
+            cuenta.setActivo(false);
             userRepository.save(cuenta);
         }
 

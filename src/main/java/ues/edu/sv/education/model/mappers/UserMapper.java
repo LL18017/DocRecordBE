@@ -9,12 +9,28 @@ import java.util.HashSet;
 
 public class UserMapper {
     public static UserResponseDto toDto(User user) {
+        return toDto(user, null);
+    }
+
+    /**
+     * El mismo DTO, con la especialidad que el llamador haya podido averiguar.
+     *
+     * La especialidad vive en `medicos` y no en `users`, asi que este mapper no
+     * puede ir a buscarla: es estatico y no tiene repositorio. Y aunque lo
+     * tuviera, leerla aqui seria una consulta por usuario. Quien arma un
+     * listado la trae en bloque y la pasa (ver UserService.getAll); quien no la
+     * necesita llama a la version corta y el campo queda null, que es
+     * exactamente lo que significa "esta cuenta no ejerce la medicina".
+     */
+    public static UserResponseDto toDto(User user, String especialidad) {
         Persona persona = user.getPersona();
         return new UserResponseDto(
                 user.getUserID(),
                 user.getEmail(),
                 persona.getNombres() + " " + persona.getApellidos(),
-                user.getRoles().stream().map(RoleMapper::toDto).toList()
+                user.getRoles().stream().map(RoleMapper::toDto).toList(),
+                especialidad,
+                user.isActivo()
         );
     }
 

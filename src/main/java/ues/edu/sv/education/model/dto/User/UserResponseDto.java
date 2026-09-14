@@ -21,5 +21,24 @@ public record UserResponseDto(
         @NotNull(message = "El usuario no puede ser nula")
         @NotBlank(message = "El usuario no puede estar vacia")
         String userName,
-        List<RoleDto> roles) {
+        List<RoleDto> roles,
+
+        /**
+         * La especialidad, si esta cuenta ejerce la medicina.
+         *
+         * Null cuando no aplica -- una enfermera, un administrador que no
+         * ejerce -- y eso NO es un dato faltante: es que la pregunta no le
+         * corresponde. La pantalla lo pinta como un guion, nunca como texto
+         * inventado ni como una especialidad por defecto.
+         */
+        String especialidad,
+
+        /**
+         * Si la cuenta puede iniciar sesion (HU-05 criterio 3).
+         *
+         * Espeja `users.enabled`, que el login ya respeta. Se expone como
+         * booleano y no como texto porque en la base es exactamente eso: dos
+         * valores, sin un tercero previsto.
+         */
+        Boolean activo) {
 }

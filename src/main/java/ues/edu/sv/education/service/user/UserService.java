@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,8 @@ import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.entity.VerificationToken;
 import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.model.mappers.UserMapper;
+import ues.edu.sv.education.repository.MedicoRepository;
+import ues.edu.sv.education.repository.proyeccion.EspecialidadDePersona;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.EnfermeraRepository;
 import ues.edu.sv.education.repository.PersonaRepository;
@@ -39,6 +42,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,6 +52,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
+    private final MedicoRepository medicoRepository;
     private final PersonaRepository personaRepository;
     private final RoleRepository roleRepository;
     private final ClinicaRepository clinicaRepository;
@@ -61,8 +66,78 @@ public class UserService {
     private static final long TOKEN_EXPIRATION_MINUTES = 5;
 
     public List<UserResponseDto> getAll(Integer inicio, Integer fin) {
-        Pageable pageable = PageRequest.of(inicio, fin);
-        return userRepository.findAll(pageable).stream().map(UserMapper::toDto).toList();
+        // Con Sort y no sin el: una pagina sin orden deja a PostgreSQL elegir
+        // que filas devuelve, asi que el mismo usuario puede salir en dos
+        // paginas o en ninguna. Con pocas filas no se nota; con 221 usuarios
+        // en la base, una prueba dejo de encontrar al suyo en la primera
+        // pagina de 100 y el fallo parecia de otra cosa.
+        //
+        // Por `email` y no por el id: para que una paginacion sea estable el
+        // criterio de orden tiene que ser UNICO, y el correo lo es (indice
+        // unico sobre LOWER(email), V11). Ademas ordena el listado de forma
+        // util para quien lo lee, que es la razon por la que se ordena algo.
+        Pageable pageable = PageRequest.of(inicio, fin, Sort.by("email"));
+        List<User> usuarios = userRepository.findAll(pageable).getContent();
+
+        // La especialidad de TODA la pagina en una consulta, no una por fila
+        // (HU-05 criterio 1). Ver MedicoRepository.especialidadesDe: no basta
+        // con que sea lento, es que Medico.especialidad es LAZY y este metodo
+        // no corre dentro de una transaccion, asi que leerla fila por fila
+        // reventaria con LazyInitializationException.
+        List<Long> personaIds = usuarios.stream()
+                .map(u -> u.getPersona().getPersonaId())
+                .toList();
+
+        Map<Long, String> especialidades = personaIds.isEmpty()
+                ? Map.of()
+                : medicoRepository.especialidadesDe(personaIds).stream()
+                        .collect(Collectors.toMap(
+                                EspecialidadDePersona::personaId,
+                                EspecialidadDePersona::especialidad));
+
+        return usuarios.stream()
+                .map(u -> UserMapper.toDto(u, especialidades.get(u.getPersona().getPersonaId())))
+                .toList();
+    }
+
+    /**
+     * Activa o desactiva una cuenta (HU-05 criterio 3).
+     *
+     * Desactivar no borra: "deja de poder iniciar sesion, PERO sus registros
+     * clinicos anteriores siguen existiendo". Por eso mueve `enabled` y no
+     * toca ninguna otra tabla -- las consultas que firmo un medico siguen
+     * firmadas por el aunque su cuenta quede cerrada, porque ocurrieron.
+     *
+     * ── Las dos guardas ──────────────────────────────────────────────────
+     * Son las mismas que protegen a quitarRole, y por la misma razon: dejar el
+     * sistema sin ningun administrador que pueda entrar no tiene arreglo desde
+     * la aplicacion. Se comprueban ANTES de tocar nada; hacerlo despues, en la
+     * misma transaccion, hace que la propia comprobacion lea el estado ya
+     * modificado y responda un 403 que no significa lo que dice.
+     */
+    @Transactional
+    public UserResponseDto cambiarEstado(int userId, boolean activo) {
+        User administrador = adminAutenticado.exigir();
+
+        User objetivo = userRepository.findById(userId)
+                .orElseThrow(() -> new NoResourceFoundException(
+                        "No se encontro el usuario con id: " + userId, "404"));
+
+        if (!activo) {
+            if (objetivo.getUserID().equals(administrador.getUserID())) {
+                throw new GeneralException(
+                        "Un administrador no puede desactivar su propia cuenta", "409");
+            }
+            boolean objetivoEsAdmin = objetivo.getRoles().stream()
+                    .anyMatch(rol -> RolesEnum.ADMIN.getName().equalsIgnoreCase(rol.getName()));
+            if (objetivoEsAdmin && userRepository.contarActivosConRol(RolesEnum.ADMIN.getName()) <= 1) {
+                throw new GeneralException(
+                        "No se puede desactivar al ultimo administrador activo", "409");
+            }
+        }
+
+        objetivo.setActivo(activo);
+        return UserMapper.toDto(userRepository.save(objetivo));
     }
 
     // @Transactional porque ahora hace DOS escrituras que tienen que ir juntas:

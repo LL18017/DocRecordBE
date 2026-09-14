@@ -46,9 +46,19 @@ public class CustomUserDetails implements UserDetails {
         return UserDetails.super.isAccountNonExpired();
     }
 
+    /**
+     * Una cuenta desactivada por un administrador esta "bloqueada", no "sin
+     * confirmar" (HU-05 criterio 3).
+     *
+     * Va aqui y no en isEnabled() porque PasswordAuthProvider ya da mensajes
+     * distintos para cada uno: "Usuario bloqueado" frente a "Usuario no ha
+     * confirmado su cuenta aun". Con las dos cosas en isEnabled(), a quien
+     * acaban de desactivar se le pediria confirmar un correo que confirmo hace
+     * meses, y se quedaria dandole vueltas a un enlace que no existe.
+     */
     @Override
     public boolean isAccountNonLocked() {
-        return UserDetails.super.isAccountNonLocked();
+        return user.isActivo();
     }
 
     @Override

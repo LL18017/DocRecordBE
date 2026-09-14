@@ -27,8 +27,25 @@ public class User {
     @Size(max = 255)
     @Column(name = "password")
     private String password;
+    /** El correo de esta cuenta esta confirmado (ver V15). */
     @Column(nullable = false)
     private boolean enabled = false;
+
+    /**
+     * La organizacion le permite entrar (HU-05 criterio 3, ver V15).
+     *
+     * Deliberadamente separada de `enabled`. Son dos preguntas distintas
+     * -- "confirmo su correo" y "puede entrar hoy" -- y meterlas en la misma
+     * columna hacia que asignarle una contrasena a alguien desactivado lo
+     * reactivara sin que nadie lo pidiera.
+     *
+     * Solo la mueve un administrador; ninguna accion del propio usuario la
+     * toca. Desactivar no borra nada: las consultas que firmo un medico siguen
+     * firmadas por el aunque su cuenta quede cerrada, porque ocurrieron.
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean activo = true;
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",
