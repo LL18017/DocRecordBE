@@ -46,13 +46,21 @@ public record SignosVitalesRequestDto(
         LocalDateTime tomadoEn,
 
         @Schema(description = "Peso en kilogramos", example = "72.50", nullable = true)
-        @DecimalMin(value = "0.1", message = "El peso debe ser mayor que cero")
-        @DecimalMax(value = "500.0", message = "El peso no puede superar los 500 kg")
+        // Rango de HU-17 criterio 3. El limite inferior de 0.5 kg no es un
+        // descuido: un prematuro extremo pesa menos de un kilo, y un rango
+        // "razonable para un adulto" dejaria fuera a los pacientes mas
+        // fragiles. Lo que sI atrapa es la coma corrida de sitio -- 7.25 en
+        // lugar de 72.5 --, que despues arrastra un IMC absurdo.
+        @DecimalMin(value = "0.5", message = "El peso debe estar entre 0.5 y 400 kg")
+        @DecimalMax(value = "400.0", message = "El peso debe estar entre 0.5 y 400 kg")
         BigDecimal pesoKg,
 
         @Schema(description = "Estatura en centimetros", example = "175.00", nullable = true)
-        @DecimalMin(value = "0.1", message = "La estatura debe ser mayor que cero")
-        @DecimalMax(value = "300.0", message = "La estatura no puede superar los 300 cm")
+        // El criterio lo enuncia en metros (0.3 a 2.5) y aqui son los mismos
+        // limites en centimetros, que es la unidad de la columna desde V9 y la
+        // que teclea quien captura.
+        @DecimalMin(value = "30.0", message = "La estatura debe estar entre 30 y 250 cm")
+        @DecimalMax(value = "250.0", message = "La estatura debe estar entre 30 y 250 cm")
         BigDecimal estaturaCm,
 
         @Schema(description = "Temperatura en grados Celsius", example = "36.8", nullable = true)

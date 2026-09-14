@@ -24,6 +24,7 @@ import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.SignosVitalesRepository;
 import ues.edu.sv.education.service.auth.EnfermeraAutenticado;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -211,6 +212,15 @@ public class SignosVitalesService {
         Persona personaPaciente = toma.getPaciente().getPersona();
         Persona personaEnfermera = toma.getEnfermera().getPersona();
 
+        // El IMC se deriva aqui, no se guarda: depende del peso y la talla que
+        // ya estan en la fila, y una columna propia podria quedar diciendo lo
+        // de antes despues de corregir un peso. La clasificacion necesita
+        // ademas la fecha de nacimiento, porque en menores no aplica la tabla
+        // de adultos (HU-17 criterio 2).
+        BigDecimal imc = IndiceDeMasaCorporal.calcular(toma.getPesoKg(), toma.getEstaturaCm());
+        String clasificacion = IndiceDeMasaCorporal.clasificar(
+                imc, personaPaciente.getFechaNacimiento());
+
         return new SignosVitalesResponseDto(
                 toma.getSignosVitalesId(),
                 toma.getTomadoEn(),
@@ -232,6 +242,8 @@ public class SignosVitalesService {
                 toma.getPulsoLpm(),
                 toma.getFrecuenciaRespRpm(),
                 toma.getSaturacionPct(),
-                toma.getObservaciones());
+                toma.getObservaciones(),
+                imc,
+                clasificacion);
     }
 }

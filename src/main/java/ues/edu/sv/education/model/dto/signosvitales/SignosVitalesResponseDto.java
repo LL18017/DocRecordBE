@@ -43,7 +43,30 @@ public record SignosVitalesResponseDto(
         @Schema(example = "16", nullable = true) Short frecuenciaRespRpm,
         @Schema(example = "98", nullable = true) Short saturacionPct,
 
-        @Schema(nullable = true) String observaciones
+        @Schema(nullable = true) String observaciones,
+
+        /**
+         * IMC = peso / talla², con un decimal (HU-17 criterio 1).
+         *
+         * Null cuando falta el peso o la talla. Un IMC calculado con uno de los
+         * dos ausente no es un IMC aproximado: es un numero inventado.
+         *
+         * Se calcula al leer y no se guarda en una columna a proposito: es un
+         * valor DERIVADO de otros dos que si estan en la fila, y guardarlo
+         * abriria la posibilidad de que quede desincronizado -- un peso
+         * corregido y un IMC que sigue diciendo lo de antes.
+         */
+        @Schema(example = "23.7", nullable = true) BigDecimal imc,
+
+        /**
+         * La clasificacion de la OMS, o el aviso de que no aplica.
+         *
+         * En menores de 18 anos NO dice "Normal" ni "Sobrepeso": dice que hay
+         * que interpretarlo por percentiles (HU-17 criterio 2). La tabla de
+         * adultos aplicada a un nino da una etiqueta sin sentido, y una etiqueta
+         * equivocada en un expediente orienta decisiones.
+         */
+        @Schema(example = "Normal", nullable = true) String clasificacionImc
 
 ) {
 }
