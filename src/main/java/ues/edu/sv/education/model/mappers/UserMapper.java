@@ -43,14 +43,18 @@ public class UserMapper {
      *                        contrasena en claro.
      */
     public static User toEntity(UserRequestDto request, Persona persona, String passwordCifrada) {
-        return new User(
-                null,
-                persona,
-                request.email(),
-                passwordCifrada,
-                false,
-                new HashSet<>(),
-                null
-        );
+        // Se usa el builder y no el constructor de todos los argumentos a
+        // proposito: ese constructor es posicional, asi que cada campo nuevo en
+        // User cambia su firma y rompe a quien lo llame. Ya paso -- al anadir
+        // `clinicasAsignadas` esta llamada se quedo en siete argumentos de ocho
+        // y el modulo dejo de compilar. El builder nombra lo que asigna y deja
+        // el resto en su valor por defecto.
+        return User.builder()
+                .persona(persona)
+                .email(request.email())
+                .password(passwordCifrada)
+                .enabled(false)
+                .roles(new HashSet<>())
+                .build();
     }
 }
