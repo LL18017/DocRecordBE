@@ -12,7 +12,7 @@ public class UserAuthService {
     private final UserRepository repository;
 
     public User getUser(String email) {
-        return repository.findByEmailContainingIgnoreCase(email).orElseThrow(
+        return repository.findByEmailIgnoreCase(email).orElseThrow(
                 () -> new EntityNotFoundException("No se encontro al usuario")
         );
     }

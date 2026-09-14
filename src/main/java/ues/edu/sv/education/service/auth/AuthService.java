@@ -150,7 +150,7 @@ public class AuthService {
         Especialidad especialidad = especialidadRepository.findById(request.especialidadId())
                 .orElseThrow(() -> new NoResourceFoundException("Especialidad no encontrada", "404"));
 
-        Optional<User> userOptional = userRepository.findByEmailContainingIgnoreCase(request.email());
+        Optional<User> userOptional = userRepository.findByEmailIgnoreCase(request.email());
 
         User userToSave;
         Persona persona;

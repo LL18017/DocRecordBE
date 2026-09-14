@@ -85,7 +85,7 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
                                 """.formatted(correo, CLAVE)))
                 .andExpect(status().is2xxSuccessful());
 
-        User usuario = usuarios.findByEmailContainingIgnoreCase(correo)
+        User usuario = usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
         usuario.setEnabled(true);
         usuarios.saveAndFlush(usuario);

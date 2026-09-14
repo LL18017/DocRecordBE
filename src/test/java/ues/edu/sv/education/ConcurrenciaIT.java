@@ -166,7 +166,7 @@ class ConcurrenciaIT extends PruebaConServidorReal {
             }
         }
 
-        User usuario = usuarios.findByEmailContainingIgnoreCase(correo)
+        User usuario = usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
         usuario.setEnabled(true);
         usuarios.saveAndFlush(usuario);
@@ -206,7 +206,7 @@ class ConcurrenciaIT extends PruebaConServidorReal {
             }
         }
 
-        User usuario = usuarios.findByEmailContainingIgnoreCase(correo)
+        User usuario = usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
         usuario.setEnabled(true);
         usuarios.saveAndFlush(usuario);

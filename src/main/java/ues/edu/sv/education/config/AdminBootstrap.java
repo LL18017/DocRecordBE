@@ -114,7 +114,7 @@ public class AdminBootstrap implements CommandLineRunner {
         // `UPDATE`/el endpoint de roles, una vez verificada la identidad de
         // quien tiene esa cuenta -- es la opcion que no se puede automatizar
         // para atacar.
-        Optional<User> existente = userRepository.findByEmailContainingIgnoreCase(adminEmail);
+        Optional<User> existente = userRepository.findByEmailIgnoreCase(adminEmail);
         if (existente.isPresent()) {
             // Sin la contrasena, sin el hash: solo el correo, que ya es
             // publico (es el que el propio operador configuro en

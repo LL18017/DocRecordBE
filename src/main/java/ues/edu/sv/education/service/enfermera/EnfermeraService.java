@@ -53,7 +53,7 @@ public class EnfermeraService {
         // El correo de acceso se comprueba ANTES de tocar nada. users.email es
         // UNIQUE, asi que sin esta guarda el choque saldria como una violacion
         // de restriccion (un 500) despues de haber creado ya la persona.
-        if (userRepository.findByEmailContainingIgnoreCase(request.emailDeAcceso()).isPresent()) {
+        if (userRepository.findByEmailIgnoreCase(request.emailDeAcceso()).isPresent()) {
             throw new GeneralException("Ya existe una cuenta con ese correo de acceso", "409");
         }
 

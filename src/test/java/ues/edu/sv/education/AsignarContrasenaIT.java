@@ -101,7 +101,7 @@ class AsignarContrasenaIT extends PruebaClinica {
     }
 
     private User leerDeLaBase(String correo) {
-        return usuarios.findByEmailContainingIgnoreCase(correo)
+        return usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("no se encontro el usuario " + correo));
     }
 

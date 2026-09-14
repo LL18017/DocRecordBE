@@ -54,4 +54,31 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "clinica_id")
     )
     private Set<Clinicas> clinicasAsignadas;
+
+    /**
+     * El correo se guarda SIEMPRE en minusculas y sin espacios alrededor.
+     *
+     * ── Por que aqui y no en cada servicio ────────────────────────────────
+     * Hay cuatro sitios que construyen un User con su correo -el registro
+     * publico, POST /user, el alta de enfermeria y AdminBootstrap- y no hay
+     * nada que impida que aparezca un quinto. Repartir un .toLowerCase() por
+     * cada uno funciona hasta que alguien anade el siguiente y se olvida, y el
+     * fallo no se ve: la cuenta se crea bien y solo falla al intentar entrar.
+     * Un callback de JPA se ejecuta antes de CUALQUIER insert o update de esta
+     * entidad, venga de donde venga.
+     *
+     * ── Por que hace falta normalizar ─────────────────────────────────────
+     * La busqueda ignora mayusculas (findByEmailIgnoreCase, exigido por HU-02
+     * criterio 4). Si la base guardara `Ana@ues.edu.sv` y `ana@ues.edu.sv` como
+     * dos cuentas distintas -cosa que el UNIQUE de la columna permite, porque
+     * compara byte a byte-, esa busqueda encontraria dos filas donde el codigo
+     * espera una y el login de ambas respondaria 500. V11 pone ademas un indice
+     * unico sobre LOWER(email) para que la base lo impida aunque este callback
+     * desapareciera.
+     */
+    @PrePersist
+    @PreUpdate
+    private void normalizarCorreo() {
+        if (email != null) email = email.trim().toLowerCase();
+    }
 }

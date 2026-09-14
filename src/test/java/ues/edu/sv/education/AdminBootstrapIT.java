@@ -87,7 +87,7 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
     void creaElAdminYPuedeIniciarSesionDeVerdad() throws Exception {
         adminBootstrap.run();
 
-        User creado = usuarios.findByEmailContainingIgnoreCase(ADMIN_EMAIL)
+        User creado = usuarios.findByEmailIgnoreCase(ADMIN_EMAIL)
                 .orElseThrow(() -> new AssertionError("AdminBootstrap no creo el usuario administrador"));
 
         assertTrue(creado.isEnabled(), "el admin debe nacer habilitado; sin eso no sirve para nada");
@@ -118,7 +118,7 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
     void arrancarDosVecesEsIdempotente() {
         adminBootstrap.run();
 
-        User primero = usuarios.findByEmailContainingIgnoreCase(ADMIN_EMAIL)
+        User primero = usuarios.findByEmailIgnoreCase(ADMIN_EMAIL)
                 .orElseThrow(() -> new AssertionError("la primera corrida debio crear el admin"));
         Integer idOriginal = primero.getUserID();
         String hashOriginal = primero.getPassword();
@@ -128,7 +128,7 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
         // acaba de crear), asi que debe quedarse quieta.
         adminBootstrap.run();
 
-        User segundo = usuarios.findByEmailContainingIgnoreCase(ADMIN_EMAIL)
+        User segundo = usuarios.findByEmailIgnoreCase(ADMIN_EMAIL)
                 .orElseThrow(() -> new AssertionError("el admin desaparecio tras la segunda corrida"));
         int totalDespues = usuarios.findByRolesName(RolesEnum.ADMIN.getName()).size();
 
@@ -151,7 +151,7 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
 
         assertEquals(totalAntes, usuarios.findByRolesName(RolesEnum.ADMIN.getName()).size(),
                 "ya existe un ADMIN (con otro correo); no debe crearse uno nuevo aunque ADMIN_EMAIL cambie");
-        assertTrue(usuarios.findByEmailContainingIgnoreCase(otroCorreo).isEmpty(),
+        assertTrue(usuarios.findByEmailIgnoreCase(otroCorreo).isEmpty(),
                 "no debio registrarse ninguna cuenta con el correo nuevo");
     }
 
@@ -170,7 +170,7 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
 
         int totalDespues = usuarios.findByRolesName(RolesEnum.ADMIN.getName()).size();
         assertEquals(totalAntes, totalDespues, "sin las variables no debe crearse ningun administrador");
-        assertTrue(usuarios.findByEmailContainingIgnoreCase(ADMIN_EMAIL).isEmpty(),
+        assertTrue(usuarios.findByEmailIgnoreCase(ADMIN_EMAIL).isEmpty(),
                 "sin las variables, el correo de prueba no debe haber quedado registrado");
     }
 }

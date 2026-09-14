@@ -406,7 +406,7 @@ public class UserService {
     }
 
     public void deleteUser(String userEmail) {
-        User user = userRepository.findByEmailContainingIgnoreCase(userEmail).orElseThrow(()-> new NoResourceFoundException("Usuario no encontrado","404"));
+        User user = userRepository.findByEmailIgnoreCase(userEmail).orElseThrow(()-> new NoResourceFoundException("Usuario no encontrado","404"));
         userRepository.delete(user);
     }
 

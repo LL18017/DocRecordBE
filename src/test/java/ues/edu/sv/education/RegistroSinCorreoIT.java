@@ -94,7 +94,7 @@ class RegistroSinCorreoIT extends PruebaDeIntegracion {
                 "la respuesta no debe afirmar que el correo salio cuando el envio fallo");
 
         // 3. El usuario existe en base, deshabilitado, tal como en un registro normal.
-        User usuario = usuarios.findByEmailContainingIgnoreCase(correo)
+        User usuario = usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError(
                         "el fallo del correo se llevo por delante la creacion de la cuenta"));
         assertFalse(usuario.isEnabled(),

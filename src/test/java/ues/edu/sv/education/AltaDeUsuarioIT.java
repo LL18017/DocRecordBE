@@ -67,7 +67,7 @@ class AltaDeUsuarioIT extends PruebaClinica {
     }
 
     private User leerDeLaBase(String correo) {
-        return usuarios.findByEmailContainingIgnoreCase(correo)
+        return usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("POST /user no creo el usuario " + correo));
     }
 

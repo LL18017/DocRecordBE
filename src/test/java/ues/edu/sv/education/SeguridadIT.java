@@ -86,7 +86,7 @@ class SeguridadIT extends PruebaDeIntegracion {
                 .andExpect(status().is2xxSuccessful());
 
         // La cuenta nace deshabilitada a la espera del correo de confirmacion.
-        User usuario = usuarios.findByEmailContainingIgnoreCase(correo)
+        User usuario = usuarios.findByEmailIgnoreCase(correo)
                 .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
         usuario.setEnabled(true);
         usuarios.saveAndFlush(usuario);
@@ -120,7 +120,7 @@ class SeguridadIT extends PruebaDeIntegracion {
         // los asignaba tal cual, asi que cualquiera en internet podia crearse
         // una cuenta ADMIN mandando "roles":[1]. Que la cuenta naciera
         // deshabilitada no protegia nada: el atacante controla su propio correo.
-        User medico = usuarios.findByEmailContainingIgnoreCase(correoDelMedico)
+        User medico = usuarios.findByEmailIgnoreCase(correoDelMedico)
                 .orElseThrow(() -> new AssertionError("no se encontro el usuario"));
 
         var roles = medico.getRoles().stream().map(r -> r.getName()).toList();
@@ -262,7 +262,7 @@ class SeguridadIT extends PruebaDeIntegracion {
         // LazyInitializationException. Se resuelve pidiendo la Persona aparte
         // por su id -- leer el id de un proxy lazy NO lo inicializa -- y
         // reemplazandola en el User antes de construir el token.
-        User usuario = usuarios.findByEmailContainingIgnoreCase(correoDelMedico)
+        User usuario = usuarios.findByEmailIgnoreCase(correoDelMedico)
                 .orElseThrow(() -> new AssertionError("no se encontro el usuario"));
         usuario.setPersona(personas.findById(usuario.getPersona().getPersonaId())
                 .orElseThrow(() -> new AssertionError("no se encontro la persona")));

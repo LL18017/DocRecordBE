@@ -12,7 +12,30 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User,Integer> {
 
-    Optional<User> findByEmailContainingIgnoreCase(String email);
+    /**
+     * La cuenta con ESE correo, comparando sin distinguir mayusculas.
+     *
+     * ── Aqui decia `findByEmailIgnoreCase` ──────────────────────
+     * Es decir, `LIKE '%correo%'`: una BUSQUEDA POR SUBCADENA usada para
+     * autenticar. Un correo que no existe pero que es subcadena de uno real
+     * devolvia esa cuenta, y con la contrasena correcta emitia su token. Se
+     * comprobo ejecutandolo: `osa.portillo@ues.edu.sv` -inexistente- devolvia
+     * un JWT valido de `rosa.portillo@ues.edu.sv`.
+     *
+     * El dano no se queda en eso. Como el metodo devuelve Optional, en cuanto
+     * dos correos de la base son subcadena uno del otro Spring Data encuentra
+     * dos filas y lanza IncorrectResultSizeDataAccessException: el login de
+     * ambas cuentas pasa a responder 500 sin explicacion.
+     *
+     * Lo usaban el login (AuthService), el UserDetailsService de Spring
+     * Security, el alta de enfermeria y el borrado por correo: en los cuatro
+     * casos lo que se quiere es UNA cuenta concreta, nunca un parecido.
+     *
+     * IgnoreCase se conserva a proposito: HU-02 exige que quien se registro
+     * escribiendo el correo con mayusculas pueda entrar igual. El otro lado de
+     * esa regla -normalizar al GUARDAR- vive en V11 y en los servicios de alta.
+     */
+    Optional<User> findByEmailIgnoreCase(String email);
 
     Page<User> findAll(Pageable pageable);
 
