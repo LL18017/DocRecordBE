@@ -8,11 +8,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import ues.edu.sv.education.model.dto.auth.CustomUserDetails;
+import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.repository.PersonaRepository;
 import ues.edu.sv.education.repository.UserRepository;
+import ues.edu.sv.education.service.auth.JwtService;
 
+import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,6 +48,9 @@ class SeguridadIT extends PruebaDeIntegracion {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository usuarios;
+    @Autowired private PersonaRepository personas;
+    @Autowired private PasswordEncoder encoder;
+    @Autowired private JwtService jwtService;
     // Se instancia en vez de inyectarse: este contexto no expone un bean de ObjectMapper.
     private final ObjectMapper json = new ObjectMapper();
 
@@ -231,5 +240,91 @@ class SeguridadIT extends PruebaDeIntegracion {
         // "eso no existe".
         mockMvc.perform(get("/esto-no-existe").header("Authorization", bearer()))
                 .andExpect(status().isNotFound());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Autorizacion en los bordes del token
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("un token ya expirado no sirve para entrar")
+    void unTokenExpiradoNoSirve() throws Exception {
+        // Se fabrica con JwtService directamente, con una expiracion negativa:
+        // es un token con firma valida (la misma clave de siempre) pero
+        // vencido desde el instante en que se genero. JwtService.getClaims
+        // lanza ExpiredJwtException al leerlo, que JwtFilter atrapa junto con
+        // cualquier otro fallo y responde 401.
+        //
+        // User.persona es LAZY (ver User.java) y esta clase no es
+        // @Transactional a proposito (el registro de @BeforeEach necesita
+        // comitear): fuera de una sesion de Hibernate abierta, tocar
+        // usuario.getPersona().getNombres() revienta con
+        // LazyInitializationException. Se resuelve pidiendo la Persona aparte
+        // por su id -- leer el id de un proxy lazy NO lo inicializa -- y
+        // reemplazandola en el User antes de construir el token.
+        User usuario = usuarios.findByEmailContainingIgnoreCase(correoDelMedico)
+                .orElseThrow(() -> new AssertionError("no se encontro el usuario"));
+        usuario.setPersona(personas.findById(usuario.getPersona().getPersonaId())
+                .orElseThrow(() -> new AssertionError("no se encontro la persona")));
+        CustomUserDetails detalles = new CustomUserDetails(usuario);
+        String tokenExpirado = jwtService.buildToken(detalles, -1000L);
+
+        mockMvc.perform(get("/pacientes").header("Authorization", "Bearer " + tokenExpirado))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("un token con la firma alterada no sirve para entrar")
+    void unTokenConLaFirmaAlteradaNoSirve() throws Exception {
+        // Se toma un token real y valido y se cambia UN caracter dentro de su
+        // firma (el tercer segmento del JWT). Jwts.parser().verifyWith(...)
+        // debe rechazarlo por SignatureException, no aceptarlo ni caer en un
+        // 500: es la diferencia entre "invalido porque nunca existio" (el
+        // "token inventado" que ya prueba unTokenInventadoNoSirve) y
+        // "invalido porque alguien lo manipulo".
+        String[] segmentos = tokenDeMedico.split("\\.");
+        assertEquals(3, segmentos.length, "un JWT debe tener tres segmentos separados por punto");
+
+        char ultimo = segmentos[2].charAt(segmentos[2].length() - 1);
+        char alterado = ultimo == 'A' ? 'B' : 'A';
+        String firmaAlterada = segmentos[2].substring(0, segmentos[2].length() - 1) + alterado;
+        String tokenAlterado = segmentos[0] + "." + segmentos[1] + "." + firmaAlterada;
+
+        mockMvc.perform(get("/pacientes").header("Authorization", "Bearer " + tokenAlterado))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("un token sin ningun rol autentica pero no autoriza: 403, no 401")
+    void unTokenSinNingunRolRecibe403NoConfundirConSinToken() throws Exception {
+        // Distinto de "sin token" (401, ver sinTokenLosEndpointsClinicosRechazan):
+        // aqui SI hay una sesion valida -JwtFilter la acepta y deja el
+        // principal en el SecurityContext- pero el arreglo "authorities" del
+        // token viene vacio, asi que ningun hasAnyRole(...) se cumple. Eso es
+        // 403 (quien eres se sabe, no te alcanza), no 401 (no se sabe quien
+        // eres).
+        String correo = "medico.sinrol." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
+        Persona persona = personas.saveAndFlush(
+                Persona.builder().nombres("Sin").apellidos("Ningun Rol").build());
+        usuarios.saveAndFlush(User.builder()
+                .persona(persona)
+                .email(correo)
+                .password(encoder.encode(CLAVE))
+                .enabled(true)
+                .roles(new HashSet<>())
+                .build());
+
+        MvcResult login = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"%s"}
+                                """.formatted(correo, CLAVE)))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn();
+        String tokenSinRoles = json.readTree(login.getResponse().getContentAsString())
+                .get("token").asText();
+
+        mockMvc.perform(get("/pacientes").header("Authorization", "Bearer " + tokenSinRoles))
+                .andExpect(status().isForbidden());
     }
 }

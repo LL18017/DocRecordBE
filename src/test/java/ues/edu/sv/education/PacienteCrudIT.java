@@ -473,4 +473,97 @@ class PacienteCrudIT extends PruebaDeIntegracion {
                 .andReturn().getResponse().getContentAsString();
         assertTrue(json.readTree(porDui).size() >= 1, "debio encontrarlo por DUI");
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Limites y datos raros
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("un paciente sin DUI, sin telefono, sin direccion, sin correo y sin tipo de sangre se crea igual")
+    void unPacienteSinNingunCampoOpcionalSeCreaIgual() throws Exception {
+        // Los cinco a la vez, no uno por uno: todos son NULL-ables en el
+        // esquema (V2 y V8), y la combinacion completa es la que de verdad
+        // ejercita que ninguno se volvio obligatorio por accidente al validar
+        // los demas juntos.
+        String cuerpo = mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"nombres":"Sin Datos","apellidos":"Opcionales",
+                                            "fechaNacimiento":"1990-05-20","sexo":"F"}}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode creado = json.readTree(cuerpo);
+        assertTrue(creado.get("tipoSangre").isNull(), "tipoSangre debe quedar null, no inventado");
+        JsonNode persona = creado.get("persona");
+        assertTrue(persona.get("dui").isNull(), "dui debe quedar null");
+        assertTrue(persona.get("telefono").isNull(), "telefono debe quedar null");
+        assertTrue(persona.get("direccion").isNull(), "direccion debe quedar null");
+        assertTrue(persona.get("email").isNull(), "email debe quedar null");
+    }
+
+    @Test
+    @DisplayName("un nombre de 80 caracteres se acepta; uno de 81 se rechaza")
+    void elLimiteDeNombresEsExactamente80() throws Exception {
+        // PersonaRequestDto.nombres declara @Size(max = 80), que coincide con
+        // persona.nombres VARCHAR(80) en V2. Esta prueba confirma que el limite
+        // esta exactamente donde el codigo dice, ni uno de mas ni uno de menos.
+        String limite = "N".repeat(80);
+        String pasado = "N".repeat(81);
+
+        mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"dui":"%s","nombres":"%s","apellidos":"Limite",
+                                            "fechaNacimiento":"1990-05-20","sexo":"F"}}
+                                """.formatted(duiUnico(), limite)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"dui":"%s","nombres":"%s","apellidos":"Limite",
+                                            "fechaNacimiento":"1990-05-20","sexo":"F"}}
+                                """.formatted(duiUnico(), pasado)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("una fecha de nacimiento invalida como el 30 de febrero se rechaza, no se normaliza sola")
+    void unaFechaDeNacimientoInvalidaSeRechaza() throws Exception {
+        // Jackson/java.time deben rechazar 2024-02-30 al deserializar el
+        // cuerpo, en vez de "normalizarla" a otro dia (algunos parsers lo
+        // hacen). Si eso pasara, quedaria una fecha de nacimiento falsa en el
+        // expediente sin que nadie la haya pedido.
+        mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"dui":"%s","nombres":"Fecha","apellidos":"Invalida",
+                                            "fechaNacimiento":"2024-02-30","sexo":"F"}}
+                                """.formatted(duiUnico())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("un tipo de sangre que pasa el @Size pero no esta en el catalogo se rechaza sin dar 500")
+    void unTipoDeSangreFueraDelCatalogoNoRevienta() throws Exception {
+        // "ZZ" tiene 2 caracteres: pasa el @Size(max = 3) de PacienteRequestDto,
+        // pero no esta en el CHECK de pacientes.tipo_sangre (V2). El fallo debe
+        // llegar como un 4xx del manejador de DataIntegrityViolationException,
+        // nunca como un 500 sin explicacion.
+        mockMvc.perform(post("/pacientes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"persona":{"dui":"%s","nombres":"Sangre","apellidos":"Invalida",
+                                            "fechaNacimiento":"1990-05-20","sexo":"F"},
+                                 "tipoSangre":"ZZ"}
+                                """.formatted(duiUnico())))
+                .andExpect(status().is4xxClientError());
+    }
 }

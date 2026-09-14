@@ -226,6 +226,34 @@ class AltaDeUsuarioIT extends PruebaClinica {
     }
 
     // ══════════════════════════════════════════════════════════════════════
+    // Datos raros: un userName sin espacios mas largo que persona.nombres
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("un userName de una sola palabra mas largo que persona.nombres (80) no revienta con 500")
+    void unUserNameSinEspaciosQueExcedeElLimiteDeNombresNoRevienta() throws Exception {
+        // UserRequestDto.userName no lleva @Size. UserService.createUser lo
+        // parte en nombres/apellidos por el primer espacio (dividirNombreCompleto);
+        // sin ningun espacio, TODO el userName se guarda como persona.nombres
+        // (VARCHAR(80), V2). Con 200 caracteres sin espacios, la fila nunca pasa
+        // el @Size del DTO (no existe) y llega intacta hasta el INSERT, que
+        // Postgres rechaza por "value too long". Lo que se comprueba aqui no es
+        // el codigo exacto sino que ese fallo de base de datos llegue como un
+        // 4xx del manejador de DataIntegrityViolationException, nunca como un
+        // 500 sin explicacion.
+        String correo = correoUnico("alta.nombrelargo");
+        String userNameSinEspacios = "N".repeat(200);
+
+        mockMvc.perform(post("/user")
+                        .header("Authorization", bearer(tokenDeAdmin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","userName":"%s","password":"%s"}
+                                """.formatted(correo, userNameSinEspacios, CLAVE)))
+                .andExpect(status().is4xxClientError());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     // Apoyo
     // ══════════════════════════════════════════════════════════════════════
 

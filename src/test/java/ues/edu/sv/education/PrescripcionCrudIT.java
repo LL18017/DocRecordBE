@@ -504,6 +504,107 @@ class PrescripcionCrudIT extends PruebaClinica {
                 .andExpect(status().isNotFound());
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // Limites de la paginacion (TAMANO_PAGINA_MAXIMO en PrescripcionService)
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("tamano de pagina 0 se rechaza con 400, no se interpreta como 'sin limite'")
+    void tamanoDePaginaCeroSeRechaza() throws Exception {
+        mockMvc.perform(get("/prescripciones")
+                        .param("pacienteId", String.valueOf(paciente))
+                        .param("tamano", "0")
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("un tamano de pagina por encima del tope maximo (100) se rechaza con 400")
+    void tamanoDePaginaSobreElTopeSeRechaza() throws Exception {
+        // El tope existe justamente para que ?tamano=999999999 no equivalga a
+        // "todos" (ver el comentario de TAMANO_PAGINA_MAXIMO). 101 es el primer
+        // valor invalido arriba del limite.
+        mockMvc.perform(get("/prescripciones")
+                        .param("tamano", "101")
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("una pagina negativa se rechaza con 400")
+    void unaPaginaNegativaSeRechaza() throws Exception {
+        mockMvc.perform(get("/prescripciones")
+                        .param("pagina", "-1")
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("pedir una pagina fuera de rango no es un error: devuelve contenido vacio con el total real")
+    void unaPaginaFueraDeRangoDevuelveVacioNoError() throws Exception {
+        // Un paciente fresco con una sola receta: la pagina 999 no puede
+        // existir, pero la respuesta debe seguir siendo 200 con "contenido"
+        // vacio y el total verdadero, no un 404 ni un 500 por indice fuera de
+        // rango.
+        emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamento":"Unica receta de esta prueba"}]}
+                """.formatted(consultaId));
+
+        JsonNode respuesta = json.readTree(mockMvc.perform(get("/prescripciones")
+                        .param("pacienteId", String.valueOf(paciente))
+                        .param("pagina", "999")
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertEquals(0, respuesta.get("contenido").size(),
+                "la pagina 999 no existe, debe venir vacia");
+        assertEquals(1, respuesta.get("totalElementos").asLong(),
+                "el total debe seguir siendo el real, no 0 solo porque la pagina pedida no exista");
+        assertEquals(999, respuesta.get("paginaActual").asInt());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Huso horario: la maquina corre en America/El_Salvador (UTC-6)
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("una receta fijada a las 00:00:00.000 exactas de 'desde' cae dentro del rango")
+    void elInicioDeDesdeALaMedianocheQuedaIncluido() throws Exception {
+        // Complemento del limite de "hasta" que ya prueba
+        // desdeHastaIncluyenElDiaCompletoDeHasta (23:59:59.999 del dia de
+        // hasta). Este es el otro extremo: el primer instante posible del dia
+        // de "desde". El sistema no usa Instant/ZonedDateTime en ningun lado
+        // (todo es LocalDateTime, hora de pared, sin zona) -- si algun dia
+        // alguien normalizara esta fecha a UTC antes de compararla, El
+        // Salvador esta 6 horas detras y una receta de la madrugada local
+        // podria "retroceder" al dia anterior en esa conversion. Fijar el
+        // limite exacto aqui detecta justo esa regresion.
+        LocalDate dia = LocalDate.of(2024, 7, 1);
+
+        long enElInicioDeDesde = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamento":"Justo al inicio de desde"}]}
+                """.formatted(consultaId)).get("prescripcionId").asLong();
+        fijarFecha(enElInicioDeDesde, dia.atStartOfDay());
+
+        long unInstanteAntes = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamento":"Un instante antes de desde"}]}
+                """.formatted(consultaId)).get("prescripcionId").asLong();
+        fijarFecha(unInstanteAntes, dia.atStartOfDay().minusNanos(1000));
+
+        JsonNode delRango = contenidoDe(mockMvc.perform(get("/prescripciones")
+                        .param("pacienteId", String.valueOf(paciente))
+                        .param("desde", dia.toString())
+                        .param("hasta", dia.toString())
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertEquals(1, delRango.size(),
+                "solo la receta del inicio exacto de desde (00:00:00.000) debe caer en el rango");
+        assertEquals(enElInicioDeDesde, delRango.get(0).get("prescripcionId").asLong());
+    }
+
     @Test
     @DisplayName("una receta sobre una consulta que no existe responde 404, no 500")
     void unaConsultaInexistenteResponde404() throws Exception {
