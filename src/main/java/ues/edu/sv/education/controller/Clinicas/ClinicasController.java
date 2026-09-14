@@ -29,14 +29,32 @@ public class ClinicasController {
 
     @Operation(
             summary = "Obtener mis clínicas",
-            description = "Devuelve las clínicas del usuario autenticado"
+            description = "Las clínicas en las que el usuario autenticado puede operar: las que "
+                    + "registró y aquellas a las que se le asignó como personal."
     )
+    // ENFERMERA incluida, a diferencia del resto de este controlador. Leer en
+    // qué sedes trabaja uno no es administrar sedes: sin este permiso la
+    // pantalla de selección de clínica respondía 403 y dejaba a enfermería
+    // encallada en la puerta, sin poder llegar a lo único que sí le toca, que
+    // es tomar constantes.
     @GetMapping("/mias")
-    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
     public ResponseEntity<List<ClinicasResponseDto>> obtenerMias() {
         return ResponseEntity.ok(
                 clinicasService.obtenerPorUsuarioActual()
         );
+    }
+
+    @Operation(
+            summary = "Listar todas las clínicas",
+            description = "El catálogo completo, sin filtrar por dueño. Lo necesita quien asigna "
+                    + "personal a una sede: para asignar hay que poder ver las sedes ajenas, que "
+                    + "es justo lo que /mias no devuelve."
+    )
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<ClinicasResponseDto>> listarTodas() {
+        return ResponseEntity.ok(clinicasService.listarTodas());
     }
 
     @Operation(

@@ -1,5 +1,6 @@
 package ues.edu.sv.education.controller.auth;
 
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,7 @@ import ues.edu.sv.education.model.dto.User.AltaUsuarioResponseDto;
 import ues.edu.sv.education.model.dto.User.AsignarContrasenaRequestDto;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
+import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
 import ues.edu.sv.education.service.user.UserService;
 
 import java.util.List;
@@ -53,12 +55,81 @@ public class UserControler {
     ) {
         return ResponseEntity.ok(userService.getAll(inicio,fin));
     }
+    @Operation(
+            summary = "Añadir un rol a un usuario",
+            description = "Solo añade; no reemplaza los que ya tiene. Asignar ENFERMERA crea "
+                    + "además su ficha en enfermería, porque sin esa fila la cuenta pasa el "
+                    + "control de rol y luego recibe 403 al registrar constantes."
+    )
     @PostMapping("/{userId}/role/{roleId}")
     public ResponseEntity<UserResponseDto> addRole(
             @PathVariable(required = true) int userId,
             @PathVariable(required = true) int roleId
     ) {
         return ResponseEntity.ok(userService.addRole(userId,roleId));
+    }
+
+    @Operation(
+            summary = "Quitarle un rol a un usuario",
+            description = "404 si no lo tenía. No deja quitarse uno mismo el rol de administrador "
+                    + "ni retirar el último administrador del sistema: de eso no hay vuelta atrás "
+                    + "desde la aplicación. Quitar ENFERMERA marca su ficha inactiva, no la borra "
+                    + "—sus tomas de signos vitales la referencian—."
+    )
+    @DeleteMapping("/{userId}/role/{roleId}")
+    public ResponseEntity<UserResponseDto> quitarRole(
+            @PathVariable(required = true) int userId,
+            @PathVariable(required = true) int roleId
+    ) {
+        return ResponseEntity.ok(userService.quitarRole(userId, roleId));
+    }
+
+    /*
+     * Asignacion de sede, junto a la de rol porque es la misma decision: que
+     * puede hacer esta cuenta y donde.
+     *
+     * Hace falta porque `clinicas.user_id` significa QUIEN REGISTRO la sede, no
+     * quien trabaja en ella. Una enfermera nunca da de alta una clinica, asi
+     * que sin esto su lista salia vacia y la pantalla de seleccion de clinica
+     * la dejaba encallada en la puerta. Reasignar el dueño no servia: se la
+     * quitaria al medico que la registro. Ver V10.
+     */
+    @Operation(
+            summary = "Asignar una clínica a un usuario",
+            description = "Le da acceso a operar en esa sede sin volverlo su dueño. "
+                    + "404 si el usuario o la clínica no existen; 409 si ya la tenía asignada."
+    )
+    @PostMapping("/{userId}/clinica/{clinicaId}")
+    public ResponseEntity<UserResponseDto> asignarClinica(
+            @PathVariable(required = true) int userId,
+            @PathVariable(required = true) int clinicaId
+    ) {
+        return ResponseEntity.ok(userService.asignarClinica(userId, clinicaId));
+    }
+
+    @Operation(
+            summary = "Clínicas asignadas a un usuario",
+            description = "Solo las asignadas como personal, no las que registró él mismo. "
+                    + "Lo pide la pantalla de permisos para marcar cuáles ya tiene."
+    )
+    @GetMapping("/{userId}/clinicas")
+    public ResponseEntity<List<ClinicasResponseDto>> clinicasAsignadas(
+            @PathVariable(required = true) int userId
+    ) {
+        return ResponseEntity.ok(userService.clinicasAsignadas(userId));
+    }
+
+    @Operation(
+            summary = "Quitarle una clínica a un usuario",
+            description = "Retira la asignación; no borra la clínica ni afecta a su dueño. "
+                    + "404 si el usuario o la clínica no existen, o si no la tenía asignada."
+    )
+    @DeleteMapping("/{userId}/clinica/{clinicaId}")
+    public ResponseEntity<UserResponseDto> quitarClinica(
+            @PathVariable(required = true) int userId,
+            @PathVariable(required = true) int clinicaId
+    ) {
+        return ResponseEntity.ok(userService.quitarClinica(userId, clinicaId));
     }
     // @Valid, y no solo @RequestBody: sin el, las anotaciones de
     // UserRequestDto (@Email, @NotBlank, @Size) no se evaluaban y un cuerpo

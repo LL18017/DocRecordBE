@@ -13,7 +13,9 @@ import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.UserRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -21,15 +23,52 @@ public class ClinicaService {
     private final UserRepository userRepository;
     private final ClinicaRepository clinicasRepository;
 
+    /**
+     * Las clinicas en las que este usuario puede operar hoy.
+     *
+     * Son DOS conjuntos y hacen falta los dos:
+     *   · Las que registro (clinicas.user_id), que es lo unico que devolvia
+     *     antes este metodo.
+     *   · Aquellas a las que se le asigno como personal (clinica_personal,
+     *     ver V10).
+     *
+     * Con solo el primero, enfermeria quedaba fuera del sistema entero: una
+     * enfermera no da de alta sedes, trabaja en la que registro un medico, asi
+     * que su lista salia vacia y la pantalla de seleccion de clinica la dejaba
+     * encallada antes de poder hacer nada.
+     *
+     * Se unen sin repetir porque los dos conjuntos pueden solaparse -a alguien
+     * se le puede asignar una sede que ademas registro-, y una clinica
+     * duplicada en el selector es un error visible.
+     */
     @Transactional(readOnly = true)
     public List<ClinicasResponseDto> obtenerPorUsuarioActual() {
 
         User user = usuarioActual();
 
-        return clinicasRepository.findByUser(user.getUserID())
-                .stream()
-                .map(this::toResponseDto)
-                .toList();
+        Map<Integer, Clinicas> porId = new LinkedHashMap<>();
+        for (Clinicas propia : clinicasRepository.findByUser(user.getUserID())) {
+            porId.put(propia.getClinicaId(), propia);
+        }
+        if (user.getClinicasAsignadas() != null) {
+            for (Clinicas asignada : user.getClinicasAsignadas()) {
+                porId.putIfAbsent(asignada.getClinicaId(), asignada);
+            }
+        }
+
+        return porId.values().stream().map(this::toResponseDto).toList();
+    }
+
+    /**
+     * El catalogo completo de clinicas, sin filtrar por dueño.
+     *
+     * Lo usa quien asigna personal a una sede: para poder asignar hay que ver
+     * las sedes ajenas, y eso es exactamente lo que obtenerPorUsuarioActual no
+     * devuelve. Por eso el endpoint que lo expone es solo para ADMIN.
+     */
+    @Transactional(readOnly = true)
+    public List<ClinicasResponseDto> listarTodas() {
+        return clinicasRepository.findAll().stream().map(this::toResponseDto).toList();
     }
 
     // Las coordenadas pueden llegar null: la columna las admite y una clinica

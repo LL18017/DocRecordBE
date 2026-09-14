@@ -37,6 +37,21 @@ public class User {
     )
     private Set<Role> roles;
 
+    // Las clinicas que este usuario REGISTRO. `clinicas.user_id` es la
+    // propiedad de la sede, no el lugar donde alguien trabaja.
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<Clinicas> clinicas;
+
+    // Las clinicas donde este usuario TRABAJA sin haberlas registrado (ver
+    // V10). Son dos cosas distintas y hacen falta las dos: una enfermera nunca
+    // da de alta una sede -trabaja en la que registro un medico-, asi que con
+    // solo la propiedad su lista salia vacia y la pantalla de seleccion de
+    // clinica la dejaba encallada.
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "clinica_personal",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "clinica_id")
+    )
+    private Set<Clinicas> clinicasAsignadas;
 }

@@ -34,4 +34,12 @@ public interface UserRepository extends JpaRepository<User,Integer> {
     // usuarios tienen un rol dado, sin depender de cuantos administradores
     // haya creado el resto de la suite para sus propios casos.
     List<User> findByRolesName(String name);
+
+    // La cuenta de acceso de una persona concreta. La usa EnfermeraService
+    // para decir, en el listado de enfermeria, con que correo entra cada una.
+    //
+    // Existe para no resolverlo con findAll() y un filtro en memoria, que es
+    // como estaba escrito primero: eso trae la tabla `users` entera por cada
+    // enfermera del listado.
+    Optional<User> findByPersona_PersonaId(Long personaId);
 }
