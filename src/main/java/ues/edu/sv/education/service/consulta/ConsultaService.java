@@ -3,6 +3,7 @@ package ues.edu.sv.education.service.consulta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.consulta.ClinicaResumenDto;
 import ues.edu.sv.education.model.dto.consulta.ConsultaActualizacionDto;
@@ -14,11 +15,13 @@ import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.Consulta;
 import ues.edu.sv.education.model.entity.Medico;
 import ues.edu.sv.education.model.entity.Paciente;
+import ues.edu.sv.education.model.entity.SignosVitales;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.enums.EstadoConsulta;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.ConsultaRepository;
 import ues.edu.sv.education.repository.PacienteRepository;
+import ues.edu.sv.education.repository.SignosVitalesRepository;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
 import java.time.LocalDateTime;
@@ -39,8 +42,22 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ConsultaService {
 
+    /**
+     * Cuanto vale una toma de constantes para abrir una consulta.
+     *
+     * 24 horas porque una visita clinica cabe en un dia: se pasa por
+     * enfermeria y despues por el medico, con la espera de por medio. Mas
+     * corto estorbaria en una manana con sala llena; mas largo dejaria
+     * diagnosticar con una presion de la semana pasada, que es tan util como
+     * no tener ninguna.
+     *
+     * Si el equipo decide otra ventana, se cambia aqui y en ningun sitio mas.
+     */
+    private static final long VIGENCIA_DE_LA_TOMA_HORAS = 24;
+
     private final ConsultaRepository consultaRepository;
     private final PacienteRepository pacienteRepository;
+    private final SignosVitalesRepository signosVitalesRepository;
     private final ClinicaRepository clinicaRepository;
     private final MedicoAutenticado medicoAutenticado;
 
@@ -60,6 +77,25 @@ public class ConsultaService {
         Paciente paciente = buscarPacienteOFallar(request.pacienteId());
         Clinicas clinica = buscarClinicaSiVino(request.clinicaId());
 
+        // El triage va ANTES de la consulta: sin constantes recientes no se
+        // abre. Enfermeria pesa, mide y toma la presion, y el medico lee eso
+        // para diagnosticar; una consulta sin ese paso previo es un
+        // diagnostico hecho a ciegas sobre datos que nadie recogio.
+        //
+        // Se exige una toma RECIENTE y no "alguna": bastando con cualquiera,
+        // la regla dejaria de aplicar despues de la primera visita del
+        // paciente para siempre, que es justo lo contrario de lo que busca.
+        // La ventana esta en VIGENCIA_DE_LA_TOMA_HORAS.
+        SignosVitales toma = signosVitalesRepository
+                .findFirstByPaciente_PersonaIdOrderByTomadoEnDesc(paciente.getPersonaId())
+                .filter(sv -> sv.getTomadoEn()
+                        .isAfter(LocalDateTime.now().minusHours(VIGENCIA_DE_LA_TOMA_HORAS)))
+                .orElseThrow(() -> new GeneralException(
+                        "Este paciente no tiene signos vitales de las ultimas "
+                                + VIGENCIA_DE_LA_TOMA_HORAS + " horas. "
+                                + "Enfermeria debe tomarle las constantes antes de la consulta.",
+                        "409"));
+
         // Quien crea la consulta ya se comprobo que es medico, asi que puede
         // traer diagnostico desde el inicio (la consulta nace cerrada, que es
         // lo normal cuando se registra despues de atender).
@@ -75,7 +111,20 @@ public class ConsultaService {
                 .estado(estadoSegun(diagnostico))
                 .build();
 
-        return toDto(consultaRepository.save(consulta));
+        Consulta guardada = consultaRepository.save(consulta);
+
+        // La toma que habilito esta consulta queda ligada a ella, si no lo
+        // estaba ya a otra. Asi el expediente puede responder "con que
+        // constantes se diagnostico esto", que es la pregunta que hace util
+        // guardar las dos cosas juntas. La columna existia desde V9 esperando
+        // este momento: enfermeria toma ANTES de que la consulta exista, asi
+        // que en el INSERT de la toma no hay nada a lo que apuntar.
+        if (toma.getConsulta() == null) {
+            toma.setConsulta(guardada);
+            signosVitalesRepository.save(toma);
+        }
+
+        return toDto(guardada);
     }
 
     /**

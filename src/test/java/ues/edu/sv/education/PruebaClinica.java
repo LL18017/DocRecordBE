@@ -181,7 +181,41 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
         return json.readTree(cuerpo).get("personaId").asLong();
     }
 
+    /**
+     * Registra una toma de constantes al paciente, como haria enfermeria.
+     *
+     * Existe porque el triage es ahora REQUISITO de la consulta: sin una toma
+     * de las ultimas 24 horas, POST /consultas responde 409 (ver
+     * ConsultaService.crear). Sin este paso, toda prueba que abra una consulta
+     * fallaria por una razon que no es la que esta probando.
+     *
+     * Se manda una sola medida a proposito: el backend exige al menos una, y
+     * mandar las ocho aqui solo anadiria ruido a un requisito previo.
+     */
+    protected void tomarSignosVitales(long pacienteId) throws Exception {
+        mockMvc.perform(post("/signos-vitales")
+                        .header("Authorization", "Bearer " + tokenDeEnfermera())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pacienteId":%d,"pulsoLpm":72}
+                                """.formatted(pacienteId)))
+                .andExpect(status().isCreated());
+    }
+
+    /**
+     * Abre una consulta, tomandole antes las constantes al paciente.
+     *
+     * El triage va incluido aqui y no en cada prueba por lo mismo que
+     * `crearPaciente`: es parte del montaje, no de lo que se comprueba. Quien
+     * necesite verificar que SIN constantes se responde 409 llama directamente
+     * a mockMvc, sin este helper.
+     */
     protected JsonNode crearConsulta(String token, String cuerpoJson) throws Exception {
+        JsonNode cuerpo = json.readTree(cuerpoJson);
+        if (cuerpo.hasNonNull("pacienteId")) {
+            tomarSignosVitales(cuerpo.get("pacienteId").asLong());
+        }
+
         String respuesta = mockMvc.perform(post("/consultas")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
