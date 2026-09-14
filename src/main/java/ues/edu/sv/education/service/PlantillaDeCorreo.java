@@ -24,7 +24,10 @@ public enum PlantillaDeCorreo {
 
     AVISO_DE_INICIO_DE_SESION("aviso-inicio-sesion", "Nuevo inicio de sesión en DocRecord Sv"),
 
-    TOKEN_EXPIRADO("token-expirado", "Tu enlace de confirmación venció");
+    TOKEN_EXPIRADO("token-expirado", "Tu enlace de confirmación venció"),
+
+    RECUPERACION_DE_CONTRASENA("recuperacion-contrasena",
+            "Restablece tu contraseña de DocRecord Sv");
 
     private final String nombreBase;
     private final String asunto;

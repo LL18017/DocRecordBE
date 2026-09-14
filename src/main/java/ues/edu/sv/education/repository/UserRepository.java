@@ -37,6 +37,25 @@ public interface UserRepository extends JpaRepository<User,Integer> {
      */
     Optional<User> findByEmailIgnoreCase(String email);
 
+    /**
+     * La misma busqueda que la de arriba, pero trayendo ya la Persona.
+     *
+     * Existe por el hilo de fondo de la recuperacion de contrasena, que corre
+     * FUERA de cualquier peticion HTTP y fuera de una transaccion (ver
+     * RecuperacionDeContrasenaService: el trabajo se saca del hilo de la
+     * peticion para que el tiempo de respuesta no delate si el correo existe).
+     * Ahi no hay open-in-view ni sesion abierta, asi que `user.getPersona()`
+     * -- que es LAZY -- revienta con LazyInitializationException en cuanto se
+     * le pide el nombre para saludar en el correo.
+     *
+     * Se resuelve con un join fetch y no volviendo EAGER la relacion en la
+     * entidad: esa relacion la recorre CADA carga de usuario, incluido el
+     * login, y una consulta extra en el camino caliente de todo el sistema es
+     * un precio desproporcionado por un saludo en un correo.
+     */
+    @Query("select u from User u join fetch u.persona where lower(u.email) = lower(:correo)")
+    Optional<User> buscarConPersonaPorCorreo(@Param("correo") String correo);
+
     Page<User> findAll(Pageable pageable);
 
     // Usado por AdminBootstrap para decidir si ya existe un administrador
@@ -57,6 +76,25 @@ public interface UserRepository extends JpaRepository<User,Integer> {
     // usuarios tienen un rol dado, sin depender de cuantos administradores
     // haya creado el resto de la suite para sus propios casos.
     List<User> findByRolesName(String name);
+
+    /**
+     * Cuantas cuentas con este rol pueden AUN iniciar sesion.
+     *
+     * No es lo mismo que contar las que tienen el rol: un administrador
+     * desactivado conserva el rol pero no puede entrar. La guarda que impide
+     * dejar el sistema sin administracion tiene que mirar quien puede entrar,
+     * no quien figura en la tabla; si mirara lo segundo, desactivar al ultimo
+     * admin activo pasaria la comprobacion mientras quedara otro desactivado, y
+     * el sistema se quedaria sin nadie que pueda administrarlo.
+     */
+    // Las DOS columnas: desde V15 entrar exige tener el correo confirmado
+    // (`enabled`) y que la organizacion lo permita (`activo`). Mirar solo una
+    // contaria como disponible a quien no puede pasar del login.
+    @Query("""
+            SELECT COUNT(u) FROM User u JOIN u.roles r
+            WHERE r.name = :name AND u.enabled = true AND u.activo = true
+            """)
+    long contarActivosConRol(@Param("name") String name);
 
     // La cuenta de acceso de una persona concreta. La usa EnfermeraService
     // para decir, en el listado de enfermeria, con que correo entra cada una.

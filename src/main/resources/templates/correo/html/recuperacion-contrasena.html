@@ -1,27 +1,33 @@
 <!DOCTYPE html>
 <!--/*
-  Correo 1 de 4: confirmacion de registro.
+  Correo 4 de 4: enlace para restablecer la contrasena (HU-04).
 
-  Es el mas importante de los tres, porque sin el nadie entra al sistema: la
-  cuenta nace deshabilitada y solo este enlace la activa. De ahi que el enlace
-  aparezca DOS veces, como boton y como direccion escrita a la vista. Si el
-  cliente de correo bloquea los estilos, el boton se vuelve un enlace suelto
-  pero sigue siendo pulsable; y si ademas bloquea el HTML entero, queda la
-  version de texto (correo/texto/confirmacion-registro.txt).
+  Lo que lo distingue de los otros tres: este correo llega tambien a gente que
+  NO pidio nada. Cualquiera puede escribir una direccion ajena en el formulario
+  de recuperacion, asi que el cuerpo tiene que decirle a quien no lo pidio que
+  no hace falta que haga nada -- ni siquiera avisar -- porque la contrasena no
+  cambia sola y el enlace vence por su cuenta. Sin esa frase, un correo de
+  "restablece tu contrasena" que nadie pidio se lee como una cuenta
+  comprometida y provoca justo lo contrario de la calma que hace falta.
 
-  Variables: nombre, enlace, minutos.
+  El enlace aparece DOS veces, como boton y como direccion escrita, por lo
+  mismo que en confirmacion-registro: si el cliente bloquea los estilos el
+  boton se vuelve un enlace suelto pero sigue sirviendo, y si bloquea el HTML
+  entero queda la version de texto (correo/texto/recuperacion-contrasena.txt).
+
+  Variables: nombre, enlace, horas.
 */-->
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Confirma tu cuenta de DocRecord Sv</title>
+    <title>Restablece tu contraseña de DocRecord Sv</title>
 </head>
 <body style="margin:0;padding:0;background-color:#EEF2F7;">
 
 <!--/* Linea de vista previa: la que ensena la bandeja de entrada debajo del asunto. */-->
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
-    Activa tu cuenta con el enlace del correo. Vence en [[${minutos}]] minutos.
+    Elige una contraseña nueva con el enlace del correo. Vence en [[${horas == 1} ? '1 hora' : ${horas} + ' horas']].
 </div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
@@ -42,14 +48,15 @@
                 <tr>
                     <td style="padding:32px 28px 8px 28px;">
                         <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
-                            Confirma tu cuenta
+                            Restablece tu contraseña
                         </h1>
                         <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
                             Hola<span th:if="${nombre}" th:text="' ' + ${nombre}">
-                            </span>, se creó una cuenta en DocRecord Sv con este correo.
+                            </span>, se pidió restablecer la contraseña de la cuenta de DocRecord Sv
+                            asociada a este correo.
                         </p>
                         <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
-                            Para poder iniciar sesión falta un paso: confirmar que la dirección es tuya.
+                            Si fuiste tú, elige una contraseña nueva desde aquí:
                         </p>
                     </td>
                 </tr>
@@ -61,7 +68,7 @@
                                 <td align="center" bgcolor="#E8A838" style="background-color:#E8A838;border-radius:6px;">
                                     <a th:href="${enlace}" href="#"
                                        style="display:inline-block;padding:16px 34px;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;color:#1E3A5F;text-decoration:none;border-radius:6px;">
-                                        Activar mi cuenta
+                                        Elegir contraseña nueva
                                     </a>
                                 </td>
                             </tr>
@@ -76,8 +83,8 @@
                             <tr>
                                 <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#7A5B12;">
                                     El enlace vence en
-                                    <strong th:text="${minutos} + ' minutos'">5 minutos</strong>.
-                                    Después de eso deja de servir y hay que pedir uno nuevo.
+                                    <strong th:text="${horas == 1} ? '1 hora' : ${horas} + ' horas'">1 hora</strong>
+                                    y sirve una sola vez. Después de eso deja de funcionar y hay que pedir uno nuevo.
                                 </td>
                             </tr>
                         </table>
@@ -94,8 +101,10 @@
                                style="color:#1E3A5F;text-decoration:underline;">enlace</a>
                         </p>
                         <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#64748B;">
-                            Si no fuiste tú quien se registró, no hagas clic en nada. La cuenta no se
-                            activa sola y el enlace vence por su cuenta.
+                            Si no pediste esto, no tienes que hacer nada: tu contraseña sigue siendo la
+                            misma y el enlace vence solo. Cualquiera pudo escribir tu dirección en el
+                            formulario; recibir este correo no significa que alguien haya entrado a tu
+                            cuenta.
                         </p>
                     </td>
                 </tr>

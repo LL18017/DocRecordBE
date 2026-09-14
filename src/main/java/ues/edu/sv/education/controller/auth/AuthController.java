@@ -18,12 +18,16 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
+import ues.edu.sv.education.model.dto.auth.RecuperacionRequestDto;
+import ues.edu.sv.education.model.dto.auth.RecuperacionResponseDto;
+import ues.edu.sv.education.model.dto.auth.RestablecerContrasenaRequestDto;
 import ues.edu.sv.education.model.dto.auth.RegistroMedicoRequestDto;
 import ues.edu.sv.education.model.dto.auth.RegistroMedicoResponseDto;
 import ues.edu.sv.education.model.dto.auth.UserLoginDto;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.service.auth.AuthService;
+import ues.edu.sv.education.service.auth.RecuperacionDeContrasenaService;
 import ues.edu.sv.education.service.auth.UserAuthService;
 
 @Slf4j
@@ -35,6 +39,7 @@ public class AuthController {
 
     private final UserAuthService service;
     private final AuthService authService;
+    private final RecuperacionDeContrasenaService recuperacionService;
 
     /**
      * Donde vive el frontend. En desarrollo es localhost:3000; en el despliegue
@@ -120,6 +125,69 @@ public class AuthController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(authService.registrarMedico(request));
+    }
+
+    /**
+     * HU-04, paso 1: pedir el enlace para restablecer la contraseña.
+     *
+     * ── 202 y no 200, y siempre el mismo cuerpo ───────────────────────────
+     * El criterio 4 de la historia exige que un correo registrado y uno que no
+     * existe se respondan EXACTAMENTE igual. 202 Accepted es además lo que de
+     * verdad ocurre: la solicitud se acepta y se resuelve después, fuera del
+     * hilo de la petición, precisamente para que el tiempo de respuesta
+     * tampoco delate si la cuenta existe (ver RecuperacionDeContrasenaService).
+     *
+     * Ese diseño tiene una consecuencia visible para el cliente y conviene que
+     * esté escrita: esta respuesta NO significa que el correo se haya enviado,
+     * y nunca va a significarlo. Un campo tipo correoDeVerificacionEnviado
+     * -como el que sí devuelve /auth/register- sería justo la filtración que
+     * la historia prohíbe.
+     */
+    @Operation(
+            summary = "Solicitar el enlace de recuperación de contraseña",
+            description = "Responde siempre lo mismo, exista o no la cuenta, y sin diferencia de "
+                    + "tiempo observable: el cliente no puede averiguar por aquí qué correos están "
+                    + "registrados. Si existe, se le envía un enlace que vence en 1 hora."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "202", description = "Solicitud aceptada. NO confirma que "
+                    + "el correo exista ni que el mensaje se haya enviado"),
+            @ApiResponse(responseCode = "400", description = "El correo viene vacío o con un formato inválido")
+    })
+    @PostMapping("/password/forgot")
+    public ResponseEntity<RecuperacionResponseDto> solicitarRecuperacion(
+            @Valid @RequestBody RecuperacionRequestDto request) {
+        return ResponseEntity
+                .status(HttpStatus.ACCEPTED)
+                .body(recuperacionService.solicitar(request.email()));
+    }
+
+    /**
+     * HU-04, paso 2: canjear el enlace por una contraseña nueva.
+     *
+     * A quién se le cambia la contraseña lo dice el token, no el cuerpo: aquí
+     * no se recibe ningún correo ni ningún id de usuario. Es la misma regla
+     * que en el resto del sistema —la identidad sale de la credencial, nunca
+     * de lo que el cliente afirme ser—.
+     *
+     * Este endpoint SÍ devuelve cuerpo, a diferencia de /auth/confirm, porque
+     * lo llama el formulario del frontend por fetch, no el navegador siguiendo
+     * un enlace del correo.
+     */
+    @Operation(
+            summary = "Restablecer la contraseña con el token del correo",
+            description = "El token debe estar vigente y sin usar. Un token inexistente, ya usado "
+                    + "o vencido se rechazan los tres con el mismo 400 y el mismo mensaje."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Contraseña actualizada; el enlace queda usado"),
+            @ApiResponse(responseCode = "400", description = "El enlace no es válido, ya se usó o venció")
+    })
+    @PostMapping("/password/reset")
+    public ResponseEntity<RecuperacionResponseDto> restablecerContrasena(
+            @Valid @RequestBody RestablecerContrasenaRequestDto request) {
+        return ResponseEntity.ok(
+                recuperacionService.restablecer(request.token(), request.password()));
     }
 
     /**
