@@ -183,6 +183,46 @@ class SeguridadIT extends PruebaDeIntegracion {
         mockMvc.perform(get("/user/all")).andExpect(status().isUnauthorized());
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // Agujero 5: el login decia que correos existen
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("el login responde IGUAL exista o no el correo (HU-01, criterio 2)")
+    void elLoginNoDelataQueCorreosExisten() throws Exception {
+        // Antes: correo inexistente -> 404 "No se encontro al usuario";
+        //        correo real con clave mala -> 401 "Credenciales incorrectas".
+        // Con esa diferencia se averigua quien tiene cuenta probando correos,
+        // sin adivinar ni una sola contrasena. En un expediente clinico eso
+        // dice quien trabaja aqui y, con los correos institucionales, quien es
+        // paciente.
+        var inexistente = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"no.existe.%d@ues.edu.sv","password":"LoQueSea1!"}
+                                """.formatted(CONTADOR.incrementAndGet())))
+                .andReturn().getResponse();
+
+        var claveMala = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"EstaNoEsLaClave9!"}
+                                """.formatted(correoDelMedico)))
+                .andReturn().getResponse();
+
+        assertEquals(claveMala.getStatus(), inexistente.getStatus(),
+                "el codigo de estado delata si el correo existe");
+        assertEquals(401, inexistente.getStatus(),
+                "un intento fallido de sesion es 401, no 404");
+
+        // Se compara el cuerpo ENTERO y no un campo: la API tiene hoy dos
+        // formas de error -- {message,error} y {error,code} -- y comparar solo
+        // uno dejaria pasar justo la diferencia que delataba el correo, que era
+        // de forma ademas de contenido.
+        assertEquals(claveMala.getContentAsString(), inexistente.getContentAsString(),
+                "el cuerpo de la respuesta delata si el correo existe");
+    }
+
     @Test
     @DisplayName("el 401 del filtro responde JSON con el formato uniforme de la API (TT-01)")
     void elRechazoSinTokenRespondeElFormatoUniforme() throws Exception {
