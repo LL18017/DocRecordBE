@@ -215,10 +215,12 @@ class SeguridadIT extends PruebaDeIntegracion {
         assertEquals(401, inexistente.getStatus(),
                 "un intento fallido de sesion es 401, no 404");
 
-        // Se compara el cuerpo ENTERO y no un campo: la API tiene hoy dos
-        // formas de error -- {message,error} y {error,code} -- y comparar solo
-        // uno dejaria pasar justo la diferencia que delataba el correo, que era
-        // de forma ademas de contenido.
+        // Se compara el cuerpo ENTERO y no un campo: la diferencia que
+        // delataba el correo era de FORMA ademas de contenido -404 con un
+        // cuerpo, 401 con otro-, y comparar una sola clave la dejaria pasar.
+        // Sigue comparandose entero ahora que TT-01 unifico el formato, porque
+        // es lo que detecta una divergencia futura: dos manejadores distintos
+        // respondiendo cada uno lo suyo vuelve a delatar cual correo existe.
         assertEquals(claveMala.getContentAsString(), inexistente.getContentAsString(),
                 "el cuerpo de la respuesta delata si el correo existe");
     }

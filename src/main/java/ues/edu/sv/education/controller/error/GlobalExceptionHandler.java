@@ -1,7 +1,6 @@
 package ues.edu.sv.education.controller.error;
 
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -9,8 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -19,11 +16,36 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
-import ues.edu.sv.education.model.dto.error.ErrorResponseDTO;
-
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+/**
+ * Traduce cualquier excepcion que salga de un controller a una respuesta HTTP.
+ *
+ * ── El contrato (TT-01, criterio 1) ───────────────────────────────────────
+ * Todo cuerpo de error de esta API es el mismo objeto de dos claves:
+ *
+ *     {"error": <categoria>, "message": <motivo concreto>}
+ *
+ * `error` dice de que tipo de fallo se trata ("Registro no encontrado",
+ * "Conflicto"); `message` dice que paso exactamente, redactado para que una
+ * persona lo lea. No son sinonimos y no se pueden intercambiar: la interfaz
+ * muestra `message` (ver `mensajeDirecto` en DocRecordFE/src/lib/api.ts, que
+ * toma el primer valor no vacio entre `message`, `error` y `detail`), asi que
+ * un cuerpo sin `message` deja al usuario con el texto generico por codigo
+ * HTTP -"Los datos enviados no son validos"- en vez del motivo real.
+ *
+ * El codigo HTTP NO viaja en el cuerpo: ya viaja en el estado de la respuesta,
+ * que es de donde el cliente lo lee.
+ *
+ * Unica excepcion, y es aditiva: los dos manejadores de validacion mandan
+ * ADEMAS una entrada por campo invalido, porque el par no puede decir QUE
+ * campo fallo (ver respuestaDeValidacion, al final de la clase).
+ *
+ * El JwtFilter responde con este mismo formato por su cuenta, porque corre
+ * antes del DispatcherServlet y ningun @ExceptionHandler lo alcanza.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -197,14 +219,21 @@ public class GlobalExceptionHandler {
      * Si el email está vacío, se devuelve:
      *
      * {
+     *     "error": "Datos inválidos",
+     *     "message": "El correo no puede estar vacío.",
      *     "email": "El correo no puede estar vacío"
      * }
+     *
+     * El par {error, message} lo añade respuestaDeValidacion; ahí está por qué.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationException(
             MethodArgumentNotValidException ex) {
 
-        Map<String, String> errores = new HashMap<>();
+        // LinkedHashMap y no HashMap: de este orden sale el de `message`, y con
+        // un HashMap el mismo cuerpo inválido producía un texto distinto en cada
+        // arranque, porque el orden de iteración depende del hash de los nombres.
+        Map<String, String> errores = new LinkedHashMap<>();
 
         ex.getBindingResult()
                 .getFieldErrors()
@@ -215,9 +244,7 @@ public class GlobalExceptionHandler {
                         )
                 );
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(errores);
+        return respuestaDeValidacion(errores);
     }
 
 
@@ -244,7 +271,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleConstraintViolationException(
             ConstraintViolationException ex) {
 
-        Map<String, String> errores = new HashMap<>();
+        // Mismo motivo que en el manejador de arriba para no usar HashMap.
+        Map<String, String> errores = new LinkedHashMap<>();
 
         ex.getConstraintViolations()
                 .forEach(violation ->
@@ -254,9 +282,7 @@ public class GlobalExceptionHandler {
                         )
                 );
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(errores);
+        return respuestaDeValidacion(errores);
     }
 
 
@@ -428,28 +454,54 @@ public class GlobalExceptionHandler {
      * 401 - ERROR DE AUTENTICACIÓN
      * ============================================================
      *
-     * Se utiliza cuando el usuario no está correctamente
-     * autenticado.
+     * Lo lanza PasswordAuthProvider: credenciales que no cuadran, cuenta sin
+     * confirmar, bloqueada o expirada.
      *
-     * En tu proyecto tienes una excepción personalizada:
+     * ── Por qué ya no responde ErrorResponseDTO ──────────────────────────
+     * Ese record serializaba {"error": <motivo>, "code": 401} y era la SEGUNDA
+     * forma de error de la API, contra el criterio 1 de TT-01: los otros once
+     * manejadores de esta clase -y el JwtFilter- responden
+     * {"error": <categoría>, "message": <motivo>}.
      *
-     * CustomAuthenticationException
+     * Se conservó esa y no esta por dos razones:
      *
-     * Por lo tanto conservamos tu implementación.
+     *   1. Es la que ya usaba casi toda la clase, así que unificar se reduce a
+     *      cambiar este manejador en vez de once.
+     *
+     *   2. El cliente lee `message` PRIMERO: `mensajeDirecto`, en
+     *      DocRecordFE/src/lib/api.ts, se queda con el primer valor no vacío
+     *      entre `message`, `error` y `detail`. Con {error, code} el motivo
+     *      viajaba en `error` y se mostraba de rebote; si la unificación
+     *      hubiera ido al revés y `message` desapareciera de la API, el usuario
+     *      dejaría de leer "Credenciales incorrectas" y vería el texto genérico
+     *      por código HTTP ("Tu sesión no es válida o expiró").
+     *
+     * ── Por qué el código ya no viaja en el cuerpo ───────────────────────
+     * Iba duplicado: el mismo 401 está en el estado HTTP, que es de donde el
+     * cliente lo lee de verdad (`ApiError.status`). Nadie consumía `code`; la
+     * interfaz lo tiene incluso en su lista de claves que NO son un mensaje.
+     *
+     * La categoría se llama igual que la del JwtFilter -"No autenticado"- para
+     * que un 401 se lea igual venga del filtro o del login. Es lo que hace que
+     * el cuerpo de un correo inexistente y el de una contraseña equivocada
+     * salgan idénticos (HU-01 criterio 2, ver SeguridadIT).
      */
     @ExceptionHandler(CustomAuthenticationException.class)
-    public ResponseEntity<ErrorResponseDTO> handleAuthenticationError(
+    public ResponseEntity<Map<String, String>> handleAuthenticationError(
             CustomAuthenticationException ex) {
-
-        ErrorResponseDTO err =
-                new ErrorResponseDTO(
-                        ex.getMessage(),
-                        ex.getErrorCode()
-                );
 
         return ResponseEntity
                 .status(ex.getErrorCode())
-                .body(err);
+                .body(Map.of(
+                        // El código de la excepción es un int libre. Hoy todos
+                        // los usos son 401; si alguien la lanza con otro, la
+                        // categoría dejaría de ser cierta y se dice la genérica
+                        // en vez de afirmar algo que la respuesta contradice.
+                        "error", ex.getErrorCode() == HttpStatus.UNAUTHORIZED.value()
+                                ? "No autenticado"
+                                : "Error de autenticación",
+                        "message", ex.getMessage()
+                ));
     }
 
 
@@ -474,33 +526,23 @@ public class GlobalExceptionHandler {
      * que requiere:
      *
      * ROLE_ADMIN
+     *
+     * ── Por qué el cuerpo ya no lleva `usuario` ni `roles` ───────────────
+     * Eran dos claves que solo aparecían en este 403, así que era el único
+     * cuerpo de error de la API con cuatro campos en vez de dos: justo la
+     * disparidad que TT-01 criterio 1 prohíbe. Y no se pierde nada, porque le
+     * decían al cliente quién es y qué roles tiene -lo que él mismo acaba de
+     * mandar dentro de su token-. Para diagnosticar sirve el registro del
+     * servidor, no la respuesta.
      */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, String>> handleAccessDenied(
-            HttpServletRequest request) {
-
-        Authentication auth =
-                SecurityContextHolder
-                        .getContext()
-                        .getAuthentication();
-
-        String usuario =
-                auth != null
-                        ? auth.getName()
-                        : "anónimo";
-
-        String roles =
-                auth != null
-                        ? auth.getAuthorities().toString()
-                        : "ninguno";
+    public ResponseEntity<Map<String, String>> handleAccessDenied() {
 
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(Map.of(
                         "error", "Acceso denegado",
-                        "message", "No tienes permisos para realizar esta acción",
-                        "usuario", usuario,
-                        "roles", roles
+                        "message", "No tienes permisos para realizar esta acción"
                 ));
     }
 
@@ -547,5 +589,52 @@ public class GlobalExceptionHandler {
                         "error", "Error interno",
                         "message", "Ocurrió un error inesperado en el servidor"
                 ));
+    }
+
+
+    /*
+     * ============================================================
+     * EL PAR {error, message} SOBRE UN CUERPO DE VALIDACIÓN
+     * ============================================================
+     *
+     * Las validaciones son el único error que no cabe entero en el par: además
+     * del motivo hay que decir QUÉ campo falló, y dos claves fijas no lo
+     * expresan. En vez de elegir entre el contrato y el detalle se manda el par
+     * ADEMÁS de una entrada por campo, así que el cuerpo sigue cumpliendo
+     * TT-01 -todo error trae `error` y `message`- sin perder nada.
+     *
+     * `message` se arma aquí y no lo reconstruye el cliente. Antes el cuerpo
+     * eran SOLO los campos, y la interfaz los concatenaba ella misma
+     * (`mensajesDeValidacion` en DocRecordFE/src/lib/api.ts) para tener algo
+     * que mostrar; era el único error de la API cuyo texto dependía de que
+     * cada cliente supiera rehacerlo. Se juntan en el mismo orden en que los
+     * devolvió el validador, cerrando cada uno con punto para que dos avisos
+     * seguidos no se lean como una sola frase.
+     *
+     * El par se pone al FINAL a propósito: si algún día se valida un campo que
+     * se llame `error` o `message`, quien gana es el contrato. Al revés, el
+     * cuerpo dejaría de cumplirlo sin que nadie se enterara.
+     */
+    private static ResponseEntity<Map<String, String>> respuestaDeValidacion(
+            Map<String, String> porCampo) {
+
+        String motivo = porCampo.values().stream()
+                .filter(mensaje -> mensaje != null && !mensaje.isBlank())
+                .map(mensaje -> mensaje.matches(".*[.!?]") ? mensaje : mensaje + ".")
+                .collect(Collectors.joining(" "));
+
+        Map<String, String> cuerpo = new LinkedHashMap<>(porCampo);
+        cuerpo.put("error", "Datos inválidos");
+        cuerpo.put("message", motivo.isBlank()
+                // Puede no quedar ningún mensaje aprovechable: una restricción
+                // declarada sobre la clase entera no cuelga de ningún campo.
+                // Sin esto el cuerpo saldría con `message` vacío, que para la
+                // interfaz es lo mismo que no mandarlo.
+                ? "Los datos enviados no son válidos"
+                : motivo);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(cuerpo);
     }
 }
