@@ -62,7 +62,7 @@ public class PacienteService {
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<PacienteResponseDto> buscar(String texto) {
+    public java.util.List<PacienteResponseDto> buscar(String texto, boolean incluirInactivos) {
         // Nunca null contra la consulta: un parametro null ligado en varios
         // puntos del mismo WHERE impide a Postgres inferir su tipo, el driver
         // lo manda como bytea y revienta con "function lower(bytea) does not
@@ -70,7 +70,10 @@ public class PacienteService {
         // cualquier valor no nulo.
         String filtro = texto == null ? "" : texto;
 
-        java.util.List<Long> ids = pacienteRepository.idsQueCoinciden(filtro);
+        // Por defecto el listado es el de trabajo diario: solo pacientes en
+        // seguimiento. Los dados de baja se piden a proposito (HU-08,
+        // criterio 4), nunca se cuelan.
+        java.util.List<Long> ids = pacienteRepository.idsQueCoinciden(filtro, incluirInactivos);
 
         // `IN ()` con la lista vacia no es SQL valido, asi que la busqueda sin
         // resultados se corta aqui en vez de llegar a la base.
@@ -168,16 +171,31 @@ public class PacienteService {
     }
 
     /**
-     * Da de baja al paciente.
+     * Da de baja al paciente. La baja es LOGICA: marca INACTIVO, no borra.
      *
-     * Se borra SOLO la fila de `pacientes`, nunca la persona: esa misma
-     * identidad puede ser ademas medico o enfermera del sistema, y borrarla
-     * arrastraria sus otros papeles. Dejar de ser paciente no es dejar de
-     * existir.
+     * ── Por que no se borra la fila ───────────────────────────────────────
+     * Antes esto era `pacienteRepository.delete(...)`, un borrado fisico, y
+     * contradecia a HU-10, que pide "marcar a un paciente como inactivo EN
+     * LUGAR de borrarlo para sacarlo de los listados de trabajo sin destruir su
+     * expediente". Un expediente clinico no se borra: sus consultas, sus
+     * constantes y sus recetas son el registro de actos medicos que ya
+     * ocurrieron, y siguen siendo necesarios despues de que el paciente deja de
+     * estar en seguimiento.
+     *
+     * El borrado fisico ademas se llevaba por delante el numero de expediente,
+     * que es unico y correlativo: readmitir a esa persona le daria un
+     * expediente NUEVO y su historial anterior quedaria huerfano.
+     *
+     * La persona nunca se toca, ni antes ni ahora: esa misma identidad puede
+     * ser ademas medico o enfermera del sistema.
+     *
+     * Es idempotente: dar de baja a quien ya esta de baja lo deja igual.
      */
     @Transactional
     public void eliminar(Long personaId) {
-        pacienteRepository.delete(buscarPacienteOFallar(personaId));
+        Paciente paciente = buscarPacienteOFallar(personaId);
+        paciente.setEstado(Paciente.ESTADO_INACTIVO);
+        pacienteRepository.save(paciente);
     }
 
     private Paciente buscarPacienteOFallar(Long personaId) {

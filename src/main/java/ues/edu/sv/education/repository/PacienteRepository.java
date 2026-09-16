@@ -34,16 +34,29 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
      * tiene acentos que quitar, y aplicarle la funcion solo impediria usar su
      * indice.
      */
+    /*
+     * ── Por que el estado se filtra aqui y no en Java ─────────────────────
+     * Porque la alternativa es traer a los inactivos para descartarlos
+     * despues, y eso convierte el filtro en una mentira en cuanto el listado
+     * se pagine: la primera pagina vendria con huecos. El WHERE es el unico
+     * sitio donde "no aparece" significa de verdad no aparece.
+     *
+     * El parametro va con CAST explicito por la misma razon que el filtro de
+     * texto nunca viaja nulo: un parametro suelto en el WHERE deja a Postgres
+     * sin tipo que inferir y el driver lo manda como bytea.
+     */
     @Query(value = """
             SELECT pa.persona_id
             FROM pacientes pa
             JOIN persona per ON per.persona_id = pa.persona_id
-            WHERE LOWER(sin_tildes(per.apellidos)) LIKE LOWER(sin_tildes(CONCAT('%', :buscar, '%')))
-               OR LOWER(sin_tildes(per.nombres))   LIKE LOWER(sin_tildes(CONCAT('%', :buscar, '%')))
-               OR LOWER(per.dui)                   LIKE LOWER(CONCAT('%', :buscar, '%'))
+            WHERE (CAST(:incluirInactivos AS boolean) = true OR pa.estado = 'ACTIVO')
+              AND (LOWER(sin_tildes(per.apellidos)) LIKE LOWER(sin_tildes(CONCAT('%', :buscar, '%')))
+                OR LOWER(sin_tildes(per.nombres))   LIKE LOWER(sin_tildes(CONCAT('%', :buscar, '%')))
+                OR LOWER(per.dui)                   LIKE LOWER(CONCAT('%', :buscar, '%')))
             ORDER BY per.apellidos, per.nombres
             """, nativeQuery = true)
-    List<Long> idsQueCoinciden(@Param("buscar") String buscar);
+    List<Long> idsQueCoinciden(@Param("buscar") String buscar,
+                               @Param("incluirInactivos") boolean incluirInactivos);
 
     /**
      * Trae esos pacientes con su persona ya cargada, en el mismo orden.

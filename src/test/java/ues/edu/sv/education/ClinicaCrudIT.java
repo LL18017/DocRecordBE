@@ -418,7 +418,47 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
 
-        assertTrue(clinicas.findById(clinicaId).isEmpty(), "la clinica propia si debio borrarse");
+        // La baja es logica: una clinica es la sede que firma consultas, recetas
+        // y constantes, y borrarla dejaria ese historial apuntando a una sede
+        // inexistente. Lo que cambia es su estado, y con el deja de ofrecerse
+        // en el selector (ver «una sede dada de baja no se ofrece...»).
+        assertTrue(clinicas.findById(clinicaId).isPresent(),
+                "la clinica no se borra: se da de baja");
+        assertEquals("INACTIVA", clinicas.findById(clinicaId).get().getEstado(),
+                "la baja deja la clinica INACTIVA");
+    }
+
+    @Test
+    @DisplayName("DELETE deja la clinica INACTIVA y en el catalogo, no borrada")
+    void deleteEsBajaLogica() throws Exception {
+        // El catalogo la sigue trayendo a proposito: es desde donde se la
+        // reactiva. Quien no la ofrece es el selector de sede, que descarta las
+        // INACTIVA por su estado.
+        String cuerpoCreado = mockMvc.perform(post("/clinics")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(completar("{\"name\":\"Sede Que Cierra\"}")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        int clinicaId = new ObjectMapper().readTree(cuerpoCreado).get("clinicaId").asInt();
+
+        mockMvc.perform(delete("/clinics/{id}", clinicaId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        assertEquals("INACTIVA", estadoEnElCatalogo(clinicaId),
+                "la baja cambia el estado y conserva la clinica en el catalogo");
+    }
+
+    private String estadoEnElCatalogo(int clinicaId) throws Exception {
+        String cuerpo = mockMvc.perform(get("/clinics/mias")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        for (JsonNode c : new ObjectMapper().readTree(cuerpo)) {
+            if (c.get("clinicaId").asInt() == clinicaId) return c.get("estado").asText();
+        }
+        return null;
     }
 
     @Test

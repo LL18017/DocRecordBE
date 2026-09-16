@@ -50,13 +50,16 @@ public class PacienteController {
 
     @Operation(
             summary = "Listar/buscar pacientes",
-            description = "Una sola caja de busqueda que coincide contra apellidos, nombres o DUI. Sin parametro devuelve todos."
+            description = "Una sola caja de busqueda que coincide contra apellidos, nombres o DUI. "
+                    + "Sin parametro devuelve todos los pacientes ACTIVOS. Los dados de baja "
+                    + "quedan fuera salvo que se pida incluirInactivos=true."
     )
     @GetMapping
     public ResponseEntity<List<PacienteResponseDto>> buscar(
-            @RequestParam(required = false) String buscar
+            @RequestParam(required = false) String buscar,
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInactivos
     ) {
-        return ResponseEntity.ok(pacienteService.buscar(buscar));
+        return ResponseEntity.ok(pacienteService.buscar(buscar, incluirInactivos));
     }
 
     @Operation(summary = "Ver un paciente", description = "404 si no existe.")
@@ -79,7 +82,11 @@ public class PacienteController {
 
     @Operation(
             summary = "Dar de baja a un paciente",
-            description = "Borra solo su condicion de paciente. La persona se conserva, porque puede ser ademas medico o enfermera."
+            description = "Baja LOGICA: marca al paciente como INACTIVO y lo saca de los "
+                    + "listados de trabajo. NO borra nada -- el expediente, las consultas, "
+                    + "las constantes y las recetas se conservan, y la persona tambien, "
+                    + "porque puede ser ademas medico o enfermera. Equivale a "
+                    + "PATCH /pacientes/{personaId}/estado con INACTIVO. Es idempotente."
     )
     @DeleteMapping("/{personaId}")
     public ResponseEntity<Void> eliminar(@PathVariable("personaId") Long personaId) {

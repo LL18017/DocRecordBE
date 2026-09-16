@@ -78,6 +78,18 @@ public class ClinicaService {
         return porId.values().stream().map(this::toResponseDto).toList();
     }
 
+    /*
+     * ── Por que las inactivas SI salen en este listado ────────────────────
+     * Porque este endpoint sirve a dos pantallas: el selector de sede y la
+     * administracion de clinicas. Filtrarlas aqui arreglaria la primera y
+     * romperia la segunda -- una clinica dada de baja desapareceria del
+     * catalogo y ya no habria desde donde reactivarla.
+     *
+     * Cada respuesta trae su `estado`, y es el selector el que descarta las
+     * INACTIVA: es la pantalla que pregunta "donde puedo trabajar HOY", y la
+     * unica que necesita esa distincion.
+     */
+
     /**
      * El catalogo completo de clinicas, sin filtrar por dueño.
      *
@@ -163,6 +175,22 @@ public class ClinicaService {
         return toResponseDto(clinicasRepository.save(clinica));
     }
 
+    /**
+     * Da de baja una clinica. La baja es LOGICA: marca INACTIVA, no borra.
+     *
+     * ── Por que no se borra la fila ───────────────────────────────────────
+     * Antes esto era `clinicasRepository.delete(...)`. Una clinica no es un
+     * dato suelto: es la sede que firma cada consulta, cada receta y cada toma
+     * de constantes. Borrarla deja ese historial apuntando a una sede que ya no
+     * existe -- o lo arrastra en cascada, que es peor, porque se lleva actos
+     * medicos que si ocurrieron.
+     *
+     * HU-27 pide "edicion o baja para mantener vigente la informacion de las
+     * sedes". Vigente es lo contrario de borrado: una sede cerrada sigue siendo
+     * la sede donde se atendio a alguien en su momento.
+     *
+     * Es idempotente: dar de baja a la que ya esta de baja la deja igual.
+     */
     @Transactional
     public void eliminar(Integer clinicaId) {
 
@@ -173,7 +201,8 @@ public class ClinicaService {
 
         exigirPropietarioOAdmin(clinica);
 
-        clinicasRepository.delete(clinica);
+        clinica.setEstado(Clinicas.ESTADO_INACTIVA);
+        clinicasRepository.save(clinica);
     }
 
     // ADMIN administra cualquier clinica; MEDICO solo las suyas. Que el

@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -194,5 +195,109 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
 
         assertTrue(apareceEnLaBusqueda(buscar(token, ""), creado));
         assertFalse(buscar(token, "").isEmpty());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-08 criterio 4 · el paciente de baja sale del listado de trabajo
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("un paciente dado de baja no aparece en la busqueda normal")
+    void elInactivoNoApareceEnLaBusquedaNormal() throws Exception {
+        String token = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(token, "Paciente", "Fuera Del Listado");
+
+        assertTrue(apareceEnLaBusqueda(buscar(token, ""), pacienteId),
+                "mientras esta activo tiene que aparecer");
+
+        darDeBaja(token, pacienteId);
+
+        assertFalse(apareceEnLaBusqueda(buscar(token, ""), pacienteId),
+                "tras la baja no puede seguir en el listado de trabajo diario");
+    }
+
+    @Test
+    @DisplayName("el filtro «incluir inactivos» lo vuelve a mostrar, y como INACTIVO")
+    void elFiltroDevuelveAlInactivo() throws Exception {
+        String token = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(token, "Paciente", "Que Reaparece");
+        darDeBaja(token, pacienteId);
+
+        JsonNode conInactivos = buscarIncluyendoInactivos(token, "");
+        assertTrue(apareceEnLaBusqueda(conInactivos, pacienteId),
+                "con el filtro activo el paciente de baja tiene que volver a salir");
+
+        for (JsonNode p : conInactivos) {
+            if (p.get("personaId").asLong() == pacienteId) {
+                assertEquals("INACTIVO", p.get("estado").asText(),
+                        "y tiene que venir marcado como inactivo, no disfrazado de activo");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("DELETE da de baja: no borra el expediente ni al paciente")
+    void deleteEsBajaLogica() throws Exception {
+        // Antes DELETE hacia `repository.delete(...)`, un borrado fisico que
+        // contradecia a HU-10 -- y se llevaba por delante el numero de
+        // expediente, que es unico y correlativo.
+        String token = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(token, "Paciente", "Dado De Baja");
+        String expediente = leer(token, pacienteId).get("expediente").asText();
+
+        darDeBaja(token, pacienteId);
+
+        JsonNode releido = leer(token, pacienteId);
+        assertEquals("INACTIVO", releido.get("estado").asText());
+        assertEquals(expediente, releido.get("expediente").asText(),
+                "el expediente tiene que sobrevivir a la baja");
+    }
+
+    @Test
+    @DisplayName("dar de baja dos veces no falla: la operacion es idempotente")
+    void laBajaEsIdempotente() throws Exception {
+        String token = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(token, "Paciente", "De Baja Dos Veces");
+
+        darDeBaja(token, pacienteId);
+        darDeBaja(token, pacienteId);
+
+        assertEquals("INACTIVO", leer(token, pacienteId).get("estado").asText());
+    }
+
+    @Test
+    @DisplayName("readmitir a un paciente lo devuelve al listado con su mismo expediente")
+    void readmitirDevuelveAlListado() throws Exception {
+        // Es la contraparte de la baja logica: si el expediente sobrevive, el
+        // paciente tiene que poder volver sin estrenar uno nuevo.
+        String token = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(token, "Paciente", "Que Regresa");
+        String expediente = leer(token, pacienteId).get("expediente").asText();
+
+        darDeBaja(token, pacienteId);
+        mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"ACTIVO\"}"))
+                .andExpect(status().isOk());
+
+        assertTrue(apareceEnLaBusqueda(buscar(token, ""), pacienteId));
+        assertEquals(expediente, leer(token, pacienteId).get("expediente").asText());
+    }
+
+    private void darDeBaja(String token, long pacienteId) throws Exception {
+        mockMvc.perform(delete("/pacientes/{id}", pacienteId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+    }
+
+    private JsonNode buscarIncluyendoInactivos(String token, String texto) throws Exception {
+        String cuerpo = mockMvc.perform(get("/pacientes")
+                        .param("buscar", texto)
+                        .param("incluirInactivos", "true")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(cuerpo);
     }
 }

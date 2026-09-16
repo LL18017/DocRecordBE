@@ -352,21 +352,34 @@ class PacienteCrudIT extends PruebaDeIntegracion {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("dar de baja a un paciente conserva a la persona")
+    @DisplayName("dar de baja a un paciente conserva a la persona y su expediente")
     void darDeBajaConservaALaPersona() throws Exception {
         // Esa identidad puede ser ademas medico o enfermera. Dejar de ser
         // paciente no es dejar de existir; borrar la persona arrastraria sus
         // otros papeles.
+        //
+        // La baja es LOGICA desde que HU-10 se implemento como pide su
+        // enunciado -- "marcar como inactivo EN LUGAR de borrarlo"-, asi que el
+        // paciente sigue siendo consultable por su id: lo que desaparece es su
+        // presencia en el listado de trabajo, no el expediente. Que el listado
+        // ya no lo traiga se comprueba en EstadoYBusquedaDePacientesIT.
         JsonNode creado = crearPaciente(duiUnico(), "Se Da", "De Baja");
         long personaId = creado.get("personaId").asLong();
+        String expediente = creado.get("expediente").asText();
 
         mockMvc.perform(delete("/pacientes/{id}", personaId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/pacientes/{id}", personaId)
+        String cuerpo = mockMvc.perform(get("/pacientes/{id}", personaId)
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals("INACTIVO", json.readTree(cuerpo).get("estado").asText(),
+                "la baja deja al paciente inactivo, no borrado");
+        assertEquals(expediente, json.readTree(cuerpo).get("expediente").asText(),
+                "el numero de expediente sobrevive a la baja");
 
         assertTrue(personas.findById(personaId).isPresent(),
                 "la persona debe seguir existiendo tras dejar de ser paciente");
