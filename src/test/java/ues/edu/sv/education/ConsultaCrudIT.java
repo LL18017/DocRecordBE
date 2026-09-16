@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -424,6 +425,89 @@ class ConsultaCrudIT extends PruebaClinica {
                 .andExpect(status().isMethodNotAllowed());
 
         mockMvc.perform(get("/consultas")).andExpect(status().isUnauthorized());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-20 criterio 4 · el diagnostico no sale hacia enfermeria
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("enfermeria ve la consulta pero NO el texto del diagnostico")
+    void enfermeriaNoRecibeElDiagnostico() throws Exception {
+        // El recorte va en el servidor y no en la pantalla: esconderlo en la
+        // interfaz deja el dato viajando en la respuesta, donde se lee con las
+        // herramientas del navegador o llamando al endpoint directamente.
+        long consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
+
+        // `crearConsultaSimple` deja la consulta PENDIENTE, sin diagnostico: hay
+        // que escribirlo para que haya algo que ocultar.
+        mockMvc.perform(put("/consultas/{id}", consultaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"diagnostico\":\"Faringitis aguda probablemente viral\"}"))
+                .andExpect(status().isOk());
+
+        JsonNode paraElMedico = leerConsulta(medico, consultaId);
+        assertTrue(paraElMedico.hasNonNull("diagnostico"),
+                "el medico si tiene que ver el diagnostico que el mismo escribio");
+
+        JsonNode paraEnfermeria = leerConsulta(tokenDeEnfermera(), consultaId);
+        assertTrue(paraEnfermeria.get("diagnostico").isNull(),
+                "el texto del diagnostico no debe salir hacia enfermeria");
+
+        // Lo demas si le llega: el historial vive en el expediente y enfermeria
+        // abre expedientes. Necesita saber que hubo consulta, cuando y con
+        // quien; lo que no le toca es el juicio clinico.
+        assertTrue(paraEnfermeria.hasNonNull("fecha"), "la fecha si");
+        assertTrue(paraEnfermeria.hasNonNull("motivo"), "el motivo si");
+        assertTrue(paraEnfermeria.get("medico").hasNonNull("nombres"), "el medico si");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-10 criterio 3 · un paciente de baja no recibe consultas nuevas
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("un paciente dado de baja no admite consultas nuevas, pero si se lee")
+    void unPacienteDeBajaNoAdmiteConsultasNuevas() throws Exception {
+        // La baja logica sacaba al paciente de los listados y no cambiaba nada
+        // de lo que el sistema acepta: seguia siendo atendible por id.
+        JsonNode previa = crearConsultaSimple(medico, paciente);
+
+        mockMvc.perform(delete("/pacientes/{id}", paciente).header("Authorization", bearer(medico)))
+                .andExpect(status().isNoContent());
+
+        tomarSignosVitales(paciente);
+        mockMvc.perform(post("/consultas")
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d,\"motivo\":\"Intento sobre paciente de baja\"}"
+                                .formatted(paciente)))
+                .andExpect(status().isConflict());
+
+        // Y lo que el criterio SI permite: el expediente se sigue leyendo entero.
+        mockMvc.perform(get("/consultas").param("pacienteId", String.valueOf(paciente))
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isOk());
+        assertEquals(previa.get("consultaId").asLong(),
+                leerConsulta(medico, previa.get("consultaId").asLong()).get("consultaId").asLong(),
+                "las consultas anteriores a la baja siguen accesibles");
+    }
+
+    @Test
+    @DisplayName("reactivar al paciente vuelve a permitir consultas")
+    void reactivarVuelveAPermitirConsultas() throws Exception {
+        // La contraparte: una prueba que solo mira el 409 se sigue cumpliendo
+        // si alguien bloquea las consultas para todo el mundo.
+        mockMvc.perform(delete("/pacientes/{id}", paciente).header("Authorization", bearer(medico)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(patch("/pacientes/{id}/estado", paciente)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"ACTIVO\"}"))
+                .andExpect(status().isOk());
+
+        assertTrue(crearConsultaSimple(medico, paciente).hasNonNull("consultaId"));
     }
 
     private JsonNode leerConsulta(String token, long consultaId) throws Exception {

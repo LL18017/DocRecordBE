@@ -1,6 +1,8 @@
 package ues.edu.sv.education.service.consulta;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
@@ -76,6 +78,25 @@ public class ConsultaService {
         Medico medico = medicoAutenticado.exigir();
         Paciente paciente = buscarPacienteOFallar(request.pacienteId());
         Clinicas clinica = buscarClinicaSiVino(request.clinicaId());
+
+        // HU-10, criterio 3: a un paciente dado de baja se le puede LEER el
+        // expediente completo, pero no registrarle consultas nuevas.
+        //
+        // La baja logica saca al paciente de los listados de trabajo; sin esta
+        // comprobacion seguia siendo atendible por id -- y el id lo tiene
+        // cualquiera que abriera su expediente antes de la baja, o que lo abra
+        // despues, porque leerlo sigue permitido. Es decir: la baja ordenaba la
+        // pantalla y no cambiaba nada de lo que el sistema acepta, que es
+        // justamente lo que el criterio pide que cambie.
+        //
+        // 409 y no 403: no es una cuestion de permisos -- ningun rol puede
+        // hacerlo -- sino del estado en que esta el paciente. Quien lo reciba
+        // tiene que entender que la salida es reactivarlo, no pedir permiso.
+        if (Paciente.ESTADO_INACTIVO.equals(paciente.getEstado())) {
+            throw new GeneralException(
+                    "El paciente esta dado de baja: reactivelo antes de registrarle una consulta",
+                    "409");
+        }
 
         // El triage va ANTES de la consulta: sin constantes recientes no se
         // abre. Enfermeria pesa, mide y toma la presion, y el medico lee eso
@@ -246,6 +267,38 @@ public class ConsultaService {
         return (valor == null || valor.isBlank()) ? null : valor.trim();
     }
 
+    /**
+     * El texto del diagnostico, o null si quien pregunta es enfermeria.
+     *
+     * HU-20, criterio 4: "Dado que soy enfermera, cuando abro el listado,
+     * entonces veo fecha, medico y motivo pero NO el texto del diagnostico".
+     *
+     * ── Por que se recorta aqui y no en la interfaz ───────────────────────
+     * Porque esconderlo en la pantalla no lo esconde: el dato viaja igual en la
+     * respuesta y se lee con las herramientas del navegador o llamando al
+     * endpoint directamente. Un diagnostico es informacion clinica sensible;
+     * el unico sitio donde no darlo es el que lo tiene.
+     *
+     * ── Por que ENFERMERA si puede LEER la consulta ───────────────────────
+     * Porque el historial vive dentro del expediente del paciente, y enfermeria
+     * abre expedientes: necesita saber que hubo una consulta, cuando y con
+     * quien, para el triage. Lo que no le corresponde es el juicio clinico. Por
+     * eso la lista le llega completa menos este campo, en vez de negarle la
+     * ruta entera.
+     *
+     * Quien ademas es MEDICO o ADMIN lo ve: los roles se suman, no se restan.
+     */
+    private String diagnosticoVisible(Consulta consulta) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return consulta.getDiagnostico();
+
+        boolean puedeVerlo = auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(rol -> "ROLE_MEDICO".equals(rol) || "ROLE_ADMIN".equals(rol));
+
+        return puedeVerlo ? consulta.getDiagnostico() : null;
+    }
+
     private ConsultaResponseDto toDto(Consulta consulta) {
 
         Paciente paciente = consulta.getPaciente();
@@ -258,7 +311,7 @@ public class ConsultaService {
                 consulta.getConsultaId(),
                 consulta.getFecha(),
                 consulta.getMotivo(),
-                consulta.getDiagnostico(),
+                diagnosticoVisible(consulta),
                 consulta.getEstado(),
                 new PacienteResumenDto(
                         paciente.getPersonaId(),
