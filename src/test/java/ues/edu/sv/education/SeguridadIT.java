@@ -25,9 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -178,6 +181,49 @@ class SeguridadIT extends PruebaDeIntegracion {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/clinics/mias")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/user/all")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("el 401 del filtro responde JSON con el formato uniforme de la API (TT-01)")
+    void elRechazoSinTokenRespondeElFormatoUniforme() throws Exception {
+        // El filtro corre ANTES del DispatcherServlet, asi que ningun
+        // @ExceptionHandler lo alcanza: si el filtro no arma el cuerpo, nadie lo
+        // hace. Antes escribia "Debe enviar token Bearer" en texto plano, que
+        // dejaba fuera del contrato al caso de error mas comun de la API.
+        mockMvc.perform(get("/pacientes"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").value("No autenticado"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("un token corrupto tambien responde JSON, no texto plano")
+    void elTokenInvalidoRespondeElFormatoUniforme() throws Exception {
+        mockMvc.perform(get("/pacientes").header("Authorization", "Bearer no-es-un-jwt"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").value("No autenticado"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("el mensaje del 401 esta redactado para el usuario, no para el programador")
+    void elMensajeDel401NoHablaDeCabeceras() throws Exception {
+        // La interfaz lo muestra tal cual (`extraerMensajeDeError` en
+        // lib/api.ts se queda con `message`). Nombrar la cabecera Authorization
+        // o el esquema Bearer no le dice nada a quien solo ve que perdio la
+        // sesion.
+        String cuerpo = mockMvc.perform(get("/pacientes"))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        String mensaje = json.readTree(cuerpo).get("message").asText().toLowerCase();
+        assertFalse(mensaje.contains("bearer"), "el mensaje no debe nombrar el esquema del token");
+        assertFalse(mensaje.contains("token"), "ni la palabra token");
+        assertFalse(mensaje.contains("header"), "ni la cabecera HTTP");
+        assertTrue(mensaje.contains("sesion") || mensaje.contains("sesión"),
+                "debe hablar de la sesion, que es lo que la persona reconoce");
     }
 
     @Test
