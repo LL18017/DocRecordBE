@@ -474,7 +474,8 @@ class ConsultaCrudIT extends PruebaClinica {
         // de lo que el sistema acepta: seguia siendo atendible por id.
         JsonNode previa = crearConsultaSimple(medico, paciente);
 
-        mockMvc.perform(delete("/pacientes/{id}", paciente).header("Authorization", bearer(medico)))
+        // La baja es del administrador desde que se resolvio la Tabla 5.
+        mockMvc.perform(delete("/pacientes/{id}", paciente).header("Authorization", bearer(tokenDeAdministrador())))
                 .andExpect(status().isNoContent());
 
         tomarSignosVitales(paciente);
@@ -499,10 +500,11 @@ class ConsultaCrudIT extends PruebaClinica {
     void reactivarVuelveAPermitirConsultas() throws Exception {
         // La contraparte: una prueba que solo mira el 409 se sigue cumpliendo
         // si alguien bloquea las consultas para todo el mundo.
-        mockMvc.perform(delete("/pacientes/{id}", paciente).header("Authorization", bearer(medico)))
+        // La baja es del administrador desde que se resolvio la Tabla 5.
+        mockMvc.perform(delete("/pacientes/{id}", paciente).header("Authorization", bearer(tokenDeAdministrador())))
                 .andExpect(status().isNoContent());
         mockMvc.perform(patch("/pacientes/{id}/estado", paciente)
-                        .header("Authorization", bearer(medico))
+                        .header("Authorization", bearer(tokenDeAdministrador()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"ACTIVO\"}"))
                 .andExpect(status().isOk());

@@ -97,7 +97,7 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         String expediente = leer(token, pacienteId).get("expediente").asText();
 
         String cuerpo = mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
-                        .header("Authorization", "Bearer " + token)
+                        .header("Authorization", "Bearer " + tokenDeAdministrador())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"INACTIVO\"}"))
                 .andExpect(status().isOk())
@@ -121,7 +121,7 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         long pacienteId = crearPacienteLlamado(token, "Paciente", "Con Estado Raro");
 
         mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
-                        .header("Authorization", "Bearer " + token)
+                        .header("Authorization", "Bearer " + tokenDeAdministrador())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"DE VACACIONES\"}"))
                 .andExpect(status().isBadRequest());
@@ -183,26 +183,50 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("cerrar esa puerta no se la cierra al medico, que si puede dar de baja")
-    void elMedicoSiPuedeDarDeBajaPorLasDosRutas() throws Exception {
-        // La contraparte de la anterior: una prueba que solo comprueba el 403 se
-        // sigue cumpliendo si alguien cierra el endpoint a todo el mundo.
+    @DisplayName("el medico TAMPOCO da de baja: es potestad del administrador")
+    void elMedicoTampocoDaDeBaja() throws Exception {
+        // La regla tenia tres versiones: el codigo decia ADMIN y MEDICO, la
+        // herencia de la clase dejaba pasar ademas a ENFERMERA por el DELETE, y
+        // la Tabla 5 del Laboratorio 2 decia que el administrador es el unico
+        // rol que da de baja pacientes. Se resolvio a favor del documento, que
+        // ademas coincide con el actor de la propia HU-10: "Como administrador
+        // de la clinica quiero marcar a un paciente como inactivo".
         String medico = tokenDeMedico();
-        long pacienteId = crearPacienteLlamado(medico, "Paciente", "Del Medico");
+        long pacienteId = crearPacienteLlamado(medico, "Paciente", "Solo Del Admin");
 
-        darDeBaja(medico, pacienteId);
+        int porPatch = mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
+                        .header("Authorization", "Bearer " + medico)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"INACTIVO\"}"))
+                .andReturn().getResponse().getStatus();
+
+        int porDelete = mockMvc.perform(delete("/pacientes/{id}", pacienteId)
+                        .header("Authorization", "Bearer " + medico))
+                .andReturn().getResponse().getStatus();
+
+        assertEquals(porPatch, porDelete, "las dos rutas tienen que exigir lo mismo");
+        assertEquals(403, porDelete);
+        assertEquals("ACTIVO", leer(medico, pacienteId).get("estado").asText(),
+                "el intento rechazado no debe haber cambiado nada");
+    }
+
+    @Test
+    @DisplayName("el administrador SI puede dar de baja, por las dos rutas")
+    void elAdministradorSiPuedeDarDeBaja() throws Exception {
+        // Contrapeso imprescindible: una prueba que solo mira el 403 se sigue
+        // cumpliendo si alguien cierra la baja a todo el mundo.
+        String medico = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(medico, "Paciente", "Del Administrador");
+
+        darDeBaja(pacienteId);
         assertEquals("INACTIVO", leer(medico, pacienteId).get("estado").asText());
 
         mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
-                        .header("Authorization", "Bearer " + medico)
+                        .header("Authorization", "Bearer " + tokenDeAdministrador())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"ACTIVO\"}"))
                 .andExpect(status().isOk());
     }
-
-    // ══════════════════════════════════════════════════════════════════════
-    // HU-07 criterio 3 · busqueda sin tildes
-    // ══════════════════════════════════════════════════════════════════════
 
     @Test
     @DisplayName("buscar sin tildes encuentra al paciente que si las tiene")
@@ -268,7 +292,7 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         assertTrue(apareceEnLaBusqueda(buscar(token, ""), pacienteId),
                 "mientras esta activo tiene que aparecer");
 
-        darDeBaja(token, pacienteId);
+        darDeBaja(pacienteId);
 
         assertFalse(apareceEnLaBusqueda(buscar(token, ""), pacienteId),
                 "tras la baja no puede seguir en el listado de trabajo diario");
@@ -279,7 +303,7 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
     void elFiltroDevuelveAlInactivo() throws Exception {
         String token = tokenDeMedico();
         long pacienteId = crearPacienteLlamado(token, "Paciente", "Que Reaparece");
-        darDeBaja(token, pacienteId);
+        darDeBaja(pacienteId);
 
         JsonNode conInactivos = buscarIncluyendoInactivos(token, "");
         assertTrue(apareceEnLaBusqueda(conInactivos, pacienteId),
@@ -303,7 +327,7 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         long pacienteId = crearPacienteLlamado(token, "Paciente", "Dado De Baja");
         String expediente = leer(token, pacienteId).get("expediente").asText();
 
-        darDeBaja(token, pacienteId);
+        darDeBaja(pacienteId);
 
         JsonNode releido = leer(token, pacienteId);
         assertEquals("INACTIVO", releido.get("estado").asText());
@@ -317,8 +341,8 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         String token = tokenDeMedico();
         long pacienteId = crearPacienteLlamado(token, "Paciente", "De Baja Dos Veces");
 
-        darDeBaja(token, pacienteId);
-        darDeBaja(token, pacienteId);
+        darDeBaja(pacienteId);
+        darDeBaja(pacienteId);
 
         assertEquals("INACTIVO", leer(token, pacienteId).get("estado").asText());
     }
@@ -332,9 +356,9 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         long pacienteId = crearPacienteLlamado(token, "Paciente", "Que Regresa");
         String expediente = leer(token, pacienteId).get("expediente").asText();
 
-        darDeBaja(token, pacienteId);
+        darDeBaja(pacienteId);
         mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
-                        .header("Authorization", "Bearer " + token)
+                        .header("Authorization", "Bearer " + tokenDeAdministrador())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"ACTIVO\"}"))
                 .andExpect(status().isOk());
@@ -343,9 +367,16 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
         assertEquals(expediente, leer(token, pacienteId).get("expediente").asText());
     }
 
-    private void darDeBaja(String token, long pacienteId) throws Exception {
+    /**
+     * Da de baja al paciente como ADMINISTRADOR.
+     *
+     * No recibe token a proposito: desde que la baja es exclusiva de ese rol,
+     * pasarle uno invitaria a escribir pruebas que la intentan con el rol
+     * equivocado sin querer. Quien quiera probar el rol lo hace explicito.
+     */
+    private void darDeBaja(long pacienteId) throws Exception {
         mockMvc.perform(delete("/pacientes/{id}", pacienteId)
-                        .header("Authorization", "Bearer " + token))
+                        .header("Authorization", "Bearer " + tokenDeAdministrador()))
                 .andExpect(status().isNoContent());
     }
 

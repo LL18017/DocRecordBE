@@ -102,10 +102,9 @@ public class PacienteController {
     // baja en logica dejaron de serlo, y el agujero quedo servido: el arreglo de
     // la baja EXIGE este ajuste, no lo acompana.
     //
-    // El alcance es el que razona el PATCH: dar de baja es una decision sobre el
-    // expediente, no parte de atender. Registrar y consultar si le tocan a
-    // enfermeria; decidir que alguien deja de estar en seguimiento, no.
-    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
+    // El alcance es el que razona el PATCH, y desde el 16 de septiembre es el
+    // ADMINISTRADOR y nadie mas. Ver alli el porque.
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> eliminar(@PathVariable("personaId") Long personaId) {
         pacienteService.eliminar(personaId);
         return ResponseEntity.noContent().build();
@@ -123,7 +122,24 @@ public class PacienteController {
     // expediente, no parte de atenderlo; registrar y consultar si le tocan a
     // enfermeria, decidir que un paciente deja de estar en seguimiento no.
     @PatchMapping("/{personaId}/estado")
-    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
+    // Solo el ADMINISTRADOR, y no tambien el medico.
+    //
+    // Habia tres versiones de esta misma regla: el codigo decia ADMIN y MEDICO
+    // en el PATCH, la clase entera -- por herencia -- dejaba pasar tambien a
+    // ENFERMERA por el DELETE, y la Tabla 5 del documento del Laboratorio 2
+    // decia que el administrador es el unico rol que da de baja pacientes. El
+    // equipo resolvio a favor del documento.
+    //
+    // Es defendible: dar de baja no es un acto clinico sino administrativo
+    // sobre el expediente. El medico decide que un paciente ya no necesita
+    // seguimiento, pero quien lo saca del padron es quien administra el
+    // sistema, igual que quien da de alta y de baja las cuentas.
+    //
+    // DELETE /{personaId} tiene que llevar EXACTAMENTE este mismo alcance: las
+    // dos rutas dejan al paciente INACTIVO, y dos alcances distintos sobre la
+    // misma operacion no son una incoherencia de estilo sino una puerta que
+    // evade a la otra. Hay una prueba que lo exige.
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PacienteResponseDto> cambiarEstado(
             @PathVariable("personaId") Long personaId,
             @Valid @RequestBody CambiarEstadoRequestDto request

@@ -8,10 +8,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.repository.PersonaRepository;
+import ues.edu.sv.education.model.entity.Persona;
+import ues.edu.sv.education.model.enums.RolesEnum;
+import ues.edu.sv.education.repository.RoleRepository;
 import ues.edu.sv.education.repository.UserRepository;
+
+import java.util.HashSet;
+import java.util.Set;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -39,6 +46,8 @@ class PacienteCrudIT extends PruebaDeIntegracion {
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository usuarios;
     @Autowired private PersonaRepository personas;
+    @Autowired private RoleRepository roles;
+    @Autowired private PasswordEncoder encoder;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -89,6 +98,39 @@ class PacienteCrudIT extends PruebaDeIntegracion {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(cuerpo);
+    }
+
+    /**
+     * Token de un ADMINISTRADOR.
+     *
+     * Hace falta desde que la baja de paciente es exclusiva de ese rol (Tabla 5
+     * del Laboratorio 2). El resto de esta clase se autentica con un medico,
+     * que es quien da de alta y edita.
+     */
+    private String tokenDeAdmin() throws Exception {
+        String correo = "crud.admin." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
+
+        Persona persona = personas.saveAndFlush(Persona.builder()
+                .nombres("Admin").apellidos("Del Crud")
+                .build());
+
+        usuarios.saveAndFlush(User.builder()
+                .persona(persona)
+                .email(correo)
+                .password(encoder.encode(CLAVE))
+                .enabled(true)
+                .roles(new HashSet<>(Set.of(roles.getReferenceById(RolesEnum.ADMIN.getId()))))
+                .build());
+
+        String cuerpo = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"%s"}
+                                """.formatted(correo, CLAVE)))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn().getResponse().getContentAsString();
+
+        return json.readTree(cuerpo).get("token").asText();
     }
 
     private String duiUnico() {
@@ -367,8 +409,9 @@ class PacienteCrudIT extends PruebaDeIntegracion {
         long personaId = creado.get("personaId").asLong();
         String expediente = creado.get("expediente").asText();
 
+        // La baja es exclusiva del administrador (Tabla 5 del Laboratorio 2).
         mockMvc.perform(delete("/pacientes/{id}", personaId)
-                        .header("Authorization", "Bearer " + token))
+                        .header("Authorization", "Bearer " + tokenDeAdmin()))
                 .andExpect(status().isNoContent());
 
         String cuerpo = mockMvc.perform(get("/pacientes/{id}", personaId)
@@ -395,7 +438,7 @@ class PacienteCrudIT extends PruebaDeIntegracion {
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(delete("/pacientes/{id}", inexistente)
-                        .header("Authorization", "Bearer " + token))
+                        .header("Authorization", "Bearer " + tokenDeAdmin()))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(put("/pacientes/{id}", inexistente)

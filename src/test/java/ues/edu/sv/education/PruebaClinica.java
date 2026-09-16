@@ -139,6 +139,18 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
         return iniciarSesion(correo);
     }
 
+    /**
+     * Token de un ADMINISTRADOR, sin mas.
+     *
+     * Es el mismo usuario que `tokenDeAdminQueNoEjerce`, pero se le da otro
+     * nombre porque en las pruebas de baja de paciente lo que importa no es que
+     * no ejerza: es que administra. Leer alli "adminQueNoEjerce" haria pensar
+     * que la prueba depende de esa particularidad, y no.
+     */
+    protected String tokenDeAdministrador() throws Exception {
+        return tokenDeAdminQueNoEjerce();
+    }
+
     private void crearUsuario(Persona persona, String correo, RolesEnum rol) {
         usuarios.saveAndFlush(User.builder()
                 .persona(persona)
