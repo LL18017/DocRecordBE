@@ -26,6 +26,38 @@ RAIZ=/opt/docrecord
 COMPOSE="docker compose -f docker-compose.prod.yml"
 cd "$RAIZ"
 
+# ----------------------------------------------------------------------------
+# Un despliegue a la vez, venga del repositorio que venga.
+#
+# Los dos repositorios despliegan en esta misma maquina y corren ESTE mismo
+# script, que reconstruye AMBOS. El `concurrency` de GitHub Actions serializa
+# las ejecuciones dentro de un repositorio, pero no cruza de uno a otro: si se
+# empuja al backend y al frontend con pocos minutos de diferencia, las dos
+# corridas se pisan sobre el mismo /opt/docrecord y una muere.
+#
+# Cuando eso pasa, el despliegue que gana reconstruye los dos repositorios de
+# todos modos -- asi que el codigo SI queda publicado -- y el que pierde
+# reporta fallo. Esa combinacion es la peligrosa: el 16 de septiembre hizo que
+# un arreglo de SEGURIDAD apareciera como fallido en Actions estando vivo en
+# produccion. Quien mirara la insignia en vez de la API habria concluido lo
+# contrario de lo que pasaba.
+#
+# `flock` sin -n a proposito: el segundo despliegue ESPERA su turno en vez de
+# rendirse. El timeout evita que un proceso muerto deje el lock tomado para
+# siempre; es holgado porque una reconstruccion completa de las imagenes puede
+# pasar de los diez minutos.
+#
+# El descriptor 9 no tiene nada de especial: es uno alto y libre, elegido para
+# no chocar con 0, 1 y 2. Se mantiene abierto mientras dure el script, y el
+# kernel suelta el lock solo cuando el proceso termina, aunque muera de golpe.
+# ----------------------------------------------------------------------------
+exec 9>/var/lock/docrecord-despliegue.lock
+if ! flock --wait 900 9; then
+  echo "Otro despliegue lleva mas de 15 minutos en curso. Abortado sin tocar nada."
+  exit 1
+fi
+echo "== lock de despliegue tomado"
+
 [ -f .env ] || { echo "Falta $RAIZ/.env (los secretos). Abortado."; exit 1; }
 
 for repo in DocRecordBE DocRecordFE; do
