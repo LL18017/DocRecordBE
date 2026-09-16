@@ -89,6 +89,23 @@ public class PacienteController {
                     + "PATCH /pacientes/{personaId}/estado con INACTIVO. Es idempotente."
     )
     @DeleteMapping("/{personaId}")
+    // MISMO alcance que PATCH /{personaId}/estado, y no el de la clase.
+    //
+    // Los dos hacen ya exactamente lo mismo -- poner el paciente en INACTIVO --,
+    // asi que dos alcances distintos no son una incoherencia de estilo: son una
+    // ruta que evade la politica que el otro declara. ENFERMERA tenia 403 en el
+    // PATCH y 204 en el DELETE, es decir, conseguia por una puerta justo lo que
+    // la otra le negaba.
+    //
+    // Mientras el DELETE destruia y el PATCH desactivaba eran operaciones
+    // distintas y la diferencia de alcance se podia argumentar. Al convertir la
+    // baja en logica dejaron de serlo, y el agujero quedo servido: el arreglo de
+    // la baja EXIGE este ajuste, no lo acompana.
+    //
+    // El alcance es el que razona el PATCH: dar de baja es una decision sobre el
+    // expediente, no parte de atender. Registrar y consultar si le tocan a
+    // enfermeria; decidir que alguien deja de estar en seguimiento, no.
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<Void> eliminar(@PathVariable("personaId") Long personaId) {
         pacienteService.eliminar(personaId);
         return ResponseEntity.noContent().build();

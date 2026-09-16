@@ -142,6 +142,64 @@ class EstadoYBusquedaDePacientesIT extends PruebaClinica {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("enfermeria tampoco da de baja por DELETE: las dos rutas exigen lo mismo")
+    void lasDosRutasDeBajaExigenElMismoRol() throws Exception {
+        // Este agujero lo ABRIO el arreglo de la baja logica, no lo heredo.
+        //
+        // Mientras DELETE destruia la fila y PATCH cambiaba el estado eran
+        // operaciones distintas, y que el DELETE heredara el alcance de la clase
+        // -- que incluye ENFERMERA -- era feo pero discutible. Al hacer que las
+        // DOS pongan INACTIVO paso a ser una ruta que evade la politica: en el
+        // despliegue, enfermeria recibia 403 en el PATCH y 204 en el DELETE,
+        // sobre el mismo paciente y con el mismo efecto.
+        //
+        // No se comprueba un codigo concreto sino que los dos caminos respondan
+        // IGUAL. Si manana se decide abrir o cerrar la baja a otro rol, quien la
+        // cambie en un sitio y se olvide del otro rompe esta prueba, que es
+        // exactamente lo que hace falta que ocurra.
+        String medico = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(medico, "Paciente", "Con Dos Puertas");
+        String enfermera = tokenDeEnfermera();
+
+        int porPatch = mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
+                        .header("Authorization", "Bearer " + enfermera)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"INACTIVO\"}"))
+                .andReturn().getResponse().getStatus();
+
+        int porDelete = mockMvc.perform(delete("/pacientes/{id}", pacienteId)
+                        .header("Authorization", "Bearer " + enfermera))
+                .andReturn().getResponse().getStatus();
+
+        assertEquals(porPatch, porDelete,
+                "las dos rutas dejan al paciente INACTIVO: no pueden exigir permisos distintos");
+        assertEquals(403, porDelete,
+                "enfermeria registra y consulta; decidir que un paciente sale de seguimiento no le toca");
+
+        // Y lo que de verdad importa: el paciente sigue activo.
+        assertEquals("ACTIVO", leer(medico, pacienteId).get("estado").asText(),
+                "el intento rechazado no debe haber cambiado nada");
+    }
+
+    @Test
+    @DisplayName("cerrar esa puerta no se la cierra al medico, que si puede dar de baja")
+    void elMedicoSiPuedeDarDeBajaPorLasDosRutas() throws Exception {
+        // La contraparte de la anterior: una prueba que solo comprueba el 403 se
+        // sigue cumpliendo si alguien cierra el endpoint a todo el mundo.
+        String medico = tokenDeMedico();
+        long pacienteId = crearPacienteLlamado(medico, "Paciente", "Del Medico");
+
+        darDeBaja(medico, pacienteId);
+        assertEquals("INACTIVO", leer(medico, pacienteId).get("estado").asText());
+
+        mockMvc.perform(patch("/pacientes/{id}/estado", pacienteId)
+                        .header("Authorization", "Bearer " + medico)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"ACTIVO\"}"))
+                .andExpect(status().isOk());
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // HU-07 criterio 3 · busqueda sin tildes
     // ══════════════════════════════════════════════════════════════════════
