@@ -88,15 +88,27 @@ public class ConsultaController {
         return ResponseEntity.ok(consultaService.actualizar(consultaId, request));
     }
 
-    @Operation(
-            summary = "Borrar una consulta",
-            description = "Se lleva consigo sus recetas: una receta sin la consulta que la origino "
-                    + "es una lista de medicamentos sin motivo."
-    )
-    @DeleteMapping("/{consultaId}")
-    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
-    public ResponseEntity<Void> eliminar(@PathVariable("consultaId") Long consultaId) {
-        consultaService.eliminar(consultaId);
-        return ResponseEntity.noContent().build();
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    // Aqui vivia DELETE /consultas/{id}. Se retiro a proposito.
+    //
+    // HU-21 (DRS-91) lo dice sin margen: "el sistema NUNCA ejecuta un DELETE
+    // sobre una consulta. Anular es un cambio de estado, y esa distincion es la
+    // que hace defendible el expediente ante una auditoria".
+    //
+    // Lo que habia contradecia eso de tres formas a la vez:
+    //
+    //   · Borraba de verdad, y con ON DELETE CASCADE se llevaba las recetas
+    //     emitidas. Una consulta equivocada OCURRIO: alguien la abrio, quedo
+    //     constancia, y puede haberse entregado una receta a partir de ella.
+    //     Hacerla desaparecer no corrige el error, lo esconde.
+    //   · No comprobaba de quien era. ConsultaService.eliminar llamaba a delete
+    //     sin mirar quien lo pedia, asi que cualquier MEDICO podia destruir la
+    //     consulta de cualquier otro.
+    //   · No pedia motivo. El criterio 1 exige uno de al menos 20 caracteres.
+    //
+    // La operacion que corresponde -anular con motivo, marcando tambien sus
+    // recetas- es el trabajo de HU-21 y se implementa ahi. Mientras tanto, no
+    // tener el endpoint es estrictamente mejor que tener uno que destruye
+    // historia clinica sin dejar rastro.
+    // ══════════════════════════════════════════════════════════════════════
 }

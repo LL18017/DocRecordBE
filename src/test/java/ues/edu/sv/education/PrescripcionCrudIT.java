@@ -153,12 +153,12 @@ class PrescripcionCrudIT extends PruebaClinica {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Borrar la consulta se lleva sus recetas
+    // Una consulta no se borra, asi que sus recetas tampoco desaparecen
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("borrar una consulta arrastra sus recetas y los medicamentos de estas")
-    void borrarLaConsultaArrastraSusRecetas() throws Exception {
+    @DisplayName("no se puede borrar una consulta, y sus recetas siguen ahi")
+    void noSePuedeBorrarUnaConsultaNiArrastrarSusRecetas() throws Exception {
         long primera = emitir(medico, """
                 {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"},
                                                  {"medicamento":"Paracetamol 500 mg"}]}
@@ -170,20 +170,27 @@ class PrescripcionCrudIT extends PruebaClinica {
 
         assertEquals(3, medicamentosGuardados(primera, segunda), "no se guardaron los renglones");
 
+        // Esta prueba comprobaba lo contrario: que borrar la consulta se llevaba
+        // sus recetas por el ON DELETE CASCADE de V6, y pasaba. La cascada
+        // sigue estando en la base -- es correcta si alguna vez se borra una
+        // fila -- pero la operacion que la disparaba ya no existe.
+        //
+        // HU-21 (DRS-91): "el sistema NUNCA ejecuta un DELETE sobre una
+        // consulta". Y este caso explica por que: las dos recetas de abajo se
+        // emitieron, y pueden haberse entregado. Que desaparecieran del
+        // expediente porque alguien se equivoco al registrar la consulta es
+        // justo lo que una auditoria no podria reconstruir.
         mockMvc.perform(delete("/consultas/{id}", consultaId).header("Authorization", bearer(medico)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isMethodNotAllowed());
 
+        // Lo que importa: las recetas siguen ahi, con sus renglones.
         mockMvc.perform(get("/prescripciones/{id}", primera).header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
         mockMvc.perform(get("/prescripciones/{id}", segunda).header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
 
-        // Los renglones tambien: si solo cayeran las recetas, la tabla de
-        // medicamentos quedaria con filas apuntando a recetas que ya no
-        // existen. Se comprueba contra la base porque esa cascada la impone
-        // PostgreSQL (V6), no el codigo Java.
-        assertEquals(0, medicamentosGuardados(primera, segunda),
-                "quedaron medicamentos huerfanos de una receta borrada");
+        assertEquals(3, medicamentosGuardados(primera, segunda),
+                "las recetas y sus renglones debieron sobrevivir");
     }
 
     // ══════════════════════════════════════════════════════════════════════

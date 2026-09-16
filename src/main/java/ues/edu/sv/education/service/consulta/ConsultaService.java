@@ -211,17 +211,9 @@ public class ConsultaService {
         consulta.setEstado(estadoSegun(nuevo));
     }
 
-    /**
-     * Borra la consulta.
-     *
-     * Sus prescripciones se van con ella por el ON DELETE CASCADE de V6: una
-     * receta sin la consulta que la origino es una lista de medicamentos sin
-     * motivo, y eso no debe quedar en un expediente.
-     */
-    @Transactional
-    public void eliminar(Long consultaId) {
-        consultaRepository.delete(buscarConsultaOFallar(consultaId));
-    }
+    // Aqui vivia eliminar(). Ver la nota de ConsultaController: HU-21 exige que
+    // el sistema no borre consultas nunca, y ademas este metodo no comprobaba
+    // de quien era la que estaba borrando.
 
     // ══════════════════════════════════════════════════════════════════════
     // Apoyo

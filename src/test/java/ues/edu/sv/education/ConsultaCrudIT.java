@@ -369,20 +369,35 @@ class ConsultaCrudIT extends PruebaClinica {
                         .content("{\"motivo\":\"Control\"}"))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(delete("/consultas/{id}", inexistente).header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+        // Sin DELETE: la ruta ya no admite ese metodo, asi que un id inexistente
+        // da 405 antes de que nadie mire si la consulta existe. Se comprueba en
+        // unaConsultaNoSePuedeBorrar.
     }
 
     @Test
-    @DisplayName("borrar una consulta la saca del historial")
-    void borrarUnaConsultaLaSacaDelHistorial() throws Exception {
+    @DisplayName("una consulta NO se puede borrar, y sigue en el historial")
+    void unaConsultaNoSePuedeBorrar() throws Exception {
+        // Esta prueba afirmaba lo contrario: que borrar sacaba la consulta del
+        // historial, y pasaba. El endpoint existia y borraba de verdad,
+        // llevandose las recetas por el ON DELETE CASCADE de V6.
+        //
+        // HU-21 (DRS-91) lo prohibe sin margen: "el sistema NUNCA ejecuta un
+        // DELETE sobre una consulta. Anular es un cambio de estado, y esa
+        // distincion es la que hace defendible el expediente ante una
+        // auditoria". Una consulta equivocada OCURRIO -- puede haberse
+        // entregado una receta a partir de ella -- y hacerla desaparecer no
+        // corrige el error, lo esconde.
+        //
+        // Se responde 405 y no 404 porque la ruta si existe: lo que no existe
+        // es esa operacion sobre ella.
         long consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
 
         mockMvc.perform(delete("/consultas/{id}", consultaId).header("Authorization", bearer(medico)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isMethodNotAllowed());
 
+        // Y lo que de verdad importa: sigue ahi.
         mockMvc.perform(get("/consultas/{id}", consultaId).header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -403,8 +418,10 @@ class ConsultaCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(enfermera)))
                 .andExpect(status().isOk());
 
+        // Enfermeria tampoco borra, pero ya no por falta de permiso: nadie
+        // borra. El 405 llega antes que cualquier comprobacion de rol.
         mockMvc.perform(delete("/consultas/{id}", consultaId).header("Authorization", bearer(enfermera)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isMethodNotAllowed());
 
         mockMvc.perform(get("/consultas")).andExpect(status().isUnauthorized());
     }
