@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +29,7 @@ import java.util.Set;
         name = "8. Enfermedades crónicas",
         description = "Endpoints para gestionar las enfermedades crónicas de los usuarios"
 )
+@PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
 public class EnfermedadCronicaController {
 
     private final EnfermedadCronicaService enfermedadCronicaService;
@@ -53,6 +55,7 @@ public class EnfermedadCronicaController {
                     description = "Usuario no encontrado"
             )
     })
+    @PreAuthorize("hasAnyRole('MEDICO','ENFERMERA')")
     @PostMapping
     public ResponseEntity<EnfermedadCronicaResponse> crear(
             @Valid @RequestBody EnfermedadCronicaRequest request
@@ -140,6 +143,7 @@ public class EnfermedadCronicaController {
                     description = "Enfermedad crónica no encontrada"
             )
     })
+    @PreAuthorize("hasAnyRole('MEDICO','ENFERMERA')")
     @PutMapping("/{id}")
     public ResponseEntity<EnfermedadCronicaResponse> actualizar(
             @Parameter(
@@ -170,6 +174,7 @@ public class EnfermedadCronicaController {
                     description = "Enfermedad crónica no encontrada"
             )
     })
+    @PreAuthorize("hasRole('MEDICO')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(

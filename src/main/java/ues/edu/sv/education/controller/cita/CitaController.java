@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +29,7 @@ import java.util.List;
         name = "7. Citas",
         description = "Operaciones para la gestión de citas médicas"
 )
+@PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
 public class CitaController {
 
     private final CitaService citaService;
@@ -237,6 +239,7 @@ public class CitaController {
                     description = "Cita no encontrada"
             )
     })
+    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(

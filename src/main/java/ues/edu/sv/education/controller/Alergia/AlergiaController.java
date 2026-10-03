@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +29,7 @@ import java.util.Set;
         name = "9. Alergias",
         description = "Endpoints para gestionar las alergias de los usuarios"
 )
+@PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
 public class AlergiaController {
 
     private final AlergiaService alergiaService;
@@ -55,6 +57,7 @@ public class AlergiaController {
                     description = "Usuario no encontrado"
             )
     })
+    @PreAuthorize("hasAnyRole('MEDICO','ENFERMERA')")
     @PostMapping
     public ResponseEntity<AlergiaResponse> crear(
             @Valid @RequestBody AlergiaRequest request
@@ -144,6 +147,7 @@ public class AlergiaController {
                     description = "Alergia no encontrada"
             )
     })
+    @PreAuthorize("hasAnyRole('MEDICO','ENFERMERA')")
     @PutMapping("/{id}")
     public ResponseEntity<AlergiaResponse> actualizar(
 
@@ -175,6 +179,7 @@ public class AlergiaController {
                     description = "Alergia no encontrada"
             )
     })
+    @PreAuthorize("hasRole('MEDICO')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
 
