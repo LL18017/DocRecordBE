@@ -26,10 +26,10 @@ dentro de la instancia y no salen de ella.
 
 ```bash
 ssh -i <tu-llave>.pem ubuntu@<ip>
-cd /opt/docrecord && ./desplegar.sh dev-naun
+cd /opt/docrecord && ./desplegar.sh main
 ```
 
-Lo hace también GitHub Actions en cada push a `dev-naun`, pero solo si las
+Lo hace también GitHub Actions en cada push a `main`, pero solo si las
 pruebas pasan: el job de despliegue depende del workflow CI.
 
 ## Levantar un servidor desde cero
@@ -39,7 +39,7 @@ Suponiendo Ubuntu con Docker instalado y el usuario en el grupo `docker`:
 ```bash
 sudo install -d -o ubuntu -g ubuntu /opt/docrecord
 cd /opt/docrecord
-git clone --depth 1 --branch dev-naun https://github.com/LL18017/DocRecordBE.git
+git clone --depth 1 --branch main https://github.com/LL18017/DocRecordBE.git
 cp DocRecordBE/despliegue/desplegar.sh .
 chmod +x desplegar.sh
 ```
@@ -67,7 +67,7 @@ umask 077
 } > .env
 chmod 600 .env
 
-./desplegar.sh dev-naun
+./desplegar.sh main
 ```
 
 `ADMIN_EMAIL` y `ADMIN_PASSWORD` los usa `AdminBootstrap` para crear el primer
