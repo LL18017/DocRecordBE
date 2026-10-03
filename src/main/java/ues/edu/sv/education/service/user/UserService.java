@@ -18,6 +18,8 @@ import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
 import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.Enfermera;
+import ues.edu.sv.education.model.entity.Especialidad;
+import ues.edu.sv.education.model.entity.Medico;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.Role;
 import ues.edu.sv.education.model.entity.User;
@@ -29,6 +31,7 @@ import ues.edu.sv.education.repository.MedicoRepository;
 import ues.edu.sv.education.repository.proyeccion.EspecialidadDePersona;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.EnfermeraRepository;
+import ues.edu.sv.education.repository.EspecialidadRepository;
 import ues.edu.sv.education.repository.PersonaRepository;
 import ues.edu.sv.education.repository.RoleRepository;
 import ues.edu.sv.education.repository.UserRepository;
@@ -58,6 +61,7 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final ClinicaRepository clinicaRepository;
     private final EnfermeraRepository enfermeraRepository;
+    private final EspecialidadRepository especialidadRepository;
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
@@ -146,7 +150,7 @@ public class UserService {
     // justo el estado que deja a alguien pasando el hasRole y recibiendo 403
     // del servicio, sin forma de entender por que.
     @Transactional
-    public UserResponseDto addRole(int userID, int roleID) {
+    public UserResponseDto addRole(int userID, int roleID, Long especialidadId) {
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
             throw new NoResourceFoundException("No se encontro el usuario con id: " + userID, "404");
@@ -157,28 +161,78 @@ public class UserService {
         }
         User user = userOpt.get();
         Role role = roleOpt.get();
+        boolean esMedico = RolesEnum.MEDICO.getId() == roleID;
+        Optional<Medico> ficha = esMedico
+                ? medicoRepository.findById(user.getPersona().getPersonaId())
+                : Optional.empty();
+
         if (user.getRoles().contains(role)) {
+            // Cuentas a las que se les dio MEDICO antes de que esto creara la
+            // ficha: volver a darlo con la especialidad las repara.
+            if (esMedico && ficha.isEmpty() && especialidadId != null) {
+                Medico creada = asegurarFichaDeMedico(user, ficha, especialidadId);
+                return UserMapper.toDto(user, creada.getEspecialidad().getNombre());
+            }
             throw new GeneralException("El usuario ya cuenta con este rol", "409");
         }
+        // Se valida ANTES de tocar los roles: sin especialidad no se puede
+        // crear la ficha, y un rol MEDICO sin ficha es justo el estado roto
+        // que se quiere evitar.
+        if (esMedico && ficha.isEmpty() && especialidadId == null) {
+            throw new GeneralException(
+                    "Para dar el rol de médico hay que indicar su especialidad", "400");
+        }
+
         user.getRoles().add(role);
         userRepository.save(user);
 
-        // Asignar el rol ENFERMERA crea tambien su ficha en `enfermeras`.
+        // Asignar un rol clinico crea tambien su ficha: `enfermeras` para
+        // ENFERMERA y `medicos` para MEDICO.
         //
         // Sin esto la asignacion queda a medias de la peor forma posible: la
-        // cuenta pasa el hasRole('ENFERMERA') del controlador de signos
-        // vitales y despues el servicio la rechaza con 403, porque lo que
-        // autoriza a tomar constantes es la FILA, no la etiqueta del token.
-        // Quien lo sufre no tiene como saber que le falta.
+        // cuenta pasa el hasRole(...) del controlador y despues el servicio
+        // la rechaza con 403, porque lo que autoriza el acto clinico es la
+        // FILA, no la etiqueta del token. Quien lo sufre no tiene como saber
+        // que le falta.
         //
-        // Con MEDICO no se puede hacer lo mismo: `medicos.especialidad_id` es
-        // NOT NULL y nadie puede adivinar la especialidad. Esa alta sigue
-        // pasando por /auth/register, que si la pide.
+        // La ficha de medico lleva la especialidad (`especialidad_id` es NOT
+        // NULL), por eso con MEDICO se pide `especialidadId`. Antes esa alta
+        // solo pasaba por /auth/register.
         if (RolesEnum.ENFERMERA.getId() == roleID) {
             asegurarFichaDeEnfermeria(user);
         }
+        if (esMedico) {
+            Medico medico = asegurarFichaDeMedico(user, ficha, especialidadId);
+            return UserMapper.toDto(user, medico.getEspecialidad().getNombre());
+        }
 
         return UserMapper.toDto(user);
+    }
+
+    /**
+     * Crea o reactiva la ficha de medico. `ficha` es la que ya existe, si
+     * existe; `especialidadId` solo es obligatorio cuando hay que crearla, y
+     * si viene con una ficha existente le cambia la especialidad.
+     *
+     * OJO: no fijar personaId en el builder. Con @MapsId lo deriva de
+     * `persona`; con el id puesto, Spring Data haria merge en vez de persist
+     * (ver el mismo comentario en AuthService).
+     */
+    private Medico asegurarFichaDeMedico(User user, Optional<Medico> ficha, Long especialidadId) {
+        Especialidad especialidad = especialidadId == null
+                ? null
+                : especialidadRepository.findById(especialidadId)
+                        .orElseThrow(() -> new NoResourceFoundException(
+                                "No se encontro la especialidad con id: " + especialidadId, "404"));
+
+        Medico medico = ficha.orElseGet(() -> Medico.builder()
+                .persona(user.getPersona())
+                .build());
+        medico.setActivo(true);
+        if (especialidad != null) {
+            medico.setEspecialidad(especialidad);
+        }
+        return medicoRepository.save(medico);
     }
 
     /**
@@ -238,6 +292,15 @@ public class UserService {
                     .ifPresent(enfermera -> {
                         enfermera.setActivo(false);
                         enfermeraRepository.save(enfermera);
+                    });
+        }
+        // Igual que enfermeria: la ficha se marca inactiva, no se borra. Sus
+        // consultas, recetas y antecedentes la referencian.
+        if (RolesEnum.MEDICO.getId() == roleID) {
+            medicoRepository.findById(user.getPersona().getPersonaId())
+                    .ifPresent(medico -> {
+                        medico.setActivo(false);
+                        medicoRepository.save(medico);
                     });
         }
 

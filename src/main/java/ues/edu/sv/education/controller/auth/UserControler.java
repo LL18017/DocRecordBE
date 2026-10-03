@@ -60,14 +60,18 @@ public class UserControler {
             summary = "Añadir un rol a un usuario",
             description = "Solo añade; no reemplaza los que ya tiene. Asignar ENFERMERA crea "
                     + "además su ficha en enfermería, porque sin esa fila la cuenta pasa el "
-                    + "control de rol y luego recibe 403 al registrar constantes."
+                    + "control de rol y luego recibe 403 al registrar constantes. Asignar MEDICO "
+                    + "crea su ficha de medico con especialidadId, obligatorio si la persona aun "
+                    + "no la tiene (400 si falta). A una cuenta que ya tiene MEDICO pero no ficha, "
+                    + "volver a asignarlo con especialidadId se la crea."
     )
     @PostMapping("/{userId}/role/{roleId}")
     public ResponseEntity<UserResponseDto> addRole(
             @PathVariable(required = true) int userId,
-            @PathVariable(required = true) int roleId
+            @PathVariable(required = true) int roleId,
+            @RequestParam(required = false) Long especialidadId
     ) {
-        return ResponseEntity.ok(userService.addRole(userId,roleId));
+        return ResponseEntity.ok(userService.addRole(userId, roleId, especialidadId));
     }
 
     @Operation(
