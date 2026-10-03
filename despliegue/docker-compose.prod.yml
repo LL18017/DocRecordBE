@@ -79,9 +79,11 @@ services:
       # consultas salen con ? --, asi que no es una fuga de datos clinicos,
       # pero tampoco hay razon para escribirlo.
       JPA_SHOW_SQL: "false"
-      # Swagger no queda expuesto en produccion (TT-03, criterio 4). Pide
-      # SWAGGER_USER y SWAGGER_PASSWORD del .env; si faltan, queda cerrado.
-      SWAGGER_PUBLICO: "false"
+      # Swagger sigue abierto en produccion por decision del equipo (3 oct):
+      # la proteccion de TT-03, criterio 4, queda lista pero sin activar.
+      # Para activarla: SWAGGER_PUBLICO "false" aqui, y SWAGGER_USER y
+      # SWAGGER_PASSWORD en el .env del servidor (si faltan, queda cerrado).
+      SWAGGER_PUBLICO: "true"
       SWAGGER_USER: ${SWAGGER_USER:-}
       SWAGGER_PASSWORD: ${SWAGGER_PASSWORD:-}
       # Sin limite explicito la JVM toma un porcentaje de la RAM visible y
