@@ -1,483 +1,68 @@
--- ============================================================
--- DATOS INICIALES / DEMO
--- DocRecordBE
--- ============================================================
-
-BEGIN;
-
--- ============================================================
--- 1. LIMPIAR DATOS ANTERIORES
--- ============================================================
-
-TRUNCATE TABLE
-    public.verification_token,
-    public.clinicas,
-    public.events,
-    public.user_roles,
-    public.users,
-    public.role,
-    public.user_type,
-    public.event_types,
-    public.event_status
-RESTART IDENTITY CASCADE;
-
-
--- ============================================================
--- 2. TIPOS DE USUARIO
--- ============================================================
-
-INSERT INTO public.user_type (name)
-VALUES
-    ('ADMINISTRADOR'),
-    ('MEDICO'),
-    ('ENFERMERO'),
-    ('PACIENTE');
-
-
--- ============================================================
--- 3. ROLES
--- ============================================================
-
-INSERT INTO public.role (name)
-VALUES
-    ('ROLE_ADMIN'),
-    ('ROLE_MEDICO'),
-    ('ROLE_ENFERMERO'),
-    ('ROLE_PACIENTE');
-
-
--- ============================================================
--- 4. ESTADOS DE EVENTOS
--- ============================================================
-
-INSERT INTO public.event_status (name)
-VALUES
-    ('PENDIENTE'),
-    ('PROCESADO'),
-    ('ERROR');
-
-
--- ============================================================
--- 5. TIPOS DE EVENTOS
--- ============================================================
-
-INSERT INTO public.event_types (code, description)
-VALUES
-    ('USER_LOGIN', 'Inicio de sesión de usuario'),
-    ('USER_LOGOUT', 'Cierre de sesión de usuario'),
-    ('USER_REGISTER', 'Registro de nuevo usuario'),
-    ('USER_UPDATE', 'Actualización de usuario'),
-    ('CLINICA_CREATE', 'Creación de clínica'),
-    ('CLINICA_UPDATE', 'Actualización de clínica'),
-    ('TOKEN_CREATED', 'Creación de token de verificación'),
-    ('TOKEN_USED', 'Uso de token de verificación');
-
-
--- ============================================================
--- 6. USUARIOS
--- ============================================================
+-- ============================================================================
+-- Catalogos iniciales de DocRecord.
 --
--- NOTA:
--- El password es un hash ficticio.
--- Si quieres utilizar estos usuarios para login real,
--- debes reemplazarlo por un hash Argon2 válido.
+-- Spring lo ejecuta automaticamente en cada arranque, DESPUES de que Hibernate
+-- crea o actualiza las tablas (spring.jpa.defer-datasource-initialization=true
+-- en application.properties). Por eso NO puede colocarse en la carpeta
+-- /docker-entrypoint-initdb.d de PostgreSQL: alli correria antes de que las
+-- tablas existan y fallaria.
 --
--- Usuarios:
+-- Todas las inserciones son idempotentes (ON CONFLICT DO NOTHING) para que
+-- reiniciar la aplicacion no rompa por clave duplicada.
+-- ============================================================================
+
+-- =========================
+-- event_status
+-- =========================
+INSERT INTO public.event_status (event_status_id, name) VALUES
+    (1, 'PENDING'),
+    (2, 'PROCESSING'),
+    (3, 'PROCESSED'),
+    (4, 'FAILED')
+ON CONFLICT (event_status_id) DO NOTHING;
+
+-- =========================
+-- event_types
+-- =========================
+INSERT INTO public.event_types (event_type_id, code, description) VALUES
+    (1, 'LOGIN', 'Inicio de sesión'),
+    (2, 'PASSWORD_CHANGED', 'Cambio de contraseña'),
+    (3, 'USER_REGISTERED', 'Registro de usuario'),
+    (4, 'APPOINTMENT_CREATED', 'Registro de cita'),
+    (5, 'APPOINTMENT_CANCELLED', 'Cancelación de cita')
+ON CONFLICT (event_type_id) DO NOTHING;
+
+-- =========================
+-- role
 --
--- admin@docrecord.com
--- medico@docrecord.com
--- enfermero@docrecord.com
--- paciente@docrecord.com
--- ============================================================
+-- Ya NO se siembra aqui: el catalogo de roles se mudo a la migracion
+-- V7__catalogo_de_roles_cerrado.sql, junto con el NOT NULL, el UNIQUE y el
+-- CHECK que lo cierran a los cuatro valores de RolesEnum.
+--
+-- El motivo es que la semilla y la restriccion que esa semilla debe cumplir
+-- tienen que viajar juntas. Separadas, este archivo podia insertar un nombre
+-- que la restriccion rechazara y tumbar el arranque, o peor, quedarse
+-- desincronizado del enum sin que nada lo detectara. Ademas data.sql corre en
+-- cada arranque y no esta versionado: no habia forma de saber que catalogo
+-- tiene una base concreta.
+-- =========================
 
-INSERT INTO public.users
-(email, name, password, user_type_id, enabled)
-VALUES
-    (
-        'admin@docrecord.com',
-        'Administrador del Sistema',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'ADMINISTRADOR'),
-        TRUE
-    ),
-    (
-        'carlos.medico@docrecord.com',
-        'Dr. Carlos Martínez',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'MEDICO'),
-        TRUE
-    ),
-    (
-        'ana.medico@docrecord.com',
-        'Dra. Ana Rodríguez',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'MEDICO'),
-        TRUE
-    ),
-    (
-        'maria.enfermera@docrecord.com',
-        'María López',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'ENFERMERO'),
-        TRUE
-    ),
-    (
-        'jose.enfermero@docrecord.com',
-        'José Hernández',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'ENFERMERO'),
-        TRUE
-    ),
-    (
-        'juan.paciente@docrecord.com',
-        'Juan Pérez',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'PACIENTE'),
-        TRUE
-    ),
-    (
-        'sofia.paciente@docrecord.com',
-        'Sofía Ramírez',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'PACIENTE'),
-        TRUE
-    ),
-    (
-        'pedro.paciente@docrecord.com',
-        'Pedro González',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'PACIENTE'),
-        TRUE
-    ),
-    (
-        'lucia.paciente@docrecord.com',
-        'Lucía Torres',
-        '$argon2id$v=19$m=65536,t=3,p=1$MOCKSALTVALUEDONOTUSE$MOCKHASHVALUEDONOTUSEINPRODUCTIONxx',
-        (SELECT user_type_id
-         FROM public.user_type
-         WHERE name = 'PACIENTE'),
-        FALSE
-    );
-
-
--- ============================================================
--- 7. RELACIÓN USUARIO - ROL
--- ============================================================
-
--- Administrador
-INSERT INTO public.user_roles (user_id, role_id)
-SELECT
-    u.user_id,
-    r.role_id
-FROM public.users u
-         CROSS JOIN public.role r
-WHERE u.email = 'admin@docrecord.com'
-  AND r.name = 'ROLE_ADMIN';
-
-
--- Médicos
-INSERT INTO public.user_roles (user_id, role_id)
-SELECT
-    u.user_id,
-    r.role_id
-FROM public.users u
-         CROSS JOIN public.role r
-WHERE u.email IN (
-                  'carlos.medico@docrecord.com',
-                  'ana.medico@docrecord.com'
-    )
-  AND r.name = 'ROLE_MEDICO';
-
-
--- Enfermeros
-INSERT INTO public.user_roles (user_id, role_id)
-SELECT
-    u.user_id,
-    r.role_id
-FROM public.users u
-         CROSS JOIN public.role r
-WHERE u.email IN (
-                  'maria.enfermera@docrecord.com',
-                  'jose.enfermero@docrecord.com'
-    )
-  AND r.name = 'ROLE_ENFERMERO';
-
-
--- Pacientes
-INSERT INTO public.user_roles (user_id, role_id)
-SELECT
-    u.user_id,
-    r.role_id
-FROM public.users u
-         CROSS JOIN public.role r
-WHERE u.email IN (
-                  'juan.paciente@docrecord.com',
-                  'sofia.paciente@docrecord.com',
-                  'pedro.paciente@docrecord.com',
-                  'lucia.paciente@docrecord.com'
-    )
-  AND r.name = 'ROLE_PACIENTE';
-
-
--- ============================================================
--- 8. CLÍNICAS
--- ============================================================
-
-INSERT INTO public.clinicas
-(latitud, longitud, name, user_id)
-VALUES
-    (
-        13.692940,
-        -89.218191,
-        'Clínica Central San Salvador',
-        (
-            SELECT user_id
-            FROM public.users
-            WHERE email = 'carlos.medico@docrecord.com'
-        )
-    ),
-    (
-        13.703120,
-        -89.235870,
-        'Clínica Médica Escalón',
-        (
-            SELECT user_id
-            FROM public.users
-            WHERE email = 'ana.medico@docrecord.com'
-        )
-    ),
-    (
-        13.700000,
-        -89.200000,
-        'Centro Médico La Salud',
-        (
-            SELECT user_id
-            FROM public.users
-            WHERE email = 'admin@docrecord.com'
-        )
-    );
-
-
--- ============================================================
--- 9. EVENTOS
--- ============================================================
-
-INSERT INTO public.events
-(
-    created_at,
-    description,
-    ip_address,
-    processed_at,
-    ref,
-    user_email,
-    event_status_id,
-    event_type_id
-)
-VALUES
-    (
-                CURRENT_TIMESTAMP - INTERVAL '5 days',
-                'Inicio de sesión del administrador',
-                '192.168.1.10',
-                CURRENT_TIMESTAMP - INTERVAL '5 days',
-                'LOGIN-0001',
-                'admin@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PROCESADO'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'USER_LOGIN'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '4 days',
-                'Inicio de sesión del médico Carlos Martínez',
-                '192.168.1.20',
-                CURRENT_TIMESTAMP - INTERVAL '4 days',
-                'LOGIN-0002',
-                'carlos.medico@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PROCESADO'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'USER_LOGIN'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '3 days',
-                'Registro de nuevo paciente',
-                '192.168.1.30',
-                CURRENT_TIMESTAMP - INTERVAL '3 days',
-                'REGISTER-0001',
-                'juan.paciente@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PROCESADO'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'USER_REGISTER'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '2 days',
-                'Actualización de información del usuario',
-                '192.168.1.31',
-                CURRENT_TIMESTAMP - INTERVAL '2 days',
-                'UPDATE-0001',
-                'sofia.paciente@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PROCESADO'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'USER_UPDATE'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '1 day',
-                'Creación de clínica médica',
-                '192.168.1.20',
-                CURRENT_TIMESTAMP - INTERVAL '1 day',
-                'CLINIC-0001',
-                'carlos.medico@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PROCESADO'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'CLINICA_CREATE'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '12 hours',
-                'Cierre de sesión',
-                '192.168.1.20',
-                CURRENT_TIMESTAMP - INTERVAL '12 hours',
-                'LOGOUT-0001',
-                'carlos.medico@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PROCESADO'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'USER_LOGOUT'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '2 hours',
-                'Token de verificación generado para paciente',
-                '192.168.1.40',
-                NULL,
-                'TOKEN-0001',
-                'pedro.paciente@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'PENDIENTE'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'TOKEN_CREATED'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '30 minutes',
-                'Error al procesar solicitud de actualización',
-                '192.168.1.50',
-                CURRENT_TIMESTAMP - INTERVAL '29 minutes',
-                'ERROR-0001',
-                'lucia.paciente@docrecord.com',
-                (
-                    SELECT event_status_id
-                    FROM public.event_status
-                    WHERE name = 'ERROR'
-                ),
-                (
-                    SELECT event_type_id
-                    FROM public.event_types
-                    WHERE code = 'USER_UPDATE'
-                )
-    );
-
-
--- ============================================================
--- 10. TOKENS DE VERIFICACIÓN
--- ============================================================
-
-INSERT INTO public.verification_token
-(
-    expires_at,
-    token,
-    used,
-    user_id
-)
-VALUES
-    (
-                CURRENT_TIMESTAMP + INTERVAL '24 hours',
-                'token-demo-juan-001',
-                FALSE,
-                (
-                    SELECT user_id
-                    FROM public.users
-                    WHERE email = 'juan.paciente@docrecord.com'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP + INTERVAL '24 hours',
-                'token-demo-sofia-002',
-                FALSE,
-                (
-                    SELECT user_id
-                    FROM public.users
-                    WHERE email = 'sofia.paciente@docrecord.com'
-                )
-    ),
-    (
-                CURRENT_TIMESTAMP - INTERVAL '2 days',
-                'token-demo-pedro-003',
-                TRUE,
-                (
-                    SELECT user_id
-                    FROM public.users
-                    WHERE email = 'pedro.paciente@docrecord.com'
-                )
-    );
-
-
-COMMIT;
+-- =========================
+-- Ajuste de secuencias: tras insertar IDs explicitos, las secuencias deben
+-- continuar despues del maximo para no chocar con los catalogos.
+-- COALESCE cubre el caso de una tabla vacia (setval no acepta NULL).
+--
+-- GREATEST con last_value es lo que impide que este script RETROCEDA una
+-- secuencia, y no es un adorno. Las secuencias tienen INCREMENT BY 50 porque
+-- Hibernate reserva los identificadores de 50 en 50 y los va repartiendo en
+-- memoria: la secuencia ya va por 63 aunque la tabla solo llegue a 13. Un
+-- setval al MAX de la tabla devolveria el contador a 13 y los siguientes
+-- INSERT chocarian contra filas que ya existen ("duplicate key value violates
+-- unique constraint"). Se vio en la suite: dos contextos de Spring contra la
+-- misma base, el segundo rebobinaba la secuencia que el primero ya habia
+-- repartido. Con GREATEST la secuencia solo avanza.
+-- =========================
+SELECT setval('public.event_status_seq', GREATEST(COALESCE((SELECT MAX(event_status_id) FROM public.event_status), 1), (SELECT last_value FROM public.event_status_seq)));
+SELECT setval('public.event_types_seq',  GREATEST(COALESCE((SELECT MAX(event_type_id)   FROM public.event_types),  1), (SELECT last_value FROM public.event_types_seq)));
+SELECT setval('public.events_seq',       GREATEST(COALESCE((SELECT MAX(event_id)        FROM public.events),       1), (SELECT last_value FROM public.events_seq)));
+-- role_role_id_seq no aparece aqui: su ajuste se fue con la semilla a la V7.

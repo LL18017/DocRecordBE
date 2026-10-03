@@ -2,7 +2,7 @@ package ues.edu.sv.education.model.dto.auth;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import ues.edu.sv.education.model.dto.roles.RoleResponseDto;
+import ues.edu.sv.education.model.dto.roles.RoleDto;
 
 import java.util.List;
 
@@ -18,7 +18,7 @@ public record LoginResponseDto(
         @NotBlank(message = "El token no puede ser nulo")
         String refreshToken,
 
-        List<RoleResponseDto> roles
+        List<RoleDto> roles
 
 ) {
 }

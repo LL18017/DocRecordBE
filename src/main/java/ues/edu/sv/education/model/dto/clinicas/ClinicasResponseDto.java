@@ -27,7 +27,29 @@ public record ClinicasResponseDto(
                 description = "Longitud de la clínica",
                 example = "-89.5597"
         )
-        Double longitud
+        Double longitud,
+
+        @Schema(description = "Departamento", example = "Santa Ana", nullable = true)
+        String departamento,
+
+        @Schema(description = "Municipio", example = "Santa Ana", nullable = true)
+        String municipio,
+
+        @Schema(description = "Direccion exacta", nullable = true)
+        String direccion,
+
+        @Schema(description = "Telefono de contacto", nullable = true)
+        String telefono,
+
+        @Schema(description = "Horario de atencion", nullable = true)
+        String horario,
+
+        // Las cinco de arriba admiten null porque las clinicas registradas
+        // antes de V16 no las tienen, y no se puede inventar la direccion de
+        // una sede que ya existe. Las nuevas las exigen todas.
+
+        @Schema(description = "ACTIVA o INACTIVA", example = "ACTIVA")
+        String estado
 
 ) {
 }

@@ -21,7 +21,7 @@ import java.util.List;
 public class EventStatus {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     @Column(name = "event_status_id")
     private Integer eventStatusId;
 

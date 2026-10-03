@@ -28,9 +28,35 @@
     </scm>
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>2.0.1</spring-ai.version>
         <kotlin.version>2.2.20</kotlin.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                El parent 4.1.0-SNAPSHOT no gestiona las versiones de
+                Testcontainers, asi que se importa su propio BOM. Sin esto,
+                las dependencias de prueba fallan con
+                "dependencies.dependency.version is missing".
+            -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
 
         <dependency>
@@ -40,6 +66,15 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!--migraciones de esquema-->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
         <!--para decodificar-->
         <dependency>
@@ -68,6 +103,47 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Testcontainers: las pruebas de integracion corren contra un PostgreSQL
+            real y desechable, no contra H2 ni contra la base de desarrollo.
+            Aqui importa: las restricciones que sostienen el modelo (UNIQUE sobre
+            persona.dui, ON DELETE CASCADE, los CHECK de sexo y tipo_sangre) y las
+            migraciones de Flyway solo se verifican de verdad contra el motor real.
+            H2 aceptaria SQL que PostgreSQL rechaza, y usar la base de desarrollo
+            haria que una prueba dependiera del estado que dejo la anterior.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            En Spring Boot 4 @AutoConfigureMockMvc se movio de
+            spring-boot-test-autoconfigure a este artefacto aparte
+            (org.springframework.boot.webmvc.test.autoconfigure), y ya no
+            entra por spring-boot-starter-test.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
         </dependency>
         <!-- Web -->
         <dependency>
@@ -114,7 +190,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
-
+        <!--
+            Plantillas de los correos. Thymeleaf es el motor de plantillas de
+            Spring Boot y no arrastra nada nuevo: se integra solo, resuelve
+            desde src/main/resources/templates y sabe procesar tanto HTML como
+            texto plano, que es justo lo que necesita un correo
+            multipart/alternative. La alternativa era concatenar cadenas en
+            Java, que es de donde venimos.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
 <!--        ia-->
 <!--        modelo-->
         <dependency>
@@ -126,21 +213,30 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-chat-memory</artifactId>
         </dependency>
+
+
     </dependencies>
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>${spring-ai.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <build>
         <plugins>
+            <!--
+                Surefire solo recoge *Test, Test*, *Tests y *TestCase. Las
+                pruebas de integracion se llaman *IT para distinguirlas de las
+                unitarias, asi que hay que incluirlas explicitamente; si no,
+                `mvnw test` reporta BUILD SUCCESS sin haberlas ejecutado, que es
+                peor que fallar.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

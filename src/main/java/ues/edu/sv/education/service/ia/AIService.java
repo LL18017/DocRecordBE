@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import ues.edu.sv.education.service.Clinicas.ClinicaService;
-import ues.edu.sv.education.service.UserType.UserTypeService;
 import ues.edu.sv.education.service.auth.UserAuthService;
 import ues.edu.sv.education.service.roles.RolesService;
 import ues.edu.sv.education.service.user.UserService;
@@ -30,15 +29,13 @@ public class AIService {
     private final ChatClient chatClient;
     private final RolesService rolesService;
     private final UserAuthService userAuthService;
-    private final UserTypeService userTypeService;
     private final ClinicaService clinicaService;
 
     public AIService(ChatClient.Builder builder, ChatMemory chatMemory,RolesService rolesService,
-                     UserAuthService userAuthService,UserTypeService userTypeService ,ClinicaService clinicaService) {
+                     UserAuthService userAuthService, ClinicaService clinicaService) {
 
         this.rolesService=rolesService;
         this.userAuthService=userAuthService;
-        this.userTypeService=userTypeService;
         this.clinicaService=clinicaService;
 
         MessageChatMemoryAdvisor memoryAdvisor =
@@ -48,7 +45,7 @@ public class AIService {
         this.chatClient = builder
                 .defaultAdvisors(memoryAdvisor)
                 .defaultTools(
-                        userAuthService, rolesService,userTypeService
+                        userAuthService, rolesService
                 )
                 .build();
     }

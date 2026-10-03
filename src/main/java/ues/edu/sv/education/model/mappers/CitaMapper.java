@@ -45,7 +45,7 @@ public class CitaMapper {
                         : null,
 
                 entity.getMedico() != null
-                        ? entity.getMedico().getName()
+                        ? entity.getMedico().getPersona().getNombres() + " " + entity.getMedico().getPersona().getApellidos()
                         : null,
 
                 entity.getEstado() != null

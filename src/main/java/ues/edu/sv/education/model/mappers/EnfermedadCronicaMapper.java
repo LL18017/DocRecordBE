@@ -49,7 +49,7 @@ public class EnfermedadCronicaMapper {
                 enfermedadCronica.getNombre(),
                 enfermedadCronica.getAnio(),
                 enfermedadCronica.getTratamiento(),
-                enfermedadCronica.getUser().getName()
+                enfermedadCronica.getUser().getPersona().getNombres() + " " + enfermedadCronica.getUser().getPersona().getApellidos()
         );
     }
 }

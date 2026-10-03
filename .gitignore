@@ -36,3 +36,8 @@ build/
 .env
 .env.*
 !.env.example
+
+### Python ###
+# Lo genera cualquier `python -m py_compile` sobre los scripts de despliegue/.
+__pycache__/
+*.py[cod]
