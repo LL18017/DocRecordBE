@@ -1,5 +1,6 @@
 package ues.edu.sv.education.controller.ia;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,6 +16,7 @@ import java.io.IOException;
 
 @RestController
 @RequestMapping("/ai")
+@PreAuthorize("hasRole('ADMIN')")
 public class AIController {
     private final AIService aiService;
 

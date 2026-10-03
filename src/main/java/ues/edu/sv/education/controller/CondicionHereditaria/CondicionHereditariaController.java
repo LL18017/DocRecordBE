@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +29,7 @@ import java.util.Set;
         name = "10. Condiciones hereditarias",
         description = "Endpoints para gestionar las condiciones hereditarias de los usuarios"
 )
+@PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
 public class CondicionHereditariaController {
 
     private final CondicionHereditariaService condicionHereditariaService;
@@ -55,6 +57,7 @@ public class CondicionHereditariaController {
                     description = "Usuario no encontrado"
             )
     })
+    @PreAuthorize("hasAnyRole('MEDICO','ENFERMERA')")
     @PostMapping
     public ResponseEntity<CondicionHereditariaResponse> crear(
             @Valid @RequestBody CondicionHereditariaRequest request
@@ -142,6 +145,7 @@ public class CondicionHereditariaController {
                     description = "Datos inválidos"
             )
     })
+    @PreAuthorize("hasAnyRole('MEDICO','ENFERMERA')")
     @PutMapping("/{id}")
     public ResponseEntity<CondicionHereditariaResponse> actualizar(
             @Parameter(
@@ -171,6 +175,7 @@ public class CondicionHereditariaController {
                     description = "Condición hereditaria no encontrada"
             )
     })
+    @PreAuthorize("hasRole('MEDICO')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(

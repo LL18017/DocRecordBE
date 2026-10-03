@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +28,7 @@ import java.util.List;
         name = "6. Tipos de Cita",
         description = "Operaciones para la gestión de los tipos de citas médicas"
 )
+@PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
 public class TipoCitaController {
 
     private final TipoCitaService tipoCitaService;
@@ -54,6 +56,7 @@ public class TipoCitaController {
                     description = "No autorizado"
             )
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<TipoCitaResponseDto> crear(
             @Valid @RequestBody TipoCitaRequestDto dto
@@ -148,6 +151,7 @@ public class TipoCitaController {
                     description = "Tipo de cita no encontrado"
             )
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<TipoCitaResponseDto> actualizar(
             @Parameter(
@@ -182,6 +186,7 @@ public class TipoCitaController {
                     description = "Tipo de cita no encontrado"
             )
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(
