@@ -3,6 +3,8 @@ package ues.edu.sv.education.controller.error;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 
+import org.springframework.ai.retry.NonTransientAiException;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.LinkedHashMap;
@@ -571,6 +574,43 @@ public class GlobalExceptionHandler {
      *
      * El detalle debe quedar únicamente en los logs del servidor.
      */
+    /*
+     * Servicio de IA (AIService, Ollama). Caido o lento: 503; rechazo la
+     * solicitud: 502. Sin estos tres el error terminaria en el generico, 500.
+     */
+    @ExceptionHandler(TransientAiException.class)
+    public ResponseEntity<Map<String, String>> handleTransientAiException(
+            TransientAiException ex) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of(
+                        "error", "Servicio no disponible",
+                        "message", "El servicio de inteligencia artificial no está disponible temporalmente."
+                ));
+    }
+
+    @ExceptionHandler(NonTransientAiException.class)
+    public ResponseEntity<Map<String, String>> handleNonTransientAiException(
+            NonTransientAiException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
+                .body(Map.of(
+                        "error", "Error del servicio de IA",
+                        "message", "El servicio de inteligencia artificial rechazó la solicitud."
+                ));
+    }
+
+    @ExceptionHandler(ResourceAccessException.class)
+    public ResponseEntity<Map<String, String>> handleResourceAccessException(
+            ResourceAccessException ex) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of(
+                        "error", "Servicio no disponible",
+                        "message", "No se pudo conectar con el servicio de inteligencia artificial."
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleGenericException(
             Exception ex) {
