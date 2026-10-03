@@ -1,0 +1,160 @@
+# ============================================================================
+# DocRecord Sv -- despliegue de produccion (EC2, us-east-2)
+#
+#   cd /opt/docrecord && ./desplegar.sh
+#
+# Las imagenes se CONSTRUYEN aqui, a partir de los dos repositorios clonados
+# al lado de este archivo. Ese es el flujo: `git pull` y reconstruir, sin
+# transferir imagenes desde ninguna maquina de desarrollo.
+#
+#   /opt/docrecord/
+#     .env                     secretos, permisos 600, nunca versionado
+#     docker-compose.prod.yml  este archivo
+#     nginx.conf
+#     desplegar.sh
+#     DocRecordBE/             clon, rama dev-naun
+#     DocRecordFE/             clon, rama dev-naun
+#
+# Solo nginx publica un puerto. Postgres, el backend y el frontend viven en la
+# red interna de Docker y NO son alcanzables desde internet: por eso el
+# Security Group solo necesita abrir el 80 y la base de datos no queda
+# expuesta.
+# ============================================================================
+
+services:
+  db:
+    image: postgres:15.3-alpine
+    container_name: docrecord-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      LANG: C.UTF-8
+    # Los valores por defecto de PostgreSQL asumen un servidor dedicado. Aqui
+    # comparte la maquina con una JVM y un Node, asi que se bajan a mano: sin
+    # esto shared_buffers pide 128 MB y max_connections reserva memoria para
+    # 100 conexiones que esta aplicacion nunca abre.
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c max_connections=40
+      -c effective_cache_size=256MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=48MB
+    volumes:
+      - docrecord-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [docrecord]
+
+  backend:
+    build:
+      context: ./DocRecordBE
+    image: docrecord-be:prod
+    container_name: docrecord-be
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Lo usan los correos que enlazan de vuelta a la aplicacion.
+      FRONTEND_URL: ${PUBLIC_URL}
+      # En desarrollo el eco de SQL ayuda; aqui solo llena el disco y publica
+      # el esquema en los registros. Los valores no se imprimen -- las
+      # consultas salen con ? --, asi que no es una fuga de datos clinicos,
+      # pero tampoco hay razon para escribirlo.
+      JPA_SHOW_SQL: "false"
+      # Sin limite explicito la JVM toma un porcentaje de la RAM visible y
+      # reserva el resto en nativo, lo que en una maquina compartida con
+      # Postgres y Node termina en OOM. SerialGC en vez de G1 porque con pocos
+      # nucleos y un heap pequeno G1 solo anade hilos y estructuras que aqui
+      # no se pagan solas.
+      JAVA_TOOL_OPTIONS: >-
+        -Xms128m
+        -Xmx384m
+        -XX:MaxMetaspaceSize=160m
+        -XX:+UseSerialGC
+        -Xss512k
+    networks: [docrecord]
+
+  frontend:
+    build:
+      context: ./DocRecordFE
+      args:
+        # Ruta RELATIVA a proposito. Next.js hornea esta variable en el bundle
+        # del navegador en tiempo de build, asi que una URL absoluta dejaria la
+        # IP publica grabada en el codigo: si la instancia se reinicia y cambia
+        # de IP, o si manana hay un dominio, habria que reconstruir. Con /api lo
+        # resuelve el navegador contra el host que le sirvio la pagina, y de
+        # paso todo queda en el mismo origen, sin CORS de por medio.
+        NEXT_PUBLIC_API_URL: /api
+    image: docrecord-fe:prod
+    container_name: docrecord-fe
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    networks: [docrecord]
+
+  proxy:
+    # Caddy en vez de nginx por una sola razon: obtiene y renueva el
+    # certificado de Let's Encrypt por su cuenta. Con nginx haria falta ademas
+    # certbot, resolver el huevo y la gallina de la emision inicial -- nginx
+    # necesita el certificado para levantar en 443, certbot necesita que nginx
+    # ya sirva /.well-known para validarlo --, un cron de renovacion y un
+    # reload despues de cada una. Un certificado vencido tumba el sitio entero,
+    # y es la clase de fallo que aparece tres meses despues, un domingo.
+    #
+    # nginx.conf se conserva en el repositorio: hace lo mismo salvo el
+    # certificado, por si alguna vez se vuelve atras.
+    image: caddy:2.8-alpine
+    container_name: docrecord-proxy
+    restart: unless-stopped
+    depends_on: [frontend, backend]
+    environment:
+      # El nombre para el que se pide el certificado. Sin el, Caddy sirve por
+      # HTTP y no emite nada.
+      DOMINIO: ${DOMINIO}
+      # Nombre adicional para llegar al backend directamente (Swagger,
+      # Postman, clientes que no son el navegador). La aplicacion NO lo usa:
+      # ella habla por /api, en el mismo origen.
+      DOMINIO_API: ${DOMINIO_API}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Los certificados viven aqui, y el volumen NO es opcional: sin el, cada
+      # recreacion del contenedor los pierde y vuelve a pedirlos. Let's Encrypt
+      # admite cinco certificados identicos por semana, asi que un par de
+      # despliegues seguidos agotarian la cuota y el sitio se quedaria sin
+      # HTTPS durante dias.
+      - docrecord-caddy-data:/data
+      - docrecord-caddy-config:/config
+    networks: [docrecord]
+
+volumes:
+  docrecord-pgdata:
+  docrecord-caddy-data:
+  docrecord-caddy-config:
+
+networks:
+  docrecord:
+    driver: bridge

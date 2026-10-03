@@ -1,0 +1,76 @@
+package ues.edu.sv.education.model.mappers;
+
+import ues.edu.sv.education.model.dto.User.UserRequestDto;
+import ues.edu.sv.education.model.dto.User.UserResponseDto;
+import ues.edu.sv.education.model.entity.Persona;
+import ues.edu.sv.education.model.entity.User;
+
+import java.util.HashSet;
+
+public class UserMapper {
+    public static UserResponseDto toDto(User user) {
+        return toDto(user, null);
+    }
+
+    /**
+     * El mismo DTO, con la especialidad que el llamador haya podido averiguar.
+     *
+     * La especialidad vive en `medicos` y no en `users`, asi que este mapper no
+     * puede ir a buscarla: es estatico y no tiene repositorio. Y aunque lo
+     * tuviera, leerla aqui seria una consulta por usuario. Quien arma un
+     * listado la trae en bloque y la pasa (ver UserService.getAll); quien no la
+     * necesita llama a la version corta y el campo queda null, que es
+     * exactamente lo que significa "esta cuenta no ejerce la medicina".
+     */
+    public static UserResponseDto toDto(User user, String especialidad) {
+        Persona persona = user.getPersona();
+        return new UserResponseDto(
+                user.getUserID(),
+                user.getEmail(),
+                persona.getNombres() + " " + persona.getApellidos(),
+                user.getRoles().stream().map(RoleMapper::toDto).toList(),
+                especialidad,
+                user.isActivo()
+        );
+    }
+
+    /**
+     * Arma el User a partir del alta, con la contrasena YA CIFRADA.
+     *
+     * El hash se recibe como parametro en vez de leerse de request.password()
+     * a proposito. Antes este metodo copiaba la contrasena en claro del DTO a
+     * la entidad, y como UserService.createUser guardaba lo que este metodo
+     * devolvia, POST /user dejaba la contrasena LEGIBLE en users.password: se
+     * comprobo en la base leyendo "Docrecord2026!" tal cual. Un solo SELECT
+     * sobre la tabla -o un volcado, o una copia de seguridad extraviada-
+     * entregaba las credenciales de todo el personal, y como la gente reusa
+     * contrasenas el dano no se queda en este sistema.
+     *
+     * Al exigir el hash en la firma el error deja de ser posible por olvido:
+     * quien llame a toEntity tiene que haber pasado la contrasena por el
+     * PasswordEncoder antes, porque el DTO por si solo ya no basta para
+     * construir la entidad. Ver UserService.createUser y, para el mismo
+     * cifrado en el registro publico, AuthService.registrarMedico.
+     *
+     * La persona ya debe existir (guardada) antes de llamar esto: User solo
+     * guarda la referencia, no crea su propia identidad.
+     *
+     * @param passwordCifrada el resultado de PasswordEncoder.encode, nunca la
+     *                        contrasena en claro.
+     */
+    public static User toEntity(UserRequestDto request, Persona persona, String passwordCifrada) {
+        // Se usa el builder y no el constructor de todos los argumentos a
+        // proposito: ese constructor es posicional, asi que cada campo nuevo en
+        // User cambia su firma y rompe a quien lo llame. Ya paso -- al anadir
+        // `clinicasAsignadas` esta llamada se quedo en siete argumentos de ocho
+        // y el modulo dejo de compilar. El builder nombra lo que asigna y deja
+        // el resto en su valor por defecto.
+        return User.builder()
+                .persona(persona)
+                .email(request.email())
+                .password(passwordCifrada)
+                .enabled(false)
+                .roles(new HashSet<>())
+                .build();
+    }
+}

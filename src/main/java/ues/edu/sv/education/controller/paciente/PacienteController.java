@@ -1,0 +1,149 @@
+package ues.edu.sv.education.controller.paciente;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.paciente.CambiarEstadoRequestDto;
+import ues.edu.sv.education.model.dto.paciente.PacienteRequestDto;
+import ues.edu.sv.education.model.dto.paciente.PacienteResponseDto;
+import ues.edu.sv.education.service.paciente.PacienteService;
+
+import java.util.List;
+
+// ADMIN/MEDICO/ENFERMERA, no "cualquier autenticado": el catalogo de roles
+// ya incluye PACIENTE, y listar aqui expone nombres, DUI, fecha de
+// nacimiento y tipo de sangre de terceros -en un expediente clinico eso es
+// fuga de datos de salud, no un descuido menor. Enfermeria entra porque
+// toma signos vitales y registra pacientes; excluirla obligaria a que un
+// medico dé de alta cada paciente, que no es como funciona una clinica
+// (distinto del caso de clinicas: alli enfermeria trabaja pero no
+// administra). Cuando exista el portal del paciente (ver el paciente
+// consultando SU PROPIO expediente) va en un endpoint aparte resuelto por
+// SecurityContext, igual que /clinics/mias -no forzarlo en este listado.
+@Slf4j
+@RestController
+@RequestMapping("/pacientes")
+@RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN','MEDICO','ENFERMERA')")
+@Tag(name = "Pacientes", description = "Alta y busqueda de pacientes")
+public class PacienteController {
+
+    private final PacienteService pacienteService;
+
+    @Operation(
+            summary = "Registrar paciente",
+            description = "Acepta persona.personaId para reutilizar una identidad existente, o sin el para crear una nueva. " +
+                    "422 si a la persona le falta fecha de nacimiento o sexo tras aplicar lo recibido; 409 si ya es paciente."
+    )
+    @PostMapping
+    public ResponseEntity<PacienteResponseDto> crear(@Valid @RequestBody PacienteRequestDto request) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(pacienteService.crear(request));
+    }
+
+    @Operation(
+            summary = "Listar/buscar pacientes",
+            description = "Una sola caja de busqueda que coincide contra apellidos, nombres o DUI. "
+                    + "Sin parametro devuelve todos los pacientes ACTIVOS. Los dados de baja "
+                    + "quedan fuera salvo que se pida incluirInactivos=true."
+    )
+    @GetMapping
+    public ResponseEntity<List<PacienteResponseDto>> buscar(
+            @RequestParam(required = false) String buscar,
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInactivos
+    ) {
+        return ResponseEntity.ok(pacienteService.buscar(buscar, incluirInactivos));
+    }
+
+    @Operation(summary = "Ver un paciente", description = "404 si no existe.")
+    @GetMapping("/{personaId}")
+    public ResponseEntity<PacienteResponseDto> obtener(@PathVariable("personaId") Long personaId) {
+        return ResponseEntity.ok(pacienteService.obtener(personaId));
+    }
+
+    @Operation(
+            summary = "Actualizar un paciente",
+            description = "Completa sin destruir: un campo null significa 'no lo estoy tocando'. "
+                    + "El expediente no se puede cambiar; 409 si el DUI no coincide con el registrado."
+    )
+    @PutMapping("/{personaId}")
+    public ResponseEntity<PacienteResponseDto> actualizar(
+            @PathVariable("personaId") Long personaId,
+            @Valid @RequestBody PacienteRequestDto request) {
+        return ResponseEntity.ok(pacienteService.actualizar(personaId, request));
+    }
+
+    @Operation(
+            summary = "Dar de baja a un paciente",
+            description = "Baja LOGICA: marca al paciente como INACTIVO y lo saca de los "
+                    + "listados de trabajo. NO borra nada -- el expediente, las consultas, "
+                    + "las constantes y las recetas se conservan, y la persona tambien, "
+                    + "porque puede ser ademas medico o enfermera. Equivale a "
+                    + "PATCH /pacientes/{personaId}/estado con INACTIVO. Es idempotente."
+    )
+    @DeleteMapping("/{personaId}")
+    // MISMO alcance que PATCH /{personaId}/estado, y no el de la clase.
+    //
+    // Los dos hacen ya exactamente lo mismo -- poner el paciente en INACTIVO --,
+    // asi que dos alcances distintos no son una incoherencia de estilo: son una
+    // ruta que evade la politica que el otro declara. ENFERMERA tenia 403 en el
+    // PATCH y 204 en el DELETE, es decir, conseguia por una puerta justo lo que
+    // la otra le negaba.
+    //
+    // Mientras el DELETE destruia y el PATCH desactivaba eran operaciones
+    // distintas y la diferencia de alcance se podia argumentar. Al convertir la
+    // baja en logica dejaron de serlo, y el agujero quedo servido: el arreglo de
+    // la baja EXIGE este ajuste, no lo acompana.
+    //
+    // El alcance es el que razona el PATCH, y desde el 16 de septiembre es el
+    // ADMINISTRADOR y nadie mas. Ver alli el porque.
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> eliminar(@PathVariable("personaId") Long personaId) {
+        pacienteService.eliminar(personaId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Dar de alta o de baja a un paciente",
+            description = "Cambia el estado entre ACTIVO e INACTIVO. NO borra nada: el "
+                    + "expediente, las consultas, las constantes y las recetas del paciente "
+                    + "siguen existiendo. Un paciente inactivo solo deja de aparecer en los "
+                    + "listados de trabajo diario."
+    )
+    // No lo abre a ENFERMERA, a diferencia del resto de este controlador. Dar
+    // de baja a un paciente es una decision administrativa sobre el
+    // expediente, no parte de atenderlo; registrar y consultar si le tocan a
+    // enfermeria, decidir que un paciente deja de estar en seguimiento no.
+    @PatchMapping("/{personaId}/estado")
+    // Solo el ADMINISTRADOR, y no tambien el medico.
+    //
+    // Habia tres versiones de esta misma regla: el codigo decia ADMIN y MEDICO
+    // en el PATCH, la clase entera -- por herencia -- dejaba pasar tambien a
+    // ENFERMERA por el DELETE, y la Tabla 5 del documento del Laboratorio 2
+    // decia que el administrador es el unico rol que da de baja pacientes. El
+    // equipo resolvio a favor del documento.
+    //
+    // Es defendible: dar de baja no es un acto clinico sino administrativo
+    // sobre el expediente. El medico decide que un paciente ya no necesita
+    // seguimiento, pero quien lo saca del padron es quien administra el
+    // sistema, igual que quien da de alta y de baja las cuentas.
+    //
+    // DELETE /{personaId} tiene que llevar EXACTAMENTE este mismo alcance: las
+    // dos rutas dejan al paciente INACTIVO, y dos alcances distintos sobre la
+    // misma operacion no son una incoherencia de estilo sino una puerta que
+    // evade a la otra. Hay una prueba que lo exige.
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PacienteResponseDto> cambiarEstado(
+            @PathVariable("personaId") Long personaId,
+            @Valid @RequestBody CambiarEstadoRequestDto request
+    ) {
+        return ResponseEntity.ok(pacienteService.cambiarEstado(personaId, request.estado()));
+    }
+}

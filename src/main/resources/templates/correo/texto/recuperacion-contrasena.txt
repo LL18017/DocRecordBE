@@ -1,0 +1,19 @@
+[# th:if="${nombre}"]Hola [(${nombre})],[/][# th:unless="${nombre}"]Hola,[/] se pidió restablecer la contraseña de la cuenta de DocRecord Sv asociada a este correo.
+
+Si fuiste tú, abre este enlace y elige una contraseña nueva:
+
+[(${enlace})]
+
+El enlace vence en [(${horas == 1} ? '1 hora' : ${horas} + ' horas')] y sirve una sola
+vez. Después de eso deja de funcionar y hay que pedir uno nuevo desde la
+pantalla de inicio de sesión.
+
+Si no pediste esto, no tienes que hacer nada: tu contraseña sigue siendo la
+misma y el enlace vence solo. Cualquiera pudo escribir tu dirección en el
+formulario; recibir este correo no significa que alguien haya entrado a tu
+cuenta.
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

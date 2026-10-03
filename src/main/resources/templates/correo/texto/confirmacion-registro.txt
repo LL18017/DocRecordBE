@@ -1,0 +1,18 @@
+[# th:if="${nombre}"]Hola [(${nombre})],[/][# th:unless="${nombre}"]Hola,[/] se creó una cuenta en DocRecord Sv con este correo.
+
+Para poder iniciar sesión falta un paso: confirmar que la dirección es tuya.
+Abre este enlace:
+
+[(${enlace})]
+
+El enlace vence en [(${minutos})] minutos. Después de eso deja de servir y hay
+que pedir uno nuevo: basta con llenar otra vez el formulario de registro con
+este mismo correo.
+
+Si no fuiste tú quien se registró, no abras el enlace. La cuenta no se activa
+sola y el enlace vence por su cuenta.
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II
