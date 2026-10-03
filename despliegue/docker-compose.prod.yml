@@ -79,6 +79,11 @@ services:
       # consultas salen con ? --, asi que no es una fuga de datos clinicos,
       # pero tampoco hay razon para escribirlo.
       JPA_SHOW_SQL: "false"
+      # Swagger no queda expuesto en produccion (TT-03, criterio 4). Pide
+      # SWAGGER_USER y SWAGGER_PASSWORD del .env; si faltan, queda cerrado.
+      SWAGGER_PUBLICO: "false"
+      SWAGGER_USER: ${SWAGGER_USER:-}
+      SWAGGER_PASSWORD: ${SWAGGER_PASSWORD:-}
       # Sin limite explicito la JVM toma un porcentaje de la RAM visible y
       # reserva el resto en nativo, lo que en una maquina compartida con
       # Postgres y Node termina en OOM. SerialGC en vez de G1 porque con pocos
