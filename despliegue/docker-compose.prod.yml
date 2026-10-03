@@ -12,8 +12,8 @@
 #     docker-compose.prod.yml  este archivo
 #     nginx.conf
 #     desplegar.sh
-#     DocRecordBE/             clon, rama dev-naun
-#     DocRecordFE/             clon, rama dev-naun
+#     DocRecordBE/             clon, rama main
+#     DocRecordFE/             clon, rama main
 #
 # Solo nginx publica un puerto. Postgres, el backend y el frontend viven en la
 # red interna de Docker y NO son alcanzables desde internet: por eso el
