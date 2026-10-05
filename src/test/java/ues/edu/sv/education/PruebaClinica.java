@@ -248,4 +248,23 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
     protected String bearer(String token) {
         return "Bearer " + token;
     }
+
+    /**
+     * Da de alta una sede por la API y devuelve su id. La necesita toda prueba
+     * que le de el rol MEDICO o ENFERMERA a una cuenta sin sede: desde que la
+     * sede es obligatoria para el personal clinico, el rol se da junto con ella.
+     */
+    protected int crearSede(String token) throws Exception {
+        String cuerpo = mockMvc.perform(post("/clinics")
+                        .header("Authorization", bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Sede %d","departamento":"Santa Ana","municipio":"Municipio %d",
+                                 "direccion":"Calle Principal","telefono":"2440-0000",
+                                 "horario":"Lunes a viernes, 8:00 a 16:00"}
+                                """.formatted(siguiente(), siguiente())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(cuerpo).get("clinicaId").asInt();
+    }
 }

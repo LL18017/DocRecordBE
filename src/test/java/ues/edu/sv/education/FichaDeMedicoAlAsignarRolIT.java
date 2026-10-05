@@ -35,6 +35,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
 
     private String admin;
     private long especialidadId;
+    private int sede;
 
     @BeforeEach
     void prepararAdministradorYCatalogo() throws Exception {
@@ -43,6 +44,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         especialidadId = json.readTree(cuerpo).get(0).get("especialidadId").asLong();
+        sede = crearSede(admin);
     }
 
     private record Cuenta(User user, String correo) {}
@@ -89,6 +91,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
 
         String cuerpo = mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .param("especialidadId", String.valueOf(especialidadId))
+                        .param("clinicaId", String.valueOf(sede))
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -132,6 +135,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
 
         mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .param("especialidadId", String.valueOf(especialidadId))
+                        .param("clinicaId", String.valueOf(sede))
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
         assertTrue(medicos.findById(cuenta.user().getPersona().getPersonaId()).isPresent());
@@ -145,6 +149,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
 
         mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .param("especialidadId", String.valueOf(especialidadId))
+                        .param("clinicaId", String.valueOf(sede))
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
 

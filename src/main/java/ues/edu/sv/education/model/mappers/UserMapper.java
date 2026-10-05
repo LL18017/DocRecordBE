@@ -9,7 +9,11 @@ import java.util.HashSet;
 
 public class UserMapper {
     public static UserResponseDto toDto(User user) {
-        return toDto(user, null);
+        return toDto(user, null, null);
+    }
+
+    public static UserResponseDto toDto(User user, String especialidad) {
+        return toDto(user, especialidad, null);
     }
 
     /**
@@ -22,7 +26,7 @@ public class UserMapper {
      * necesita llama a la version corta y el campo queda null, que es
      * exactamente lo que significa "esta cuenta no ejerce la medicina".
      */
-    public static UserResponseDto toDto(User user, String especialidad) {
+    public static UserResponseDto toDto(User user, String especialidad, Integer sedes) {
         Persona persona = user.getPersona();
         return new UserResponseDto(
                 user.getUserID(),
@@ -30,7 +34,8 @@ public class UserMapper {
                 persona.getNombres() + " " + persona.getApellidos(),
                 user.getRoles().stream().map(RoleMapper::toDto).toList(),
                 especialidad,
-                user.isActivo()
+                user.isActivo(),
+                sedes
         );
     }
 

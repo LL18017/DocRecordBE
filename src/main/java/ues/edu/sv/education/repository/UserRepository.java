@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.repository.proyeccion.SedesDeUsuario;
 
 import java.util.List;
 import java.util.Optional;
@@ -103,4 +104,18 @@ public interface UserRepository extends JpaRepository<User,Integer> {
     // como estaba escrito primero: eso trae la tabla `users` entera por cada
     // enfermera del listado.
     Optional<User> findByPersona_PersonaId(Long personaId);
+
+    /**
+     * Cuantas sedes tiene cada cuenta de la lista, en una sola consulta. Una
+     * cuenta sin ninguna sale con 0 por el LEFT JOIN, no queda fuera.
+     */
+    @Query("""
+            SELECT new ues.edu.sv.education.repository.proyeccion.SedesDeUsuario(
+                       u.UserID, COUNT(c))
+            FROM User u
+            LEFT JOIN u.clinicasAsignadas c
+            WHERE u.UserID IN :userIds
+            GROUP BY u.UserID
+            """)
+    List<SedesDeUsuario> sedesDe(@Param("userIds") List<Integer> userIds);
 }
