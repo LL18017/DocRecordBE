@@ -64,6 +64,17 @@ public class PasswordAuthProvider implements AuthenticationProvider {
 
         UserDetails userDetails = new CustomUserDetails(user);
 
+        // La contrasena se comprueba ANTES que el estado de la cuenta. Al
+        // reves, "no ha confirmado su cuenta" o "bloqueado" le respondian a
+        // cualquiera que escribiera el correo, con cualquier contrasena: un
+        // oraculo para averiguar que correos tienen cuenta, que es justo lo
+        // que DRS-3 cerro para el correo inexistente. Asi, el estado solo lo
+        // conoce quien ya sabe la contrasena, y el frontend puede decirle con
+        // verdad que le falta confirmar en vez de "contrasena incorrecta".
+        if (!encoder.matches(rawPassword, userDetails.getPassword())) {
+            throw new CustomAuthenticationException("Credenciales incorrectas", 401);
+        }
+
         if (!userDetails.isEnabled())
             throw new CustomAuthenticationException("Usuario no ha confirmado su cuenta aun", 401) {
             };
@@ -74,9 +85,6 @@ public class PasswordAuthProvider implements AuthenticationProvider {
         if (!userDetails.isAccountNonLocked())
             throw new CustomAuthenticationException("Usuario bloqueado",401);
 
-        if (!encoder.matches(rawPassword, userDetails.getPassword())) {
-           throw new CustomAuthenticationException("Credenciales incorrectas",401);
-        }
 
         return new UsernamePasswordAuthenticationToken(
                 userDetails,
