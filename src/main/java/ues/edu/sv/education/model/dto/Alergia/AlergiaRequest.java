@@ -1,29 +1,39 @@
 package ues.edu.sv.education.model.dto.Alergia;
 
-
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
+import ues.edu.sv.education.model.enums.SeveridadDeAlergia;
 
+import java.time.LocalDate;
+
+/**
+ * Alta de una alergia. No lleva quien la registra: lo pone el servidor desde
+ * el token, igual que en un antecedente o una consulta.
+ */
 public record AlergiaRequest(
+        @Schema(description = "persona_id del paciente", example = "12")
+        @NotNull(message = "El paciente es obligatorio")
+        Long pacienteId,
 
-        @NotBlank(message = "El nombre de la alergia no puede estar vacío")
-        @Size(max = 100, message = "El nombre no puede superar los 100 caracteres")
-        String nombre,
+        @Schema(example = "Penicilina")
+        @NotBlank(message = "La sustancia no puede estar vacía")
+        @Size(max = 100, message = "La sustancia no puede superar los 100 caracteres")
+        String sustancia,
 
-        @NotBlank(message = "El tipo de alergia no puede estar vacío")
-        @Size(max = 100, message = "El tipo no puede superar los 100 caracteres")
-        String tipo,
+        @Schema(description = "Tipo de reacción que provoca", example = "Urticaria generalizada")
+        @NotBlank(message = "La reacción no puede estar vacía")
+        @Size(max = 255, message = "La reacción no puede superar los 255 caracteres")
+        String reaccion,
 
-        @NotBlank(message = "La severidad no puede estar vacía")
-        @Size(max = 50, message = "La severidad no puede superar los 50 caracteres")
-        String severidad,
+        @Schema(description = "LEVE, MODERADA o SEVERA", example = "SEVERA")
+        @NotNull(message = "La severidad es obligatoria")
+        SeveridadDeAlergia severidad,
 
-        @NotBlank(message = "La reacción reportada no puede estar vacía")
-        @Size(max = 255, message = "La reacción reportada no puede superar los 255 caracteres")
-        String reaccionReportada,
-
-        @NotNull(message = "El usuario es obligatorio")
-        Integer userId
-) {
-}
+        @Schema(description = "Fecha en que se detectó, no la del registro", example = "2021-07-02")
+        @NotNull(message = "La fecha de detección es obligatoria")
+        @PastOrPresent(message = "La fecha de detección no puede ser futura")
+        LocalDate fechaDeteccion
+) {}
