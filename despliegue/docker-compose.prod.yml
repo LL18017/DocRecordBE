@@ -74,6 +74,9 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       # Lo usan los correos que enlazan de vuelta a la aplicacion.
       FRONTEND_URL: ${PUBLIC_URL}
+      # La API, como la ve el navegador: bajo /api del mismo dominio (ver el
+      # Caddyfile). Con ella se arma el enlace del correo de confirmacion.
+      API_PUBLIC_URL: ${PUBLIC_URL}/api
       # En desarrollo el eco de SQL ayuda; aqui solo llena el disco y publica
       # el esquema en los registros. Los valores no se imprimen -- las
       # consultas salen con ? --, asi que no es una fuga de datos clinicos,

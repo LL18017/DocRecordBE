@@ -1,9 +1,11 @@
 package ues.edu.sv.education.model.dto.CondicionHereditaria;
 
+import ues.edu.sv.education.model.enums.Parentesco;
+
 public record CondicionHereditariaResponse(
-        Integer condicionHereditariaID,
+        Integer condicionHereditariaId,
+        Long pacienteId,
         String nombre,
-        String parentesco,
-        String observaciones,
-        Integer userId
+        Parentesco parentesco,
+        String observaciones
 ) {}
