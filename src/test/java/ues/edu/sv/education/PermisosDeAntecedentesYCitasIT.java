@@ -27,8 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  *   1. el PACIENTE no entra a ningun endpoint clinico.
  *   2. leer es del personal (ADMIN, MEDICO, ENFERMERA).
- *   3. registrar antecedentes es de quien atiende (MEDICO, ENFERMERA); borrar
- *      uno, solo del MEDICO.
+ *   3. registrar y eliminar alergias es de quien atiende (MEDICO, ENFERMERA),
+ *      no del ADMIN (HU-11).
  *   4. el catalogo de tipos de cita lo mantiene el ADMIN.
  *   5. el asistente de IA es solo del ADMIN: entre sus herramientas esta el
  *      listado completo de usuarios.
@@ -63,21 +63,26 @@ class PermisosDeAntecedentesYCitasIT extends PruebaClinica {
         paciente = json.readTree(cuerpo).get("token").asText();
     }
 
-    private String alergia() {
+    /**
+     * Una alergia cuelga del EXPEDIENTE (ver V20), asi que hace falta un
+     * paciente de verdad, con fila en `pacientes`; la cuenta de arriba es solo
+     * la de alguien con rol PACIENTE que intenta entrar.
+     */
+    private String alergia(long pacienteId) {
         return """
-                {"nombre":"Penicilina","tipo":"Medicamento","severidad":"Alta",
-                 "reaccionReportada":"Urticaria","userId":%d}
-                """.formatted(idDelPaciente);
+                {"pacienteId":%d,"sustancia":"Penicilina","reaccion":"Urticaria",
+                 "severidad":"SEVERA","fechaDeteccion":"2020-01-15"}
+                """.formatted(pacienteId);
     }
 
-    private long registrarAlergia(String token) throws Exception {
-        String cuerpo = mockMvc.perform(post("/api/alergias")
+    private long registrarAlergia(String token, long pacienteId) throws Exception {
+        String cuerpo = mockMvc.perform(post("/alergias")
                         .header("Authorization", bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(alergia()))
+                        .content(alergia(pacienteId)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return json.readTree(cuerpo).get("alergiaID").asLong();
+        return json.readTree(cuerpo).get("alergiaId").asLong();
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -87,7 +92,8 @@ class PermisosDeAntecedentesYCitasIT extends PruebaClinica {
     @Test
     @DisplayName("un paciente no puede leer alergias, ni las suyas")
     void unPacienteNoLeeAlergias() throws Exception {
-        mockMvc.perform(get("/api/alergias/usuario/" + idDelPaciente)
+        long expediente = crearPaciente(tokenDeMedico());
+        mockMvc.perform(get("/alergias?pacienteId=" + expediente)
                         .header("Authorization", bearer(paciente)))
                 .andExpect(status().isForbidden());
     }
@@ -95,10 +101,11 @@ class PermisosDeAntecedentesYCitasIT extends PruebaClinica {
     @Test
     @DisplayName("un paciente no puede registrar una alergia")
     void unPacienteNoRegistraAlergias() throws Exception {
-        mockMvc.perform(post("/api/alergias")
+        long expediente = crearPaciente(tokenDeMedico());
+        mockMvc.perform(post("/alergias")
                         .header("Authorization", bearer(paciente))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(alergia()))
+                        .content(alergia(expediente)))
                 .andExpect(status().isForbidden());
     }
 
@@ -122,9 +129,9 @@ class PermisosDeAntecedentesYCitasIT extends PruebaClinica {
     @Test
     @DisplayName("una enfermera registra una alergia y el medico la lee")
     void laEnfermeraRegistraYElMedicoLee() throws Exception {
-        long id = registrarAlergia(tokenDeEnfermera());
+        long id = registrarAlergia(tokenDeEnfermera(), crearPaciente(tokenDeMedico()));
 
-        mockMvc.perform(get("/api/alergias/" + id)
+        mockMvc.perform(get("/alergias/" + id)
                         .header("Authorization", bearer(tokenDeMedico())))
                 .andExpect(status().isOk());
     }
@@ -133,30 +140,31 @@ class PermisosDeAntecedentesYCitasIT extends PruebaClinica {
     @DisplayName("un admin lee alergias pero no las registra")
     void unAdminLeePeroNoRegistra() throws Exception {
         String admin = tokenDeAdministrador();
+        long expediente = crearPaciente(tokenDeMedico());
 
-        mockMvc.perform(get("/api/alergias/usuario/" + idDelPaciente)
+        mockMvc.perform(get("/alergias?pacienteId=" + expediente)
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/alergias")
+        mockMvc.perform(post("/alergias")
                         .header("Authorization", bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(alergia()))
+                        .content(alergia(expediente)))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("borrar una alergia es del medico, no de la enfermera")
-    void soloElMedicoBorraUnaAlergia() throws Exception {
-        long id = registrarAlergia(tokenDeEnfermera());
+    @DisplayName("eliminar una alergia es de quien atiende, no del admin")
+    void eliminarUnaAlergiaEsDeQuienAtiende() throws Exception {
+        long id = registrarAlergia(tokenDeMedico(), crearPaciente(tokenDeMedico()));
 
-        mockMvc.perform(delete("/api/alergias/" + id)
-                        .header("Authorization", bearer(tokenDeEnfermera())))
+        mockMvc.perform(delete("/alergias/" + id)
+                        .header("Authorization", bearer(tokenDeAdministrador())))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(delete("/api/alergias/" + id)
-                        .header("Authorization", bearer(tokenDeMedico())))
-                .andExpect(status().is2xxSuccessful());
+        mockMvc.perform(delete("/alergias/" + id)
+                        .header("Authorization", bearer(tokenDeEnfermera())))
+                .andExpect(status().isNoContent());
     }
 
     // ══════════════════════════════════════════════════════════════════════

@@ -39,4 +39,27 @@ public interface ClinicaRepository extends JpaRepository<Clinicas,Integer> {
     boolean existeEnElMunicipio(@Param("nombre") String nombre,
                                 @Param("municipio") String municipio,
                                 @Param("excluirId") Integer excluirId);
+
+    /**
+     * Las clinicas en un estado dado, por nombre. El mapa publico (HU-28) pide
+     * las ACTIVAS; el orden alfabetico es el de la lista que acompana al mapa.
+     * Usa el indice ix_clinicas_estado de V16.
+     */
+    List<Clinicas> findByEstadoOrderByNameAsc(String estado);
+
+    /**
+     * Las clinicas ACTIVAS de un departamento (HU-28 criterio 3).
+     *
+     * El departamento es texto libre desde V16, asi que se compara sin tildes
+     * y sin mayusculas, con la misma sin_tildes() de V13: "Usulután" y
+     * "usulutan" son el mismo departamento escrito por dos personas, y un
+     * filtro literal dejaria fuera la mitad de sus clinicas sin avisar.
+     */
+    @Query(value = """
+            SELECT c.* FROM clinicas c
+            WHERE c.estado = 'ACTIVA'
+              AND LOWER(sin_tildes(c.departamento)) = LOWER(sin_tildes(:departamento))
+            ORDER BY c.name
+            """, nativeQuery = true)
+    List<Clinicas> activasDelDepartamento(@Param("departamento") String departamento);
 }

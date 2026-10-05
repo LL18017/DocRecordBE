@@ -1,23 +1,28 @@
 package ues.edu.sv.education.model.dto.prescripcion;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
  * Un renglon de la receta.
  *
- * Solo el nombre del medicamento es obligatorio: hay indicaciones sin dosis ni
- * duracion ("suspender el tratamiento anterior"). Un renglon sin nombre, en
- * cambio, no indica nada.
+ * El medicamento se elige del catalogo por su id, ya no se escribe (HU-23
+ * criterio 3: "no acepta valores fuera de el"). Es lo unico obligatorio: hay
+ * indicaciones sin dosis ni duracion. Un renglon sin medicamento, en cambio,
+ * no indica nada.
+ *
+ * No hay campo de nombre: lo pone el servidor desde el catalogo. Si lo
+ * mandara el cliente, la receta podria decir "Amoxicilina" apuntando a la
+ * fila del ibuprofeno.
  */
 @Schema(description = "Medicamento indicado dentro de una receta")
 public record MedicamentoRequestDto(
 
-        @Schema(description = "Nombre del medicamento", example = "Amoxicilina 500 mg")
-        @NotBlank(message = "El nombre del medicamento no puede estar vacio")
-        @Size(max = 160, message = "El medicamento no puede superar los 160 caracteres")
-        String medicamento,
+        @Schema(description = "Id del medicamento en el catalogo (GET /medicamentos). Debe estar activo",
+                example = "6")
+        @NotNull(message = "Elige el medicamento del catalogo")
+        Long medicamentoId,
 
         @Schema(example = "1 tableta")
         @Size(max = 80, message = "La dosis no puede superar los 80 caracteres")

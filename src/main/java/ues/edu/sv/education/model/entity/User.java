@@ -80,14 +80,6 @@ public class User {
     )
     private Set<EnfermedadCronica> enfermedadesCronicas;
 
-    @OneToMany(
-            mappedBy = "user",
-            fetch = FetchType.LAZY,
-            cascade = CascadeType.ALL,
-            orphanRemoval = true
-    )
-    private Set<Alergia> alergias;
-
     /**
      * El correo se guarda SIEMPRE en minusculas y sin espacios alrededor.
      *
