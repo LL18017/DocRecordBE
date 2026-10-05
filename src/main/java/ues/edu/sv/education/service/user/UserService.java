@@ -9,7 +9,6 @@ import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.User.AltaUsuarioResponseDto;
@@ -39,6 +38,7 @@ import ues.edu.sv.education.repository.VerificationTokenRepository;
 import ues.edu.sv.education.service.EmailService;
 import ues.edu.sv.education.service.PlantillaDeCorreo;
 import ues.edu.sv.education.service.auth.AdminAutenticado;
+import ues.edu.sv.education.service.auth.EnlaceDeConfirmacion;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -65,6 +65,7 @@ public class UserService {
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
+    private final EnlaceDeConfirmacion enlaceDeConfirmacion;
     // El mismo bean que usa /auth/register: Argon2PasswordEncoder, definido en
     // Security/BasicConfiguration.passwordEncoder().
     private final PasswordEncoder passwordEncoder;
@@ -475,10 +476,7 @@ public class UserService {
     // MailException -un problema de SMTP no debe tumbar el alta de la cuenta-
     // y se deja constancia en el log de cualquier otra falla real.
     private boolean enviarCorreoDeVerificacion(String correoDestino, String nombre, String token) {
-        String enlace = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/auth/confirm")
-                .queryParam("token", token)
-                .toUriString();
+        String enlace = enlaceDeConfirmacion.para(token);
         Map<String, Object> datos = new HashMap<>();
         datos.put("nombre", nombre);
         datos.put("enlace", enlace);
