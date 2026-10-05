@@ -43,6 +43,14 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
+        // GET /clinics/publicas es el mapa de la red (HU-28), que se abre sin
+        // cuenta. Igual que arriba: si el filtro no lo deja pasar, el permitAll
+        // de BasicConfiguration nunca llega a aplicarse.
+        if (path.equals("/clinics/publicas") && "GET".equalsIgnoreCase(req.getMethod())) {
+            chain.doFilter(req, res);
+            return;
+        }
+
         if (path.startsWith("/auth/") || path.startsWith("/swagger-ui")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-resources")

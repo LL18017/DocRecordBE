@@ -98,6 +98,11 @@ public class BasicConfiguration {
                         // Es seguro abrirlo: son nombres de especialidades
                         // medicas, sin dato personal alguno.
                         .requestMatchers(HttpMethod.GET, "/especialidades").permitAll()
+                        // El mapa de la red (HU-28) lo abre un paciente o un
+                        // visitante sin cuenta. Solo lectura y solo clinicas
+                        // ACTIVAS, con su direccion publica: nada del dueño ni
+                        // del personal (ver ClinicaPublicaDto).
+                        .requestMatchers(HttpMethod.GET, "/clinics/publicas").permitAll()
                         // Swagger no pasa por aqui: lo atiende su propia cadena,
                         // antes que esta (ver ConfiguracionDeSwagger).
                         .anyRequest().authenticated()
