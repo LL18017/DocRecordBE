@@ -26,10 +26,10 @@ dentro de la instancia y no salen de ella.
 
 ```bash
 ssh -i <tu-llave>.pem ubuntu@<ip>
-cd /opt/docrecord && ./desplegar.sh dev-naun
+cd /opt/docrecord && ./desplegar.sh main
 ```
 
-Lo hace también GitHub Actions en cada push a `dev-naun`, pero solo si las
+Lo hace también GitHub Actions en cada push a `main`, pero solo si las
 pruebas pasan: el job de despliegue depende del workflow CI.
 
 ## Levantar un servidor desde cero
@@ -39,7 +39,7 @@ Suponiendo Ubuntu con Docker instalado y el usuario en el grupo `docker`:
 ```bash
 sudo install -d -o ubuntu -g ubuntu /opt/docrecord
 cd /opt/docrecord
-git clone --depth 1 --branch dev-naun https://github.com/LL18017/DocRecordBE.git
+git clone --depth 1 --branch main https://github.com/LL18017/DocRecordBE.git
 cp DocRecordBE/despliegue/desplegar.sh .
 chmod +x desplegar.sh
 ```
@@ -64,15 +64,25 @@ umask 077
   echo "DOMINIO_API=<dominio de la API>"
   echo "PUBLIC_URL=https://<dominio de la aplicación>"
   echo 'JPA_SHOW_SQL="false"'
+  # Credenciales de Swagger (TT-03): se le entregan a quien deba probar la API.
+  echo "SWAGGER_USER=<usuario para Swagger>"
+  echo "SWAGGER_PASSWORD=$(openssl rand -base64 18 | tr -d '/+=')"
 } > .env
 chmod 600 .env
 
-./desplegar.sh dev-naun
+./desplegar.sh main
 ```
 
 `ADMIN_EMAIL` y `ADMIN_PASSWORD` los usa `AdminBootstrap` para crear el primer
 administrador, y **solo si todavía no existe ninguno**: cambiarlos después y
 reiniciar no toca la cuenta ya creada. Para eso está `cambiar-clave-admin.sh`.
+
+`SWAGGER_USER` y `SWAGGER_PASSWORD` protegen Swagger con HTTP Basic: en
+producción la documentación de la API no queda expuesta (TT-03, criterio 4).
+**Si faltan, Swagger queda cerrado del todo**, no abierto —`docker-compose.prod.yml`
+fija `SWAGGER_PUBLICO=false`—. Para agregarlas a un servidor ya desplegado basta
+con añadir las dos líneas al `.env` y volver a correr `./desplegar.sh main`.
+No son cuentas del sistema: no sirven para entrar a la aplicación ni a la API.
 
 ## Requisitos del servidor
 

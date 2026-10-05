@@ -107,7 +107,7 @@ class PermisosDeAntecedentesYCitasIT extends PruebaClinica {
     void unPacienteNoLeeElRestoDeAntecedentesNiCitas() throws Exception {
         for (String ruta : new String[]{
                 "/api/enfermedades-cronicas/usuario/" + idDelPaciente,
-                "/api/condiciones-hereditarias/usuario/" + idDelPaciente,
+                "/condiciones-hereditarias?pacienteId=" + idDelPaciente,
                 "/citas/paciente/" + idDelPaciente,
                 "/tipos-cita"}) {
             mockMvc.perform(get(ruta).header("Authorization", bearer(paciente)))

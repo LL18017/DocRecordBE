@@ -40,5 +40,14 @@ public record UserResponseDto(
          * booleano y no como texto porque en la base es exactamente eso: dos
          * valores, sin un tercero previsto.
          */
-        Boolean activo) {
+        Boolean activo,
+
+        /**
+         * Cuantas sedes tiene asignadas la cuenta.
+         *
+         * Lo usa la pantalla para avisar de un medico o una enfermera sin
+         * sede, que no puede entrar a trabajar en ninguna. Null cuando el
+         * endpoint no lo calculo: no es lo mismo que cero.
+         */
+        Integer sedes) {
 }

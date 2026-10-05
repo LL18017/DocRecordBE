@@ -3,7 +3,7 @@
 # Despliegue de DocRecord Sv. Idempotente: se puede correr cuantas veces haga
 # falta.
 #
-#   ./desplegar.sh            despliega la rama por defecto (dev-naun)
+#   ./desplegar.sh            despliega la rama por defecto (main)
 #   ./desplegar.sh otra-rama  despliega otra rama
 #
 # Trae el codigo de GitHub, actualiza la configuracion de despliegue,
@@ -21,7 +21,7 @@
 # ----------------------------------------------------------------------------
 set -euo pipefail
 
-RAMA="${1:-dev-naun}"
+RAMA="${1:-main}"
 RAIZ=/opt/docrecord
 COMPOSE="docker compose -f docker-compose.prod.yml"
 cd "$RAIZ"
@@ -64,7 +64,11 @@ for repo in DocRecordBE DocRecordFE; do
   url="https://github.com/LL18017/$repo.git"
   if [ -d "$repo/.git" ]; then
     echo "== $repo: actualizando a $RAMA"
-    git -C "$repo" fetch --depth 1 origin "$RAMA"
+    # Refspec explicito, y no solo el nombre de la rama: un clon hecho con
+    # --branch es de una sola rama, y `fetch origin otra-rama` no crearia
+    # origin/otra-rama. Asi el reset de abajo encuentra la rama aunque el
+    # clon se haya creado siguiendo otra.
+    git -C "$repo" fetch --depth 1 origin "+refs/heads/$RAMA:refs/remotes/origin/$RAMA"
     # reset --hard y no merge: este clon no es un area de trabajo, es un
     # reflejo de lo que hay en GitHub. Si alguien edito un archivo aqui a mano
     # se pierde, y eso es lo correcto: lo contrario seria desplegar algo que no

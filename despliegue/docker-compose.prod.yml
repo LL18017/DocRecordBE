@@ -12,8 +12,8 @@
 #     docker-compose.prod.yml  este archivo
 #     nginx.conf
 #     desplegar.sh
-#     DocRecordBE/             clon, rama dev-naun
-#     DocRecordFE/             clon, rama dev-naun
+#     DocRecordBE/             clon, rama main
+#     DocRecordFE/             clon, rama main
 #
 # Solo nginx publica un puerto. Postgres, el backend y el frontend viven en la
 # red interna de Docker y NO son alcanzables desde internet: por eso el
@@ -74,11 +74,21 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       # Lo usan los correos que enlazan de vuelta a la aplicacion.
       FRONTEND_URL: ${PUBLIC_URL}
+      # La API, como la ve el navegador: bajo /api del mismo dominio (ver el
+      # Caddyfile). Con ella se arma el enlace del correo de confirmacion.
+      API_PUBLIC_URL: ${PUBLIC_URL}/api
       # En desarrollo el eco de SQL ayuda; aqui solo llena el disco y publica
       # el esquema en los registros. Los valores no se imprimen -- las
       # consultas salen con ? --, asi que no es una fuga de datos clinicos,
       # pero tampoco hay razon para escribirlo.
       JPA_SHOW_SQL: "false"
+      # Swagger sigue abierto en produccion por decision del equipo (3 oct):
+      # la proteccion de TT-03, criterio 4, queda lista pero sin activar.
+      # Para activarla: SWAGGER_PUBLICO "false" aqui, y SWAGGER_USER y
+      # SWAGGER_PASSWORD en el .env del servidor (si faltan, queda cerrado).
+      SWAGGER_PUBLICO: "true"
+      SWAGGER_USER: ${SWAGGER_USER:-}
+      SWAGGER_PASSWORD: ${SWAGGER_PASSWORD:-}
       # Sin limite explicito la JVM toma un porcentaje de la RAM visible y
       # reserva el resto en nativo, lo que en una maquina compartida con
       # Postgres y Node termina en OOM. SerialGC en vez de G1 porque con pocos

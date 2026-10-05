@@ -10,7 +10,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.auth.CustomUserDetails;
@@ -43,6 +42,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthService {
     private final UserRepository userRepository;
+    private final EnlaceDeConfirmacion enlaceDeConfirmacion;
     private final PersonaRepository personaRepository;
     private final EspecialidadRepository especialidadRepository;
     private final MedicoRepository medicoRepository;
@@ -264,10 +264,7 @@ public class AuthService {
      * @return true si el correo salio; false si el envio fallo.
      */
     private boolean enviarCorreoDeVerificacion(String toEmail, String nombre, String token) {
-        String link = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/auth/confirm")
-                .queryParam("token", token)
-                .toUriString();
+        String link = enlaceDeConfirmacion.para(token);
 
         // HashMap y no Map.of porque el nombre puede venir vacio y Map.of no
         // acepta valores nulos; la plantilla ya sabe saludar sin nombre.
