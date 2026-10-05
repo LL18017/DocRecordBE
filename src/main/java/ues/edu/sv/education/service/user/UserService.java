@@ -28,6 +28,7 @@ import ues.edu.sv.education.model.mappers.ClinicaMapper;
 import ues.edu.sv.education.model.mappers.UserMapper;
 import ues.edu.sv.education.repository.MedicoRepository;
 import ues.edu.sv.education.repository.proyeccion.EspecialidadDePersona;
+import ues.edu.sv.education.repository.proyeccion.SedesDeUsuario;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.EnfermeraRepository;
 import ues.edu.sv.education.repository.EspecialidadRepository;
@@ -101,8 +102,21 @@ public class UserService {
                                 EspecialidadDePersona::personaId,
                                 EspecialidadDePersona::especialidad));
 
+        // Las sedes de toda la pagina, tambien en una consulta: con ellas la
+        // pantalla avisa de un medico o una enfermera sin sede.
+        List<Integer> userIds = usuarios.stream().map(User::getUserID).toList();
+        Map<Integer, Integer> sedes = userIds.isEmpty()
+                ? Map.of()
+                : userRepository.sedesDe(userIds).stream()
+                        .collect(Collectors.toMap(
+                                SedesDeUsuario::userId,
+                                s -> s.sedes().intValue()));
+
         return usuarios.stream()
-                .map(u -> UserMapper.toDto(u, especialidades.get(u.getPersona().getPersonaId())))
+                .map(u -> UserMapper.toDto(
+                        u,
+                        especialidades.get(u.getPersona().getPersonaId()),
+                        sedes.getOrDefault(u.getUserID(), 0)))
                 .toList();
     }
 
@@ -151,7 +165,7 @@ public class UserService {
     // justo el estado que deja a alguien pasando el hasRole y recibiendo 403
     // del servicio, sin forma de entender por que.
     @Transactional
-    public UserResponseDto addRole(int userID, int roleID, Long especialidadId) {
+    public UserResponseDto addRole(int userID, int roleID, Long especialidadId, Integer clinicaId) {
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
             throw new NoResourceFoundException("No se encontro el usuario con id: " + userID, "404");
@@ -163,6 +177,13 @@ public class UserService {
         User user = userOpt.get();
         Role role = roleOpt.get();
         boolean esMedico = RolesEnum.MEDICO.getId() == roleID;
+        // La sede del alta. Se resuelve antes de tocar nada: una clinica que no
+        // existe tiene que dar 404 sin dejar el rol puesto a medias.
+        Clinicas sede = clinicaId == null
+                ? null
+                : clinicaRepository.findById(clinicaId)
+                        .orElseThrow(() -> new NoResourceFoundException(
+                                "No se encontro la clinica con id: " + clinicaId, "404"));
         Optional<Medico> ficha = esMedico
                 ? medicoRepository.findById(user.getPersona().getPersonaId())
                 : Optional.empty();
@@ -172,7 +193,8 @@ public class UserService {
             // ficha: volver a darlo con la especialidad las repara.
             if (esMedico && ficha.isEmpty() && especialidadId != null) {
                 Medico creada = asegurarFichaDeMedico(user, ficha, especialidadId);
-                return UserMapper.toDto(user, creada.getEspecialidad().getNombre());
+                asignarSedeSiFalta(user, sede);
+                return UserMapper.toDto(user, creada.getEspecialidad().getNombre(), sedesDe(user));
             }
             throw new GeneralException("El usuario ya cuenta con este rol", "409");
         }
@@ -183,8 +205,18 @@ public class UserService {
             throw new GeneralException(
                     "Para dar el rol de médico hay que indicar su especialidad", "400");
         }
+        // Un medico o una enfermera trabaja en una sede: sin ninguna, la cuenta
+        // se queda en la pantalla de seleccion de clinica sin poder entrar. Por
+        // eso, a quien todavia no tiene sede, el rol clinico se da junto con
+        // la primera.
+        boolean esRolClinico = esMedico || RolesEnum.ENFERMERA.getId() == roleID;
+        if (esRolClinico && sedesDe(user) == 0 && sede == null) {
+            throw new GeneralException(
+                    "Un médico o una enfermera necesita al menos una sede: indique en cuál va a trabajar", "400");
+        }
 
         user.getRoles().add(role);
+        asignarSedeSiFalta(user, sede);
         userRepository.save(user);
 
         // Asignar un rol clinico crea tambien su ficha: `enfermeras` para
@@ -204,10 +236,34 @@ public class UserService {
         }
         if (esMedico) {
             Medico medico = asegurarFichaDeMedico(user, ficha, especialidadId);
-            return UserMapper.toDto(user, medico.getEspecialidad().getNombre());
+            return UserMapper.toDto(user, medico.getEspecialidad().getNombre(), sedesDe(user));
         }
 
-        return UserMapper.toDto(user);
+        return UserMapper.toDto(user, null, sedesDe(user));
+    }
+
+    /** Agrega la sede a la cuenta si viene y si aun no la tenia. */
+    private static void asignarSedeSiFalta(User user, Clinicas sede) {
+        if (sede == null) return;
+        if (user.getClinicasAsignadas() == null) {
+            user.setClinicasAsignadas(new HashSet<>());
+        }
+        boolean yaLaTiene = user.getClinicasAsignadas().stream()
+                .anyMatch(c -> Objects.equals(c.getClinicaId(), sede.getClinicaId()));
+        if (!yaLaTiene) {
+            user.getClinicasAsignadas().add(sede);
+        }
+    }
+
+    /** Sedes de la cuenta. Solo dentro de una transaccion: la coleccion es LAZY. */
+    private static int sedesDe(User user) {
+        return user.getClinicasAsignadas() == null ? 0 : user.getClinicasAsignadas().size();
+    }
+
+    private static boolean esPersonalClinico(User user) {
+        return user.getRoles().stream().anyMatch(r ->
+                RolesEnum.MEDICO.getName().equals(r.getName())
+                        || RolesEnum.ENFERMERA.getName().equals(r.getName()));
     }
 
     /**
@@ -370,7 +426,7 @@ public class UserService {
         user.getClinicasAsignadas().add(clinica);
         userRepository.save(user);
 
-        return UserMapper.toDto(user);
+        return UserMapper.toDto(user, null, sedesDe(user));
     }
 
     /**
@@ -409,6 +465,16 @@ public class UserService {
                 .orElseThrow(() -> new NoResourceFoundException(
                         "No se encontro el usuario con id: " + userId, "404"));
 
+        // La ultima sede de un medico o una enfermera no se quita: sin ninguna,
+        // la cuenta no puede entrar a trabajar (ver addRole). Se asigna otra
+        // primero, y despues se quita esta.
+        boolean esSuUnicaSede = sedesDe(user) == 1 && user.getClinicasAsignadas().stream()
+                .anyMatch(c -> Objects.equals(c.getClinicaId(), clinicaId));
+        if (esSuUnicaSede && esPersonalClinico(user)) {
+            throw new GeneralException(
+                    "No se puede quitar la única sede de un médico o una enfermera: asígnele otra antes", "409");
+        }
+
         boolean estaba = user.getClinicasAsignadas() != null
                 && user.getClinicasAsignadas()
                         .removeIf(c -> Objects.equals(c.getClinicaId(), clinicaId));
@@ -420,7 +486,7 @@ public class UserService {
 
         userRepository.save(user);
 
-        return UserMapper.toDto(user);
+        return UserMapper.toDto(user, null, sedesDe(user));
     }
 
     /**
