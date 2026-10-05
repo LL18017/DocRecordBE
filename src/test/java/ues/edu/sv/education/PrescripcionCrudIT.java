@@ -37,11 +37,23 @@ class PrescripcionCrudIT extends PruebaClinica {
     private long paciente;
     private long consultaId;
 
+    // Medicamentos del catalogo sembrado por V22. Desde HU-23 una receta solo
+    // se emite con medicamentos del catalogo; estas pruebas no tratan de el,
+    // asi que usan tres productos que siempre estan ahi y nadie desactiva
+    // (CatalogoDeMedicamentosIT crea los suyos propios para eso).
+    private long amoxicilina;
+    private long paracetamol;
+    private long loratadina;
+
     @BeforeEach
     void prepararUnaConsulta() throws Exception {
         medico = tokenDeMedico();
         paciente = crearPaciente(medico);
         consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
+
+        amoxicilina = delCatalogo("Amoxil", "Cápsula");
+        paracetamol = delCatalogo("Panadol", "Tableta");
+        loratadina = delCatalogo("Clarityne", "Tableta");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -65,8 +77,8 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .content("{\"consultaId\":%d}".formatted(consultaId)))
                 .andExpect(status().isBadRequest());
 
-        // Un renglon sin nombre de medicamento no llena la receta: no indica
-        // nada, solo ocupa lugar.
+        // Un renglon sin medicamento no llena la receta: no indica nada, solo
+        // ocupa lugar.
         mockMvc.perform(post("/prescripciones")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -94,9 +106,9 @@ class PrescripcionCrudIT extends PruebaClinica {
 
         JsonNode receta = emitir(medico, """
                 {"consultaId":%d,"medicoId":%d,
-                 "medicamentos":[{"medicamento":"Amoxicilina 500 mg","dosis":"1 tableta",
+                 "medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta",
                                   "frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
-                """.formatted(consultaId, idDelOtroMedico));
+                """.formatted(consultaId, idDelOtroMedico, amoxicilina));
 
         assertNotEquals(idDelOtroMedico, receta.get("medico").get("personaId").asLong(),
                 "la receta quedo firmada por el medico que venia en el cuerpo");
@@ -111,8 +123,8 @@ class PrescripcionCrudIT extends PruebaClinica {
         String medicoDeGuardia = tokenDeMedico();
 
         JsonNode receta = emitir(medicoDeGuardia, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Ibuprofeno 400 mg"}]}
-                """.formatted(consultaId));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina));
 
         long medicoQueAtendio = json.readTree(
                 mockMvc.perform(get("/consultas/{id}", consultaId).header("Authorization", bearer(medico)))
@@ -132,21 +144,23 @@ class PrescripcionCrudIT extends PruebaClinica {
     void laRecetaGuardaCadaRenglon() throws Exception {
         JsonNode receta = emitir(medico, """
                 {"consultaId":%d,"medicamentos":[
-                   {"medicamento":"Amoxicilina 500 mg","dosis":"1 tableta","frecuencia":"Cada 8 horas","duracion":"7 dias"},
-                   {"medicamento":"Suspender el antibiotico anterior"}
+                   {"medicamentoId":%d,"dosis":"1 tableta","frecuencia":"Cada 8 horas","duracion":"7 dias"},
+                   {"medicamentoId":%d}
                 ]}
-                """.formatted(consultaId));
+                """.formatted(consultaId, amoxicilina, loratadina));
 
         JsonNode renglones = receta.get("medicamentos");
         assertEquals(2, renglones.size());
 
         assertNotNull(renglones.get(0).get("id"));
-        assertEquals("Amoxicilina 500 mg", renglones.get(0).get("medicamento").asText());
+        // El nombre lo pone el servidor desde el catalogo, no el cliente.
+        assertEquals(amoxicilina, renglones.get(0).get("medicamentoId").asLong());
+        assertEquals("Amoxicilina 500 mg (Amoxil), Cápsula", renglones.get(0).get("medicamento").asText());
         assertEquals("Cada 8 horas", renglones.get(0).get("frecuencia").asText());
         assertEquals("7 dias", renglones.get(0).get("duracion").asText());
 
         // Una indicacion sin dosis es legitima y debe poder guardarse.
-        assertEquals("Suspender el antibiotico anterior", renglones.get(1).get("medicamento").asText());
+        assertEquals(loratadina, renglones.get(1).get("medicamentoId").asLong());
         assertTrue(renglones.get(1).get("dosis").isNull());
 
         assertEquals(consultaId, receta.get("consultaId").asLong());
@@ -160,13 +174,13 @@ class PrescripcionCrudIT extends PruebaClinica {
     @DisplayName("no se puede borrar una consulta, y sus recetas siguen ahi")
     void noSePuedeBorrarUnaConsultaNiArrastrarSusRecetas() throws Exception {
         long primera = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"},
-                                                 {"medicamento":"Paracetamol 500 mg"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d},
+                                                 {"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina, paracetamol)).get("prescripcionId").asLong();
 
         long segunda = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Loratadina 10 mg"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, loratadina)).get("prescripcionId").asLong();
 
         assertEquals(3, medicamentosGuardados(primera, segunda), "no se guardaron los renglones");
 
@@ -205,14 +219,14 @@ class PrescripcionCrudIT extends PruebaClinica {
         long consultaAjena = crearConsultaSimple(medico, otroPaciente).get("consultaId").asLong();
 
         long primera = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long segunda = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Loratadina 10 mg"}]}
-                """.formatted(otraConsulta)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(otraConsulta, loratadina)).get("prescripcionId").asLong();
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Receta de otro paciente"}]}
-                """.formatted(consultaAjena));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaAjena, amoxicilina));
 
         JsonNode delPaciente = contenidoDe(mockMvc.perform(get("/prescripciones")
                         .param("pacienteId", String.valueOf(paciente))
@@ -245,14 +259,14 @@ class PrescripcionCrudIT extends PruebaClinica {
         long suConsulta = consultaDeOtroMedico.get("consultaId").asLong();
 
         long recetaDelOtroMedico = emitir(otroMedico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Metformina 850 mg"}]}
-                """.formatted(suConsulta)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(suConsulta, amoxicilina)).get("prescripcionId").asLong();
 
         // El medico del setUp receta al MISMO paciente, para probar que el
         // filtro es por medico y no se cuela por compartir paciente.
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                """.formatted(consultaId));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina));
 
         JsonNode delMedico = contenidoDe(mockMvc.perform(get("/prescripciones")
                         .param("medicoId", String.valueOf(medicoId))
@@ -272,11 +286,11 @@ class PrescripcionCrudIT extends PruebaClinica {
         long medicoBId = consultaDeB.get("medico").get("personaId").asLong();
 
         long recetaDeA = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long recetaDeB = emitir(medicoB, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Losartan 50 mg"}]}
-                """.formatted(consultaDeB.get("consultaId").asLong())).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaDeB.get("consultaId").asLong(), amoxicilina)).get("prescripcionId").asLong();
 
         JsonNode combinado = contenidoDe(mockMvc.perform(get("/prescripciones")
                         .param("pacienteId", String.valueOf(paciente))
@@ -297,8 +311,8 @@ class PrescripcionCrudIT extends PruebaClinica {
         LocalDate dia = LocalDate.of(2024, 3, 10);
 
         long enElLimiteDeHasta = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Justo en el limite de hasta"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         // El caso critico: 23:59:59.999 del MISMO dia que "hasta". Un filtro
         // ingenuo (fecha <= hasta interpretado como las 00:00:00 de hasta) se
         // comeria esta receta, aunque "hasta ese dia" claramente deberia
@@ -306,13 +320,13 @@ class PrescripcionCrudIT extends PruebaClinica {
         fijarFecha(enElLimiteDeHasta, dia.atTime(23, 59, 59, 999_000_000));
 
         long unDiaAntesDeDesde = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Un dia antes del rango"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(unDiaAntesDeDesde, dia.minusDays(1).atTime(23, 59, 59));
 
         long justoDespuesDeHasta = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Un instante despues del rango"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(justoDespuesDeHasta, dia.plusDays(1).atStartOfDay().plusNanos(1000));
 
         JsonNode delRango = contenidoDe(mockMvc.perform(get("/prescripciones")
@@ -332,14 +346,14 @@ class PrescripcionCrudIT extends PruebaClinica {
     @DisplayName("el orden es de la receta mas reciente a la mas antigua, no el orden de insercion")
     void elOrdenEsDescendentePorFechaNoPorInsercion() throws Exception {
         long antigua = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"La mas antigua"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long reciente = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"La mas reciente"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long intermedia = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"La intermedia"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
 
         // Se insertaron en el orden antigua -> reciente -> intermedia: ni el
         // orden de insercion ni el de prescripcionId coinciden con el orden
@@ -374,8 +388,8 @@ class PrescripcionCrudIT extends PruebaClinica {
 
         long suConsulta = crearConsultaSimple(medico, personaIdPaciente).get("consultaId").asLong();
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                """.formatted(suConsulta));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(suConsulta, amoxicilina));
 
         JsonNode contenido = contenidoDe(mockMvc.perform(get("/prescripciones")
                         .param("pacienteId", String.valueOf(personaIdPaciente))
@@ -402,11 +416,11 @@ class PrescripcionCrudIT extends PruebaClinica {
         long otraConsulta = crearConsultaSimple(otroMedico, otroPaciente).get("consultaId").asLong();
 
         long recetaDeA = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long recetaDeB = emitir(otroMedico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Losartan 50 mg"}]}
-                """.formatted(otraConsulta)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(otraConsulta, amoxicilina)).get("prescripcionId").asLong();
 
         // Pagina grande a proposito: no se puede exigir un totalElementos
         // exacto porque la base de pruebas se recrea una vez por CORRIDA
@@ -448,14 +462,14 @@ class PrescripcionCrudIT extends PruebaClinica {
         long consulta1 = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
         long consulta2 = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Uno"}]}
-                """.formatted(consultaId));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina));
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Dos"}]}
-                """.formatted(consulta1));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consulta1, amoxicilina));
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Tres"}]}
-                """.formatted(consulta2));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consulta2, amoxicilina));
 
         JsonNode primeraPagina = json.readTree(mockMvc.perform(get("/prescripciones")
                         .param("pacienteId", String.valueOf(paciente))
@@ -554,8 +568,8 @@ class PrescripcionCrudIT extends PruebaClinica {
         // vacio y el total verdadero, no un 404 ni un 500 por indice fuera de
         // rango.
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Unica receta de esta prueba"}]}
-                """.formatted(consultaId));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina));
 
         JsonNode respuesta = json.readTree(mockMvc.perform(get("/prescripciones")
                         .param("pacienteId", String.valueOf(paciente))
@@ -590,13 +604,13 @@ class PrescripcionCrudIT extends PruebaClinica {
         LocalDate dia = LocalDate.of(2024, 7, 1);
 
         long enElInicioDeDesde = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Justo al inicio de desde"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(enElInicioDeDesde, dia.atStartOfDay());
 
         long unInstanteAntes = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Un instante antes de desde"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(unInstanteAntes, dia.atStartOfDay().minusNanos(1000));
 
         JsonNode delRango = contenidoDe(mockMvc.perform(get("/prescripciones")
@@ -619,8 +633,8 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":9999999,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                                """))
+                                {"consultaId":9999999,"medicamentos":[{"medicamentoId":%d}]}
+                                """.formatted(amoxicilina)))
                 .andExpect(status().isNotFound());
     }
 
@@ -636,8 +650,8 @@ class PrescripcionCrudIT extends PruebaClinica {
         String enfermera = tokenDeEnfermera();
 
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                """.formatted(consultaId));
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina));
 
         mockMvc.perform(get("/prescripciones").param("consultaId", String.valueOf(consultaId))
                         .header("Authorization", bearer(enfermera)))
@@ -647,8 +661,8 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(enfermera))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                                """.formatted(consultaId)))
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                                """.formatted(consultaId, amoxicilina)))
                 .andExpect(status().isForbidden());
 
         assertEquals(1, recetasDeLaConsulta().size(), "la enfermera emitio una receta");
@@ -663,8 +677,8 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"}]}
-                                """.formatted(consultaId)))
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                                """.formatted(consultaId, amoxicilina)))
                 .andExpect(status().isForbidden());
 
         assertEquals(0, recetasDeLaConsulta().size());
@@ -674,9 +688,9 @@ class PrescripcionCrudIT extends PruebaClinica {
     @DisplayName("anular una receta la borra con todos sus medicamentos")
     void anularUnaRecetaLaBorraEntera() throws Exception {
         long recetaId = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamento":"Amoxicilina 500 mg"},
-                                                 {"medicamento":"Paracetamol 500 mg"}]}
-                """.formatted(consultaId)).get("prescripcionId").asLong();
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d},
+                                                 {"medicamentoId":%d}]}
+                """.formatted(consultaId, amoxicilina, paracetamol)).get("prescripcionId").asLong();
 
         mockMvc.perform(delete("/prescripciones/{id}", recetaId).header("Authorization", bearer(medico)))
                 .andExpect(status().isNoContent());
@@ -746,6 +760,15 @@ class PrescripcionCrudIT extends PruebaClinica {
                 .andReturn().getResponse().getContentAsString();
 
         return json.readTree(cuerpo);
+    }
+
+    /** Id de un medicamento sembrado por V22, por su nombre comercial y presentacion. */
+    private long delCatalogo(String nombreComercial, String presentacion) {
+        Long id = jdbc.queryForObject(
+                "SELECT medicamento_id FROM medicamentos WHERE nombre_comercial = ? AND presentacion = ?",
+                Long.class, nombreComercial, presentacion);
+        assertNotNull(id, "falta " + nombreComercial + " en el catalogo sembrado");
+        return id;
     }
 
     private int medicamentosGuardados(long unaReceta, long otraReceta) {
