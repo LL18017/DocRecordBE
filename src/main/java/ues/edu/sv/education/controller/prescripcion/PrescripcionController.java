@@ -47,7 +47,9 @@ public class PrescripcionController {
     @Operation(
             summary = "Emitir una receta",
             description = "Firma el medico autenticado, no un medicoId del cuerpo. "
-                    + "400 si la lista de medicamentos viene vacia; 404 si la consulta no existe."
+                    + "Cada medicamento se elige del catalogo por su medicamentoId (GET /medicamentos). "
+                    + "400 si la lista de medicamentos viene vacia o si un medicamento no existe en el "
+                    + "catalogo o esta desactivado; 404 si la consulta no existe."
     )
     @PostMapping
     @PreAuthorize("hasRole('MEDICO')")

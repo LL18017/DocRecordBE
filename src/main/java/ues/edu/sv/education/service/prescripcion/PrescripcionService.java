@@ -17,12 +17,14 @@ import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.model.entity.Consulta;
+import ues.edu.sv.education.model.entity.Medicamento;
 import ues.edu.sv.education.model.entity.Medico;
 import ues.edu.sv.education.model.entity.Paciente;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.Prescripcion;
 import ues.edu.sv.education.model.entity.PrescripcionMedicamento;
 import ues.edu.sv.education.repository.ConsultaRepository;
+import ues.edu.sv.education.repository.MedicamentoRepository;
 import ues.edu.sv.education.repository.PrescripcionRepository;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
@@ -30,6 +32,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Prescripciones (epica E7).
@@ -44,6 +49,7 @@ public class PrescripcionService {
 
     private final PrescripcionRepository prescripcionRepository;
     private final ConsultaRepository consultaRepository;
+    private final MedicamentoRepository medicamentoRepository;
     private final MedicoAutenticado medicoAutenticado;
 
     /**
@@ -71,6 +77,8 @@ public class PrescripcionService {
             throw new GeneralException("Una receta debe llevar al menos un medicamento", "422");
         }
 
+        Map<Long, Medicamento> catalogo = medicamentosRecetables(renglones);
+
         Prescripcion prescripcion = Prescripcion.builder()
                 .consulta(consulta)
                 .medico(medico)
@@ -79,8 +87,13 @@ public class PrescripcionService {
                 .build();
 
         for (MedicamentoRequestDto renglon : renglones) {
+            Medicamento medicamento = catalogo.get(renglon.medicamentoId());
             prescripcion.agregarMedicamento(PrescripcionMedicamento.builder()
-                    .medicamento(renglon.medicamento().trim())
+                    .catalogo(medicamento)
+                    // La foto del nombre (ver PrescripcionMedicamento.medicamento):
+                    // lo que dice la receta no depende de lo que diga el
+                    // catalogo manana.
+                    .medicamento(medicamento.descripcion())
                     .dosis(textoONull(renglon.dosis()))
                     .frecuencia(textoONull(renglon.frecuencia()))
                     .duracion(textoONull(renglon.duracion()))
@@ -229,6 +242,49 @@ public class PrescripcionService {
                 .orElseThrow(() -> new NoResourceFoundException("Receta no encontrada", "404"));
     }
 
+    /**
+     * Los medicamentos de la receta, resueltos contra el catalogo.
+     *
+     * HU-23 criterio 3: la receta no acepta valores fuera del catalogo. El
+     * formulario ya solo ofrece los del catalogo, pero un cliente puede mandar
+     * cualquier id, asi que la regla vive aqui.
+     *
+     * Criterio 4: un medicamento desactivado tampoco se acepta en una receta
+     * NUEVA. Las ya emitidas no pasan por aqui y lo siguen mostrando.
+     *
+     * Las dos negativas son 400 y no 404/409 porque lo que esta mal es el
+     * cuerpo de la peticion: la receta pide algo que no se puede recetar. Un
+     * 404 se leeria en el cliente como "la consulta ya no existe", que es lo
+     * que significa en este endpoint.
+     *
+     * Se resuelven todos en un solo viaje a la base (findAllById), no uno por
+     * renglon.
+     */
+    private Map<Long, Medicamento> medicamentosRecetables(List<MedicamentoRequestDto> renglones) {
+        // El @NotNull del DTO ya lo rechaza; se repite por lo mismo que la
+        // lista vacia: la regla es del dominio, no del formulario.
+        if (renglones.stream().anyMatch(r -> r == null || r.medicamentoId() == null)) {
+            throw new GeneralException("Elige el medicamento del catalogo", "400");
+        }
+        List<Long> ids = renglones.stream().map(MedicamentoRequestDto::medicamentoId).distinct().toList();
+        Map<Long, Medicamento> encontrados = medicamentoRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Medicamento::getMedicamentoId, Function.identity()));
+
+        for (Long id : ids) {
+            Medicamento medicamento = encontrados.get(id);
+            if (medicamento == null) {
+                throw new GeneralException(
+                        "El medicamento con codigo " + id + " no existe en el catalogo", "400");
+            }
+            if (!medicamento.isActivo()) {
+                throw new GeneralException(
+                        "El medicamento " + medicamento.descripcion()
+                                + " esta desactivado en el catalogo y ya no se puede recetar", "400");
+            }
+        }
+        return encontrados;
+    }
+
     private String textoONull(String valor) {
         return (valor == null || valor.isBlank()) ? null : valor.trim();
     }
@@ -244,6 +300,9 @@ public class PrescripcionService {
                 : prescripcion.getMedicamentos().stream()
                 .map(m -> new MedicamentoResponseDto(
                         m.getId(),
+                        // getMedicamentoId sobre el proxy perezoso no lo
+                        // inicializa: el id ya viene en la fila del renglon.
+                        m.getCatalogo() == null ? null : m.getCatalogo().getMedicamentoId(),
                         m.getMedicamento(),
                         m.getDosis(),
                         m.getFrecuencia(),
