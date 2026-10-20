@@ -30,8 +30,10 @@ public class FlywayBootstrap implements BeanPostProcessor {
         if (bean instanceof DataSource dataSource) {
             Flyway.configure()
                     .dataSource(dataSource)
+                    .baselineOnMigrate(true)
                     .load()
                     .migrate();
+
         }
         return bean;
     }
