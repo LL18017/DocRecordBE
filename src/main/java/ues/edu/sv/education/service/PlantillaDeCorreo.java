@@ -37,6 +37,10 @@ public enum PlantillaDeCorreo {
     EXTENSION_PRESCRIPCION(
         "extension-prescripcion",
                 "Actualización de tu prescripción médica"
+    ),
+    RECORDATORIO_CITA(
+        "recordatorio-cita",
+                "recordatorio de cita"
     );
 
     private final String nombreBase;

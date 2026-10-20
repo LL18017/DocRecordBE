@@ -130,6 +130,11 @@ public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long
     @Query("""
     SELECT p
     FROM Prescripcion p
+     JOIN FETCH p.medico med
+            JOIN FETCH med.persona
+            JOIN FETCH p.consulta c
+            JOIN FETCH c.paciente pac
+            JOIN FETCH pac.persona
     WHERE p.consulta.consultaId = :consultaId
 """)
     List<Prescripcion> buscarPorConsulta(Long consultaId);

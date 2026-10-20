@@ -6,12 +6,13 @@ import ues.edu.sv.education.model.dto.cita.CitaRequestDto;
 import ues.edu.sv.education.model.dto.cita.CitaResponseDto;
 import ues.edu.sv.education.model.dto.cita.CitaUpdateRequestDto;
 import ues.edu.sv.education.model.entity.Cita;
+import ues.edu.sv.education.model.entity.Event;
 import ues.edu.sv.education.model.entity.TipoCita;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.enums.EventCodeEnums;
+import ues.edu.sv.education.model.enums.EventStatusEnums;
 import ues.edu.sv.education.model.mappers.CitaMapper;
-import ues.edu.sv.education.repository.CitaRepository;
-import ues.edu.sv.education.repository.TipoCitaRepository;
-import ues.edu.sv.education.repository.UserRepository;
+import ues.edu.sv.education.repository.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +28,9 @@ public class CitaService {
     private final TipoCitaRepository tipoCitaRepository;
     private final UserRepository userRepository;
     private final CitaMapper citaMapper;
+    private final EventTypeRepository eventTypeRepository;
+    private final EventRepository eventRepository;
+    private final EventStatusRepository eventStatusRepository;
 
     public CitaResponseDto crear(CitaRequestDto dto) {
         LocalDateTime fecha = LocalDateTime.parse(dto.fechaHora());
@@ -56,6 +60,20 @@ public class CitaService {
 
         cita = citaRepository.save(cita);
 
+        Event event = Event.builder()
+                .eventType(
+                        eventTypeRepository.getReferenceById(EventCodeEnums.APPOINTMENT_CREATED.getId())
+                )
+                .description("Se ha realizado una cita")
+                .eventStatus(
+                        eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId())
+                )
+                .userEmail(cita.getPaciente().getPersona().getEmail())
+                .ref(String.valueOf(cita.getCitaId()))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        eventRepository.save(event);
         return citaMapper.toResponse(cita);
     }
 
