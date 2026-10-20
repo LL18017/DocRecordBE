@@ -19,18 +19,18 @@ import java.time.LocalDate;
 
 /**
  * Prescripciones (epica E7).
- *
+ * <p>
  * ── Quien puede que ────────────────────────────────────────────────────────
  * LEER: ADMIN, MEDICO y ENFERMERA. Enfermeria es justamente quien administra
  * lo recetado; una receta que la enfermera no puede leer no sirve de nada.
- *
+ * <p>
  * PRESCRIBIR: solo MEDICO. Aqui SI se deja fuera al ADMIN, a diferencia de las
  * consultas, y es deliberado: recetar no es un acto administrativo sino la
  * emision de un documento con responsable legal, y no existe "recetar en
  * nombre de". Un administrador que ademas ejerce tiene su rol MEDICO y entra
  * por ahi; uno que no ejerce no tiene nada que firmar. Aunque se colara, el
  * servicio exige fila en `medicos` para poner la firma.
- *
+ * <p>
  * ANULAR: ADMIN o MEDICO. Una receta mal capturada hay que poder quitarla, y
  * eso si es correccion de registro.
  */
@@ -50,12 +50,25 @@ public class PrescripcionController {
                     + "400 si la lista de medicamentos viene vacia; 404 si la consulta no existe."
     )
     @PostMapping
-    @PreAuthorize("hasRole('MEDICO')")
+    @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
     public ResponseEntity<PrescripcionResponseDto> crear(
             @Valid @RequestBody PrescripcionRequestDto request) {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(prescripcionService.crear(request));
+    }
+
+    @Operation(
+            summary = "Emitir una receta",
+            description = "Firma el medico autenticado, no un medicoId del cuerpo. "
+                    + "400 si la lista de medicamentos esta vacia; 404 si la consulta no existe."
+    )
+    @PostMapping("/enviar-receta/{consultaId}")
+    @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
+    public ResponseEntity<?> enviarReceta(
+            @Valid @PathVariable  Long consultaId) {
+        prescripcionService.enviarReceta(consultaId);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(

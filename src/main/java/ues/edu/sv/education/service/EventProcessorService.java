@@ -6,11 +6,19 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ues.edu.sv.education.controller.error.GeneralException;
+import ues.edu.sv.education.controller.error.NoResourceFoundException;
+import ues.edu.sv.education.model.entity.Consulta;
 import ues.edu.sv.education.model.entity.Event;
+import ues.edu.sv.education.model.entity.Prescripcion;
+import ues.edu.sv.education.model.entity.PrescripcionMedicamento;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
+import ues.edu.sv.education.repository.ConsultaRepository;
 import ues.edu.sv.education.repository.EventRepository;
 import ues.edu.sv.education.repository.EventStatusRepository;
+import ues.edu.sv.education.repository.PrescripcionRepository;
+import ues.edu.sv.education.service.prescripcion.ReportService;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -72,6 +80,9 @@ public class EventProcessorService {
     private final EventRepository eventRepository;
     private final EventStatusRepository eventStatusRepository;
     private final EmailService emailService;
+    private final PrescripcionRepository prescripcionRepository;
+    private final ConsultaRepository consultaRepository;
+    private final ReportService reportService;
 
     /**
      * Se construye a mano en vez de inyectar TransactionTemplate para no
@@ -81,11 +92,14 @@ public class EventProcessorService {
 
     public EventProcessorService(EventRepository eventRepository,
                                  EventStatusRepository eventStatusRepository,
-                                 EmailService emailService,
+                                 EmailService emailService, PrescripcionRepository prescripcionRepository, ConsultaRepository consultaRepository, ReportService reportService,
                                  PlatformTransactionManager gestorDeTransacciones) {
         this.eventRepository = eventRepository;
         this.eventStatusRepository = eventStatusRepository;
         this.emailService = emailService;
+        this.prescripcionRepository = prescripcionRepository;
+        this.consultaRepository = consultaRepository;
+        this.reportService = reportService;
         this.transacciones = new TransactionTemplate(gestorDeTransacciones);
     }
 
@@ -141,6 +155,55 @@ public class EventProcessorService {
     }
 
     /**
+     * El intervalo y el retraso inicial son configurables a proposito: las
+     * pruebas ponen un retraso inicial enorme para que el trabajo NO arranque
+     * solo. Si corriera de fondo, se llevaria los eventos que la prueba acaba de
+     * crear y el resultado dependeria de quien llegue primero.
+     */
+    @Scheduled(fixedDelayString = "${app.eventos.intervalo-ms:15000}",
+            initialDelayString = "${app.eventos.retraso-inicial-ms:0}")
+    public void processPreescripcionEvents() {
+
+        // Solo los identificadores: las entidades se releen dentro de la
+        // transaccion de cada evento, que es donde se van a modificar.
+        List<Integer> pendientes = eventRepository
+                .getEventByType(EventCodeEnums.PREESCRIPTION_SEND.getId(), EventStatusEnums.PENDING.getId())
+                .stream()
+                .map(Event::getEventId)
+                .toList();
+
+        if (pendientes.isEmpty()) {
+            // A nivel debug y no con System.out.println: esto corre cada 15
+            // segundos y la inmensa mayoria de las veces no hay nada que hacer.
+            // Escribirlo siempre a la consola solo sirve para enterrar los
+            // mensajes que si importan.
+            log.debug("Sin ENVIO DE PREESCRIPCIONES");
+            return;
+        }
+
+        log.debug("Procesando {} evento(s) PREESCRIPCIONES", pendientes.size());
+
+        for (Integer eventoId : pendientes) {
+            try {
+                transacciones.executeWithoutResult(estado -> notificarPreescripcion(eventoId));
+
+            } catch (MailException ex) {
+                log.error("No se pudo enviar el aviso DE PREESCRIPCIONES del evento {}. Queda marcado PENDIENTE"
+                        + "aviso.", eventoId, ex);
+
+            } catch (RuntimeException ex) {
+                // Un evento envenenado no puede detener la cola ni repetirse
+                // cada 15 segundos, pero tampoco puede pasar desapercibido: va
+                // a error y con la palabra DEFECTO, porque esto se corrige en el
+                // codigo, no esperando a que Gmail se recupere.
+                marcarComoFallido(eventoId);
+                log.error("DEFECTO al procesar el evento {}: fallo algo que no es el envio de correo. "
+                        + "Queda marcado como FAILED; hay que corregir el codigo.", eventoId, ex);
+            }
+        }
+    }
+
+    /**
      * Manda el aviso de un evento concreto y lo deja como PROCESSED.
      *
      * Ya no se pasa por PROCESSING: al vivir todo dentro de una transaccion, ese
@@ -168,6 +231,42 @@ public class EventProcessorService {
         eventRepository.save(evento);
     }
 
+    private void notificarPreescripcion(Integer eventoId) {
+
+        Event evento = eventRepository.findById(eventoId)
+                .orElseThrow(() -> new NoResourceFoundException("El evento " + eventoId + " ya no existe"));
+        long consultaId;
+        try {
+            consultaId=Long.parseLong(evento.getRef());
+        }catch (Exception E){
+            throw new GeneralException("Error al obtener el id de referencia del evento "+evento.getEventId(),"409");
+        }
+
+        Consulta consulta = consultaRepository.findById(consultaId)
+                .orElseThrow(() -> new NoResourceFoundException("la consulta " + consultaId + " ya no existe"));
+
+        List<Prescripcion> preescripcion = prescripcionRepository.buscarPorConsulta(consultaId);
+        List<PrescripcionMedicamento> med=preescripcion.stream().flatMap((p)->p.getMedicamentos().stream()).toList();
+        Map<String, Object> datos = new HashMap<>();
+        datos.put("correo", evento.getUserEmail());
+        datos.put("fecha", FECHA_LEGIBLE.format(evento.getCreatedAt()));
+        datos.put("nombrePaciente", consulta.getPaciente().getPersona().getNombres());
+        datos.put("nombreMedico", consulta.getMedico().getPersona().getNombres());
+        datos.put("medicamentos", med);
+        byte[] pdf = reportService.generarPreescripcionPdf(
+                consulta.getPaciente().getPersona().getNombres(),
+                consulta.getMedico().getPersona().getNombres(),
+                FECHA_LEGIBLE.format(evento.getCreatedAt()),
+                med
+        );
+
+        emailService.enviarCorreo(evento.getUserEmail(), PlantillaDeCorreo.NUEVA_PRESCRIPCION, datos,pdf,"receta");
+
+        evento.setEventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PROCESSED.getId()));
+        evento.setProcessedAt(LocalDateTime.now());
+        eventRepository.save(evento);
+    }
+
     /**
      * Deja el evento en FAILED, en una transaccion NUEVA.
      *
@@ -188,4 +287,6 @@ public class EventProcessorService {
                     + "pendiente en la proxima pasada.", eventoId, ex);
         }
     }
+
+
 }

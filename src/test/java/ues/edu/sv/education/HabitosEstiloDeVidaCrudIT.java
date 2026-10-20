@@ -11,11 +11,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Pruebas de integración de hábitos de estilo de vida y tipos de hábito.
- *
- * Utiliza la API real, autenticación JWT y datos creados durante cada prueba.
- */
+/// **
+// * Pruebas de integración de hábitos de estilo de vida y tipos de hábito.
+// *
+// * Utiliza la API real, autenticación JWT y datos creados durante cada prueba.
+// */
 class HabitosEstiloDeVidaCrudIT extends PruebaClinica {
 
     private static final String BASE = "/api/habitos-estilo-de-vida";

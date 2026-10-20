@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva prescripción</title>
+</head>
+<body>
+<h2>DocRecord Sv</h2>
+
+<p>Hola, <span th:text="${nombrePaciente}">Paciente</span>.</p>
+
+<p>
+    Se ha registrado una nueva prescripción médica
+    asociada a tu expediente.
+</p>
+
+<p>
+    Médico responsable:
+    <strong th:text="${nombreMedico}">Médico</strong>
+</p>
+
+<p>
+    Fecha:
+    <span th:text="${fecha}">Fecha de emisión</span>
+</p>
+
+<p>
+    Consulta los detalles ingresando de forma segura
+    a tu cuenta de DocRecord Sv.
+</p>
+</body>
+</html>

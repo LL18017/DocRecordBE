@@ -27,7 +27,17 @@ public enum PlantillaDeCorreo {
     TOKEN_EXPIRADO("token-expirado", "Tu enlace de confirmación venció"),
 
     RECUPERACION_DE_CONTRASENA("recuperacion-contrasena",
-            "Restablece tu contraseña de DocRecord Sv");
+            "Restablece tu contraseña de DocRecord Sv"),
+
+    NUEVA_PRESCRIPCION(
+        "nueva-prescripcion",
+                "Nueva prescripción médica en DocRecord Sv"
+    ),
+
+    EXTENSION_PRESCRIPCION(
+        "extension-prescripcion",
+                "Actualización de tu prescripción médica"
+    );
 
     private final String nombreBase;
     private final String asunto;

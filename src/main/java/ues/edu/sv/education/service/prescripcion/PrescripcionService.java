@@ -16,24 +16,22 @@ import ues.edu.sv.education.model.dto.prescripcion.MedicamentoResponseDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
-import ues.edu.sv.education.model.entity.Consulta;
-import ues.edu.sv.education.model.entity.Medico;
-import ues.edu.sv.education.model.entity.Paciente;
-import ues.edu.sv.education.model.entity.Persona;
-import ues.edu.sv.education.model.entity.Prescripcion;
-import ues.edu.sv.education.model.entity.PrescripcionMedicamento;
-import ues.edu.sv.education.repository.ConsultaRepository;
-import ues.edu.sv.education.repository.PrescripcionRepository;
+import ues.edu.sv.education.model.entity.*;
+import ues.edu.sv.education.model.enums.EventCodeEnums;
+import ues.edu.sv.education.model.enums.EventStatusEnums;
+import ues.edu.sv.education.repository.*;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Prescripciones (epica E7).
- *
+ * <p>
  * Una receta es un documento con responsable legal. De ahi las dos decisiones
  * que gobiernan este servicio: la firma sale del token y nunca del cuerpo, y
  * una receta sin medicamentos no se emite.
@@ -45,10 +43,13 @@ public class PrescripcionService {
     private final PrescripcionRepository prescripcionRepository;
     private final ConsultaRepository consultaRepository;
     private final MedicoAutenticado medicoAutenticado;
+    private final EventTypeRepository eventTypeRepository;
+    private final EventRepository eventRepository;
+    private final EventStatusRepository eventStatusRepository;
 
     /**
      * Emite una receta a partir de una consulta.
-     *
+     * <p>
      * Firma el medico autenticado, que no tiene por que ser el mismo que
      * atendio la consulta: en una clinica con turnos, el medico de guardia
      * receta sobre una consulta que abrio otro. Por eso la firma se guarda en
@@ -87,7 +88,38 @@ public class PrescripcionService {
                     .build());
         }
 
-        return toDto(prescripcionRepository.save(prescripcion));
+        Prescripcion prescripcionEnt = prescripcionRepository.save(prescripcion);
+        return toDto(prescripcionEnt);
+    }
+
+    @Transactional
+    public void enviarReceta(long consultaId) {
+
+        Consulta consulta = buscarConsultaOFallar(consultaId);
+
+        // Una receta sin medicamentos no es una receta, es un papel firmado.
+        // El @NotEmpty del DTO ya lo rechaza con 400; esto es la misma regla
+        // dicha donde vive el dominio, para que siga siendo cierta aunque a
+        // este servicio se le llame desde otro lado.
+        List<Prescripcion> prescripciones = prescripcionRepository.buscarPorConsulta(consultaId);
+        if (prescripciones == null || prescripciones.isEmpty()) {
+            throw new GeneralException("Una receta debe llevar al menos un medicamento", "422");
+        }
+        Event event = Event.builder()
+                .eventType(
+                        eventTypeRepository.getReferenceById(EventCodeEnums.PREESCRIPTION_SEND.getId())
+                )
+                .description("Se ha realizado un preescripcion")
+                .eventStatus(
+                        eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId())
+                )
+                .userEmail(consulta.getPaciente().getPersona().getEmail())
+                .ref(String.valueOf(consultaId))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        eventRepository.save(event);
+
     }
 
     // Tope de tamano de pagina: sin el, "todos" seguiria siendo posible con un
@@ -98,7 +130,7 @@ public class PrescripcionService {
 
     /**
      * Historico de recetas, filtrado y paginado.
-     *
+     * <p>
      * ── Por que ya no exige un filtro ─────────────────────────────────────
      * Antes se obligaba a elegir consultaId O pacienteId (nunca los dos, ni
      * ninguno), con el argumento de que sin filtro la respuesta seria la
@@ -111,7 +143,7 @@ public class PrescripcionService {
      * consultaId, desde, hasta) son opcionales y COMBINABLES entre si: "por
      * paciente Y por medico a la vez" -el caso que antes daba 400- es
      * justo lo que se pidio.
-     *
+     * <p>
      * ── Decision 1: forma de la paginacion ────────────────────────────────
      * La respuesta es un PaginaDto: contenido + paginaActual + tamanoPagina +
      * totalElementos + totalPaginas. Esto evita reproducir la trampa que ya
@@ -121,7 +153,7 @@ public class PrescripcionService {
      * ningun total, asi que una llamada descuidada se queda con las primeras
      * "fin" filas sin que nada le avise que falta el resto. Aqui el cliente
      * nunca tiene que adivinar: el total viaja siempre en la misma respuesta.
-     *
+     * <p>
      * ── Decision 2: desde/hasta son FECHAS, el filtro trabaja en fecha-hora ─
      * prescripciones.fecha es LocalDateTime (el instante exacto en que se
      * firmo la receta), pero pedirle al cliente fecha-hora para "que se
@@ -134,7 +166,7 @@ public class PrescripcionService {
      * una receta firmada a las 23:59 de ese dia quedaria fuera del rango
      * aunque el usuario pidio "hasta ese dia". Con
      * fecha < hasta.plusDays(1) esa receta si entra, sin importar la hora.
-     *
+     * <p>
      * ── Decision 3: id que no existe -> pagina vacia, no 404 ──────────────
      * ConsultaService.buscarPacienteOFallar responde 404 para un pacienteId
      * inexistente, con el argumento de que una lista vacia se leeria como
@@ -143,7 +175,7 @@ public class PrescripcionService {
      * ESTA persona"), y si esa persona no existe la pregunta en si no tiene
      * sentido -es mas parecido a pedir /pacientes/{id} que a filtrar una
      * lista.
-     *
+     * <p>
      * Aqui es distinto a proposito, y no por capricho: los filtros son
      * varios, opcionales y combinables, y lo que se pregunta es "dame las
      * recetas que cumplan estas condiciones", no "dame el recurso
@@ -201,7 +233,7 @@ public class PrescripcionService {
 
     /**
      * Anula una receta.
-     *
+     * <p>
      * Se borra entera, con sus renglones (cascade en Java y ON DELETE CASCADE
      * en la base): media receta -unos medicamentos si y otros no- seria un
      * documento distinto del que firmo el medico.
@@ -267,5 +299,33 @@ public class PrescripcionService {
                 ),
                 medicamentos
         );
+    }
+
+    private Map<String, Object> datosCorreo(
+            Prescripcion prescripcion
+    ) {
+        Map<String, Object> datos = new HashMap<>();
+
+        Paciente paciente = prescripcion.getConsulta().getPaciente();
+        Persona personaPaciente = paciente.getPersona();
+        Persona personaMedico = prescripcion.getMedico().getPersona();
+
+        datos.put(
+                "nombrePaciente",
+                personaPaciente.getNombres()
+        );
+
+        datos.put(
+                "nombreMedico",
+                personaMedico.getNombres() + " "
+                        + personaMedico.getApellidos()
+        );
+
+        datos.put(
+                "fecha",
+                prescripcion.getFecha().toLocalDate().toString()
+        );
+
+        return datos;
     }
 }

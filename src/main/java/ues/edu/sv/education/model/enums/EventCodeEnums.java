@@ -9,7 +9,10 @@ public enum EventCodeEnums {
     USER_REGISTERED(3, "Registro de usuario"),
     APPOINTMENT_CREATED(4, "Registro de cita"),
     APPOINTMENT_CANCELLED(5, "Cancelación de cita"),
-    CONFIRM_ACOUNT(6, "confirmacion de cuentas");
+    CONFIRM_ACOUNT(6, "confirmacion de cuentas"),
+    TOKEN_CREATED(7, "confirmacion de cuentas"),
+    TOKEN_USED(8, "confirmacion de cuentas"),
+    PREESCRIPTION_SEND(9, "ENVIO DE PREESCRIPCION");
     private final int id;
     private final String description;
 
