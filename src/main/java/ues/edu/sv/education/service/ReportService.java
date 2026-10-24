@@ -1,4 +1,4 @@
-package ues.edu.sv.education.service.prescripcion;
+package ues.edu.sv.education.service;
 
 import net.sf.jasperreports.engine.*;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;

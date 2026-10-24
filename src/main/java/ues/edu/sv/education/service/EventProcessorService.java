@@ -12,7 +12,6 @@ import ues.edu.sv.education.model.entity.*;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
 import ues.edu.sv.education.repository.*;
-import ues.edu.sv.education.service.prescripcion.ReportService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
