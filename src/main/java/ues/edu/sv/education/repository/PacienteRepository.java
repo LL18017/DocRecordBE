@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import ues.edu.sv.education.model.entity.Paciente;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
@@ -77,4 +78,6 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     // altas simultaneas leerian el mismo maximo y chocarian contra el UNIQUE.
     @Query(value = "SELECT nextval('expediente_seq')", nativeQuery = true)
     Long siguienteCorrelativoDeExpediente();
+
+    Optional<Paciente> findByPersonaId(Long personaId);
 }

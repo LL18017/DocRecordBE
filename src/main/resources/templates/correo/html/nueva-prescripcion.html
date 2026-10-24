@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nueva prescripción médica en DocRecord Sv</title>
+</head>
+
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Se ha registrado una nueva prescripción médica asociada a tu expediente.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       border="0" bgcolor="#EEF2F7"
+       style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0"
+                   cellspacing="0" border="0" bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:10px;overflow:hidden;">
+
+                <!-- Cabecera compartida -->
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+
+                <!-- Franja azul -->
+                <tr>
+                    <td bgcolor="#1E3A5F" height="4"
+                        style="background-color:#1E3A5F;height:4px;line-height:4px;font-size:0;">
+                        &nbsp;
+                    </td>
+                </tr>
+
+                <!-- Introducción -->
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            Nueva prescripción médica
+                        </h1>
+
+                        <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Hola,
+                            <strong th:text="${nombrePaciente}">Paciente</strong>.
+                        </p>
+
+                        <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Se ha registrado una nueva prescripción médica
+                            asociada a tu expediente.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Información de la prescripción -->
+                <tr>
+                    <td style="padding:0 28px 24px 28px;">
+
+                        <table role="presentation" width="100%" cellpadding="0"
+                               cellspacing="0" border="0" bgcolor="#F1F5F9"
+                               style="background-color:#F1F5F9;border-radius:6px;">
+
+                            <tr>
+                                <td style="padding:12px 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Médico responsable
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td style="padding:0 16px 12px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${nombreMedico}">
+                                    Médico
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Fecha de emisión
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${fecha}">
+                                    Fecha de emisión
+                                </td>
+                            </tr>
+
+                        </table>
+
+                    </td>
+                </tr>
+
+                <!-- Lista de medicamentos -->
+                <tr>
+                    <td style="padding:0 28px 12px 28px;">
+
+                        <h2 style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:24px;color:#1E3A5F;">
+                            Medicamentos prescritos
+                        </h2>
+
+                        <table role="presentation" width="100%" cellpadding="0"
+                               cellspacing="0" border="0"
+                               style="width:100%;border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#1E293B;">
+
+                            <thead>
+                            <tr bgcolor="#1E3A5F"
+                                style="background-color:#1E3A5F;color:#FFFFFF;">
+
+                                <th align="left"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;font-size:13px;">
+                                    Medicamento
+                                </th>
+
+                                <th align="left"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;font-size:13px;">
+                                    Dosis
+                                </th>
+
+                                <th align="left"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;font-size:13px;">
+                                    Frecuencia
+                                </th>
+
+                                <th align="left"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;font-size:13px;">
+                                    Duración
+                                </th>
+
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="medicamento, iter : ${medicamentos}"
+                                th:bgcolor="${iter.odd ? '#FFFFFF' : '#F1F5F9'}"
+                                style="background-color:#FFFFFF;">
+
+                                <td th:text="${medicamento.medicamento}"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;overflow-wrap:anywhere;">
+                                    Paracetamol
+                                </td>
+
+                                <td th:text="${#strings.isEmpty(medicamento.dosis) ? 'No especificada' : medicamento.dosis}"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;overflow-wrap:anywhere;">
+                                    500 mg
+                                </td>
+
+                                <td th:text="${#strings.isEmpty(medicamento.frecuencia) ? 'No especificada' : medicamento.frecuencia}"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;overflow-wrap:anywhere;">
+                                    Cada 8 horas
+                                </td>
+
+                                <td th:text="${#strings.isEmpty(medicamento.duracion) ? 'No especificada' : medicamento.duracion}"
+                                    style="padding:10px 8px;border:1px solid #D7DEE8;overflow-wrap:anywhere;">
+                                    5 días
+                                </td>
+
+                            </tr>
+
+                            <tr th:if="${#lists.isEmpty(medicamentos)}">
+                                <td colspan="4"
+                                    style="padding:14px 8px;border:1px solid #D7DEE8;text-align:center;color:#64748B;">
+                                    No hay medicamentos disponibles para mostrar.
+                                </td>
+                            </tr>
+                            </tbody>
+
+                        </table>
+
+                    </td>
+                </tr>
+
+                <!-- Aviso de seguridad y acceso -->
+                <tr>
+                    <td style="padding:20px 28px 28px 28px;">
+
+                        <table role="presentation" width="100%" cellpadding="0"
+                               cellspacing="0" border="0" bgcolor="#F1F5F9"
+                               style="background-color:#F1F5F9;border-radius:6px;">
+
+                            <tr>
+                                <td style="padding:16px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#334155;">
+                                    <strong style="color:#1E3A5F;">
+                                        Consulta tu expediente de forma segura
+                                    </strong>
+                                    <br><br>
+                                    Puedes ingresar a tu cuenta de DocRecord Sv
+                                    para consultar los detalles de tu atención
+                                    médica. Si tienes dudas sobre los medicamentos
+                                    o las indicaciones, comunícate con tu médico
+                                    responsable.
+                                </td>
+                            </tr>
+
+                        </table>
+
+                    </td>
+                </tr>
+
+                <!-- Pie compartido -->
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+
+            </table>
+
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

@@ -6,13 +6,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import ues.edu.sv.education.model.entity.Event;
+import ues.edu.sv.education.controller.error.GeneralException;
+import ues.edu.sv.education.controller.error.NoResourceFoundException;
+import ues.edu.sv.education.model.entity.*;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
-import ues.edu.sv.education.repository.EventRepository;
-import ues.edu.sv.education.repository.EventStatusRepository;
+import ues.edu.sv.education.repository.*;
+import ues.edu.sv.education.service.prescripcion.ReportService;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -72,6 +76,10 @@ public class EventProcessorService {
     private final EventRepository eventRepository;
     private final EventStatusRepository eventStatusRepository;
     private final EmailService emailService;
+    private final PrescripcionRepository prescripcionRepository;
+    private final ConsultaRepository consultaRepository;
+    private final ReportService reportService;
+    private final CitaRepository citaRepository;
 
     /**
      * Se construye a mano en vez de inyectar TransactionTemplate para no
@@ -81,11 +89,15 @@ public class EventProcessorService {
 
     public EventProcessorService(EventRepository eventRepository,
                                  EventStatusRepository eventStatusRepository,
-                                 EmailService emailService,
+                                 EmailService emailService, PrescripcionRepository prescripcionRepository, ConsultaRepository consultaRepository, ReportService reportService, CitaRepository citaRepository,
                                  PlatformTransactionManager gestorDeTransacciones) {
         this.eventRepository = eventRepository;
         this.eventStatusRepository = eventStatusRepository;
         this.emailService = emailService;
+        this.prescripcionRepository = prescripcionRepository;
+        this.consultaRepository = consultaRepository;
+        this.reportService = reportService;
+        this.citaRepository = citaRepository;
         this.transacciones = new TransactionTemplate(gestorDeTransacciones);
     }
 
@@ -141,6 +153,168 @@ public class EventProcessorService {
     }
 
     /**
+     * El intervalo y el retraso inicial son configurables a proposito: las
+     * pruebas ponen un retraso inicial enorme para que el trabajo NO arranque
+     * solo. Si corriera de fondo, se llevaria los eventos que la prueba acaba de
+     * crear y el resultado dependeria de quien llegue primero.
+     */
+    @Scheduled(fixedDelayString = "${app.eventos.intervalo-ms:15000}",
+            initialDelayString = "${app.eventos.retraso-inicial-ms:0}")
+    public void processPreescripcionEvents() {
+
+        // Solo los identificadores: las entidades se releen dentro de la
+        // transaccion de cada evento, que es donde se van a modificar.
+        List<Integer> pendientes = eventRepository
+                .getEventByType(EventCodeEnums.PREESCRIPTION_SEND.getId(), EventStatusEnums.PENDING.getId())
+                .stream()
+                .map(Event::getEventId)
+                .toList();
+
+        if (pendientes.isEmpty()) {
+            // A nivel debug y no con System.out.println: esto corre cada 15
+            // segundos y la inmensa mayoria de las veces no hay nada que hacer.
+            // Escribirlo siempre a la consola solo sirve para enterrar los
+            // mensajes que si importan.
+            log.debug("Sin ENVIO DE PREESCRIPCIONES");
+            return;
+        }
+
+        log.debug("Procesando {} evento(s) PREESCRIPCIONES", pendientes.size());
+
+        for (Integer eventoId : pendientes) {
+            try {
+                transacciones.executeWithoutResult(estado -> notificarPreescripcion(eventoId));
+
+            } catch (MailException ex) {
+                log.error("No se pudo enviar el aviso DE PREESCRIPCIONES del evento {}. Queda marcado PENDIENTE"
+                        + "aviso.", eventoId, ex);
+
+            } catch (RuntimeException ex) {
+                // Un evento envenenado no puede detener la cola ni repetirse
+                // cada 15 segundos, pero tampoco puede pasar desapercibido: va
+                // a error y con la palabra DEFECTO, porque esto se corrige en el
+                // codigo, no esperando a que Gmail se recupere.
+                marcarComoFallido(eventoId);
+                log.error("DEFECTO al procesar el evento {}: fallo algo que no es el envio de correo. "
+                        + "Queda marcado como FAILED; hay que corregir el codigo.", eventoId, ex);
+            }
+        }
+    }
+
+    @Scheduled(cron = "0 0 17 * * *", zone = "America/El_Salvador")
+    public void recordarCitas() {
+        ZoneId zona = ZoneId.of("America/El_Salvador");
+
+        LocalDateTime ahora = LocalDateTime.now(zona);
+        LocalDateTime limite = ahora.plusDays(1);
+
+        List<Cita> citas = citaRepository.findByFechaHoraBetween(ahora, limite);
+
+        log.info("Se encontraron {} citas próximas para recordar", citas.size());
+
+        for (Cita cita : citas) {
+            try {
+                notificarCita(cita);
+            } catch (MailException ex) {
+                log.error(
+                        "No se pudo enviar el recordatorio de la cita {}",
+                        cita.getCitaId(),
+                        ex
+                );
+            } catch (Exception ex) {
+                log.error(
+                        "Error al procesar el recordatorio de la cita {}",
+                        cita.getCitaId(),
+                        ex
+                );
+            }
+        }
+    }
+    //citas durante el dia
+    @Scheduled(cron = "0 0 5 * * *", zone = "America/El_Salvador")
+    public void recordarCitasHoy() {
+        ZoneId zona = ZoneId.of("America/El_Salvador");
+
+        LocalDate hoy = LocalDate.now(zona);
+        LocalDateTime inicio = hoy.atStartOfDay();
+        LocalDateTime fin = hoy.plusDays(1).atStartOfDay();
+
+        List<Cita> citas = citaRepository.findByFechaHoraBetween(
+                inicio,
+                fin
+        );
+
+        log.info("Se encontraron {} citas para hoy", citas.size());
+
+        for (Cita cita : citas) {
+            try {
+                notificarCita(cita);
+            } catch (MailException ex) {
+                log.error("No se pudo enviar el recordatorio de la cita {}",
+                        cita.getCitaId(), ex);
+            } catch (Exception ex) {
+                log.error("Error al procesar el recordatorio de la cita {}",
+                        cita.getCitaId(), ex);
+            }
+        }
+    }
+
+    /**
+     * El intervalo y el retraso inicial son configurables a proposito: las
+     * pruebas ponen un retraso inicial enorme para que el trabajo NO arranque
+     * solo. Si corriera de fondo, se llevaria los eventos que la prueba acaba de
+     * crear y el resultado dependeria de quien llegue primero.
+     */
+    @Scheduled(fixedDelayString = "${app.eventos.intervalo-ms:15000}",
+            initialDelayString = "${app.eventos.retraso-inicial-ms:0}")
+    public void processAppoinmentEvents() {
+
+        // Solo los identificadores: las entidades se releen dentro de la
+        // transaccion de cada evento, que es donde se van a modificar.
+        List<Event> pendientes = eventRepository
+                .getEventByType(EventCodeEnums.APPOINTMENT_CREATED.getId(), EventStatusEnums.PENDING.getId())
+                .stream()
+                .toList();
+
+        if (pendientes.isEmpty()) {
+            // A nivel debug y no con System.out.println: esto corre cada 15
+            // segundos y la inmensa mayoria de las veces no hay nada que hacer.
+            // Escribirlo siempre a la consola solo sirve para enterrar los
+            // mensajes que si importan.
+            log.debug("Sin ENVIO DE CITAS");
+            return;
+        }
+
+        log.debug("Procesando {} evento(s) CITAS", pendientes.size());
+
+        for (Event evento : pendientes) {
+
+            try {
+                Cita cita=citaRepository.buscarCitaConPersonas(Integer.parseInt(evento.getRef())).orElseThrow(
+                        ()->new NoResourceFoundException("NO SE ENCONTRO LA CITA "+evento.getRef(),"404")
+                );
+                transacciones.executeWithoutResult(estado -> notificarCita(cita));
+
+                evento.setEventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PROCESSED.getId()));
+                eventRepository.save(evento);
+
+            } catch (MailException ex) {
+                log.error("No se pudo enviar el aviso de cita del evento {}. Queda marcado PENDIENTE"
+                        + "aviso.", evento.getEventId(), ex);
+
+            } catch (RuntimeException ex) {
+                // Un evento envenenado no puede detener la cola ni repetirse
+                // cada 15 segundos, pero tampoco puede pasar desapercibido: va
+                // a error y con la palabra DEFECTO, porque esto se corrige en el
+                // codigo, no esperando a que Gmail se recupere.
+                marcarComoFallido(evento.getEventId());
+                log.error("DEFECTO al procesar el evento {}: fallo algo que no es el envio de correo. "
+                        + "Queda marcado como FAILED; hay que corregir el codigo.", evento.getEventId(), ex);
+            }
+        }
+    }
+
+    /**
      * Manda el aviso de un evento concreto y lo deja como PROCESSED.
      *
      * Ya no se pasa por PROCESSING: al vivir todo dentro de una transaccion, ese
@@ -168,6 +342,54 @@ public class EventProcessorService {
         eventRepository.save(evento);
     }
 
+    private void notificarPreescripcion(Integer eventoId) {
+
+        Event evento = eventRepository.findById(eventoId)
+                .orElseThrow(() -> new NoResourceFoundException("El evento " + eventoId + " ya no existe"));
+        long consultaId;
+        try {
+            consultaId=Long.parseLong(evento.getRef());
+        }catch (Exception E){
+            throw new GeneralException("Error al obtener el id de referencia del evento "+evento.getEventId(),"409");
+        }
+
+        Consulta consulta = consultaRepository.findById(consultaId)
+                .orElseThrow(() -> new NoResourceFoundException("la consulta " + consultaId + " ya no existe"));
+
+        List<Prescripcion> preescripcion = prescripcionRepository.buscarPorConsulta(consultaId);
+        List<PrescripcionMedicamento> med=preescripcion.stream().flatMap((p)->p.getMedicamentos().stream()).toList();
+        Map<String, Object> datos = new HashMap<>();
+        datos.put("correo", evento.getUserEmail());
+        datos.put("fecha", FECHA_LEGIBLE.format(evento.getCreatedAt()));
+        datos.put("nombrePaciente", consulta.getPaciente().getPersona().getNombres());
+        datos.put("nombreMedico", consulta.getMedico().getPersona().getNombres());
+        datos.put("medicamentos", med);
+        byte[] pdf = reportService.generarPreescripcionPdf(
+                consulta.getPaciente().getPersona().getNombres(),
+                consulta.getMedico().getPersona().getNombres(),
+                FECHA_LEGIBLE.format(evento.getCreatedAt()),
+                med
+        );
+
+        emailService.enviarCorreo(evento.getUserEmail(), PlantillaDeCorreo.NUEVA_PRESCRIPCION, datos,pdf,"receta");
+
+        evento.setEventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PROCESSED.getId()));
+        evento.setProcessedAt(LocalDateTime.now());
+        eventRepository.save(evento);
+    }
+
+    public void notificarCita(Cita cita){
+
+        Map<String, Object> datos = new HashMap<>();
+        datos.put("correo", cita.getPaciente().getPersona().getEmail());
+        datos.put("fechaHora", FECHA_LEGIBLE.format(cita.getFechaHora()));
+        datos.put("medico", cita.getMedico().getPersona().getNombres());
+
+        emailService.enviarCorreo(cita.getPaciente().getPersona().getEmail(), PlantillaDeCorreo.RECORDATORIO_CITA, datos);
+
+
+    }
+
     /**
      * Deja el evento en FAILED, en una transaccion NUEVA.
      *
@@ -188,4 +410,6 @@ public class EventProcessorService {
                     + "pendiente en la proxima pasada.", eventoId, ex);
         }
     }
+
+
 }

@@ -6,6 +6,7 @@ import lombok.*;
 import ues.edu.sv.education.model.enums.EstadoConsulta;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 
 /**
  * El acto medico: un medico atendio a un paciente en una fecha.

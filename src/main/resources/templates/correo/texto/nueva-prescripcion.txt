@@ -1,0 +1,12 @@
+DocRecord Sv
+
+Hola, [[${nombrePaciente}]].
+
+Se ha registrado una nueva prescripción médica
+asociada a tu expediente.
+
+Médico responsable: [[${nombreMedico}]]
+Fecha: [[${fecha}]]
+
+Ingresa a tu cuenta de DocRecord Sv para consultar
+los detalles de la prescripción.

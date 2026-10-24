@@ -1,0 +1,18 @@
+Recordatorio de cita médica - DocRecord Sv
+
+Te recordamos que tienes una cita médica programada en DocRecord Sv.
+
+Fecha y hora: [(${fechaHora})]
+Médico asignado: [(${medico})]
+
+RECOMENDACIONES PARA TU CITA
+
+  1. Procura llegar con anticipación.
+  2. Si tienes estudios o documentos médicos relevantes, llévalos contigo.
+  3. Si no puedes asistir, contacta a la clínica para consultar cómo
+     reprogramar tu cita.
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

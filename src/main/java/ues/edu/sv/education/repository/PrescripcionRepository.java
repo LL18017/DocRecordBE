@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import ues.edu.sv.education.model.entity.Prescripcion;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long> {
@@ -125,4 +126,16 @@ public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long
     WHERE p.prescripcionId = :prescripcionId
 """)
     Optional<Prescripcion> buscarConDetalle(@Param("prescripcionId") Long prescripcionId);
+
+    @Query("""
+    SELECT p
+    FROM Prescripcion p
+     JOIN FETCH p.medico med
+            JOIN FETCH med.persona
+            JOIN FETCH p.consulta c
+            JOIN FETCH c.paciente pac
+            JOIN FETCH pac.persona
+    WHERE p.consulta.consultaId = :consultaId
+""")
+    List<Prescripcion> buscarPorConsulta(Long consultaId);
 }

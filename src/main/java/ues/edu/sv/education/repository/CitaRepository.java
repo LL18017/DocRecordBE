@@ -9,6 +9,7 @@ import ues.edu.sv.education.model.entity.User;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CitaRepository extends JpaRepository<Cita, Integer> {
@@ -60,5 +61,33 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
     boolean existsByPaciente_UserIDAndFechaHora(
             Integer pacienteId,
             LocalDateTime fechaHora
+    );
+
+
+    @Query("""
+    SELECT c
+    FROM Cita c
+      JOIN FETCH c.paciente p
+        JOIN FETCH p.persona
+        JOIN FETCH c.medico m
+        JOIN FETCH m.persona
+    WHERE  c.fechaHora between :fechaInicio and :fechaFinal
+""")
+    List<Cita> findByFechaHoraBetween(
+            @Param("fechaInicio") LocalDateTime fechaHora,
+            @Param("fechaFinal") LocalDateTime fechaFinal
+    );
+
+    @Query("""
+        SELECT c
+        FROM Cita c
+        JOIN FETCH c.paciente p
+        JOIN FETCH p.persona
+        JOIN FETCH c.medico m
+        JOIN FETCH m.persona
+        WHERE c.citaId = :citaId
+    """)
+    Optional<Cita> buscarCitaConPersonas(
+            @Param("citaId") Integer citaId
     );
 }

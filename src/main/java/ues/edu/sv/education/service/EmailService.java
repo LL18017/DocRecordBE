@@ -5,6 +5,7 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.MailPreparationException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -107,4 +108,72 @@ public class EmailService {
         mailSender.send(mensaje);
         log.debug("Correo {} enviado a {}", plantilla.name(), destinatario);
     }
+    public void enviarCorreo(
+            String destinatario,
+            PlantillaDeCorreo plantilla,
+            Map<String, Object> datos,
+            byte[] pdf,
+            String nombreArchivo
+    ) {
+        Context contexto = new Context(ESPANOL_SV, datos);
+
+        // Generar ambas versiones del correo.
+        String cuerpoHtml = motorDePlantillas.process(
+                CARPETA_HTML + plantilla.getNombreBase(),
+                contexto
+        );
+
+        String cuerpoTexto = motorDePlantillas.process(
+                CARPETA_TEXTO + plantilla.getNombreBase(),
+                contexto
+        );
+
+        MimeMessage mensaje = mailSender.createMimeMessage();
+
+        try {
+            MimeMessageHelper ayudante = new MimeMessageHelper(
+                    mensaje,
+                    MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name()
+            );
+
+            ayudante.setFrom(remitente, NOMBRE_DEL_REMITENTE);
+            ayudante.setTo(destinatario);
+            ayudante.setSubject(plantilla.getAsunto());
+
+            // Texto alternativo y HTML.
+            ayudante.setText(cuerpoTexto, cuerpoHtml);
+
+            // Adjuntar el PDF.
+            if (pdf != null && pdf.length > 0) {
+                ayudante.addAttachment(
+                        nombreArchivo,
+                        new ByteArrayResource(pdf),
+                        "application/pdf"
+                );
+            }
+
+        } catch (MessagingException | UnsupportedEncodingException ex) {
+            throw new MailPreparationException(
+                    "No se pudo armar el correo "
+                            + plantilla.name()
+                            + " para "
+                            + destinatario,
+                    ex
+            );
+        }
+
+        // Enviar el correo.
+        mailSender.send(mensaje);
+
+        log.debug(
+                "Correo {} enviado a {}{}",
+                plantilla.name(),
+                destinatario,
+                pdf != null && pdf.length > 0
+                        ? " con archivo adjunto " + nombreArchivo
+                        : ""
+        );
+    }
+
 }
