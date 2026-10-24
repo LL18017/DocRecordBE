@@ -41,3 +41,10 @@ build/
 # Lo genera cualquier `python -m py_compile` sobre los scripts de despliegue/.
 __pycache__/
 *.py[cod]
+
+### Archivos de asistentes de codigo ###
+# Instrucciones locales de herramientas (Claude Code, Copilot, etc.): cada
+# quien las mantiene en su equipo y no forman parte del proyecto.
+CLAUDE.md
+AGENTS.md
+.claude/
