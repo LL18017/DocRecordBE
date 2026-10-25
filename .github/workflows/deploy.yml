@@ -201,18 +201,28 @@ jobs:
                && cp DocRecordBE/despliegue/desplegar.sh . && chmod +x desplegar.sh"
 
       # Que el script termine sin error no prueba que la aplicacion quedo en
-      # pie: los contenedores pueden levantar y morir en el arranque. Esto lo
-      # comprueba desde fuera, como lo haria alguien abriendo la URL.
+      # pie: los contenedores pueden levantar y morir en el arranque.
+      #
+      # La comprobacion se hace DENTRO del servidor, desde el contenedor de
+      # Caddy, contra el backend y el frontend por separado. Hacerla desde
+      # fuera a http://$VPS_HOST/ no servia: Caddy contesta 308 hacia HTTPS a
+      # cualquier peticion por IP, curl -f toma el 308 como exito, y el 24 de
+      # octubre el despliegue salio verde con el backend caido en el arranque
+      # (una migracion de Flyway fuera de orden) y la API respondiendo 502.
+      # GET /especialidades es publico, asi que no hace falta un token.
       - name: Comprobar que la aplicacion responde
         run: |
+          COMPROBAR="docker exec docrecord-proxy wget -q -O /dev/null -T 10"
           for i in $(seq 1 30); do
-            if curl -fsS -o /dev/null --max-time 10 "http://$VPS_HOST/"; then
-              echo "La aplicacion responde en http://$VPS_HOST/"
-              echo "### Desplegado: http://$VPS_HOST/" >> "$GITHUB_STEP_SUMMARY"
+            if ssh -i ~/.ssh/despliegue -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+                 "$VPS_USER@$VPS_HOST" \
+                 "$COMPROBAR http://backend:8080/especialidades && $COMPROBAR http://frontend:3000/"; then
+              echo "Backend y frontend responden"
+              echo "### Desplegado: backend y frontend responden" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
-            echo "intento $i/30: todavia no responde"
+            echo "intento $i/30: todavia no responden"
             sleep 10
           done
-          echo "::error::La aplicacion no respondio tras cinco minutos. Revisar: docker compose -f /opt/docrecord/docker-compose.prod.yml logs"
+          echo "::error::La aplicacion no respondio tras cinco minutos. Revisar: docker compose -f /opt/docrecord/docker-compose.prod.yml logs backend"
           exit 1
