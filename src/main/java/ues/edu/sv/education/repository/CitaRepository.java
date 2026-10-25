@@ -5,7 +5,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ues.edu.sv.education.model.entity.Cita;
-import ues.edu.sv.education.model.entity.User;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,12 +16,11 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
     @Query("""
     SELECT c
     FROM Cita c
-    INNER JOIN c.paciente p
-    WHERE p.UserID = :pacienteId
+    WHERE c.paciente.personaId = :pacienteId
     ORDER BY c.fechaHora ASC
 """)
-    List<Cita> findByPaciente_UserIDOrderByFechaHoraAsc(
-            @Param("pacienteId") Integer pacienteId
+    List<Cita> findByPacienteOrderByFechaHoraAsc(
+            @Param("pacienteId") Long pacienteId
     );
 
     @Query("""
@@ -36,34 +34,70 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
             @Param("medicoId") Integer medicoId
     );
 
+    /** La agenda de una sede en un rango, canceladas incluidas: siguen en el historial. */
+    @Query("""
+    SELECT c
+    FROM Cita c
+    WHERE c.clinica.clinicaId = :clinicaId
+      AND c.fechaHora >= :desde
+      AND c.fechaHora < :hasta
+    ORDER BY c.fechaHora ASC
+""")
+    List<Cita> agendaDeClinica(
+            @Param("clinicaId") Integer clinicaId,
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta
+    );
+
+    @Query("""
+    SELECT c
+    FROM Cita c
+    WHERE c.medico.UserID = :medicoId
+      AND c.fechaHora >= :desde
+      AND c.fechaHora < :hasta
+    ORDER BY c.fechaHora ASC
+""")
+    List<Cita> agendaDeMedico(
+            @Param("medicoId") Integer medicoId,
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta
+    );
+
     List<Cita> findByEstado(String estado);
 
-
+    // Las dos de disponibilidad ignoran las canceladas: cancelar libera la
+    // franja (HU-32). `excluirCitaId` es la cita que se esta reprogramando,
+    // que no choca consigo misma; al agendar se pasa -1.
     @Query("""
     SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END
     FROM Cita c
-    INNER JOIN c.medico m
-    WHERE m.UserID = :medicoId
+    WHERE c.medico.UserID = :medicoId
       AND c.fechaHora = :fechaHora
+      AND c.estado <> 'CANCELADA'
+      AND c.citaId <> :excluirCitaId
 """)
-    boolean existsByMedico_UserIDAndFechaHora(
+    boolean medicoOcupado(
             @Param("medicoId") Integer medicoId,
-            @Param("fechaHora") LocalDateTime fechaHora
+            @Param("fechaHora") LocalDateTime fechaHora,
+            @Param("excluirCitaId") Integer excluirCitaId
     );
 
     @Query("""
     SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END
     FROM Cita c
-    INNER JOIN c.medico m
-    WHERE m.UserID = :pacienteId
+    WHERE c.paciente.personaId = :pacienteId
       AND c.fechaHora = :fechaHora
+      AND c.estado <> 'CANCELADA'
+      AND c.citaId <> :excluirCitaId
 """)
-    boolean existsByPaciente_UserIDAndFechaHora(
-            Integer pacienteId,
-            LocalDateTime fechaHora
+    boolean pacienteOcupado(
+            @Param("pacienteId") Long pacienteId,
+            @Param("fechaHora") LocalDateTime fechaHora,
+            @Param("excluirCitaId") Integer excluirCitaId
     );
 
-
+    // Solo las AGENDADAS: a una cita cancelada o atendida no se le recuerda
+    // nada (HU-33, criterio 3).
     @Query("""
     SELECT c
     FROM Cita c
@@ -72,6 +106,7 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
         JOIN FETCH c.medico m
         JOIN FETCH m.persona
     WHERE  c.fechaHora between :fechaInicio and :fechaFinal
+      AND c.estado = 'AGENDADA'
 """)
     List<Cita> findByFechaHoraBetween(
             @Param("fechaInicio") LocalDateTime fechaHora,

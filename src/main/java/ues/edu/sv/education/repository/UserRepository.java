@@ -118,4 +118,21 @@ public interface UserRepository extends JpaRepository<User,Integer> {
             GROUP BY u.UserID
             """)
     List<SedesDeUsuario> sedesDe(@Param("userIds") List<Integer> userIds);
+
+    /**
+     * Los medicos activos que atienden en una sede, para agendarles citas.
+     * Cuenta tanto la sede que el medico registro como las que tiene
+     * asignadas: son las mismas dos fuentes que /clinics/mias.
+     */
+    @Query("""
+            SELECT DISTINCT u FROM User u
+            JOIN FETCH u.persona
+            JOIN u.roles r
+            LEFT JOIN u.clinicas propia
+            LEFT JOIN u.clinicasAsignadas asignada
+            WHERE r.name = 'MEDICO'
+              AND u.activo = true
+              AND (propia.clinicaId = :clinicaId OR asignada.clinicaId = :clinicaId)
+            """)
+    List<User> medicosDeClinica(@Param("clinicaId") Integer clinicaId);
 }
