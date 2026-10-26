@@ -170,13 +170,13 @@ public class PrescripcionService {
 
         String justificacion = request.justificacionAlergia();
         if (justificacion == null || justificacion.isBlank()) {
-            throw new GeneralException("El paciente es alergico a una sustancia de esta receta: " + detalle
-                    + ". Escribe la justificacion para recetarlo de todos modos", "409");
+            throw new GeneralException("El paciente es alérgico a una sustancia de esta receta: " + detalle
+                    + ". Escriba la justificación para recetarlo de todos modos", "409");
         }
         boolean hayAlergiaSevera = alertas.stream().anyMatch(a -> a.severidad() == SeveridadDeAlergia.SEVERA);
         if (hayAlergiaSevera && !Boolean.TRUE.equals(request.confirmaAlergiaSevera())) {
             throw new GeneralException("Hay una alergia SEVERA coincidente: " + detalle
-                    + ". Confirma de forma explicita que quieres recetarlo", "409");
+                    + ". Confirme de forma explícita que quiere recetarlo", "409");
         }
         return alertas;
     }
