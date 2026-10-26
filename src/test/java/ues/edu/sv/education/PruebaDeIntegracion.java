@@ -146,6 +146,10 @@ public abstract class PruebaDeIntegracion {
         registro.add("spring.datasource.username", () -> USUARIO);
         registro.add("spring.datasource.password", () -> CLAVE);
 
+        // application.properties ya no trae clave JWT por defecto (TT-04): las
+        // pruebas ponen la suya, marcada como de pruebas.
+        registro.add("app.jwt.secret", () -> "U09MTy1QUlVFQkFTLUFVVE9NQVRJQ0FTLU5PLVVTQVItRU4tUFJPRFVDQ0lPTi0wMDAx");
+
         // Segunda barrera, por si algun dia alguien quita el mock de arriba:
         // la configuracion de correo de las pruebas no apunta a ningun servidor
         // que exista. Si un envio real se colara, moriria contra un host

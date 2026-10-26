@@ -14,12 +14,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ues.edu.sv.education.controller.error.CuerpoDeError;
 import ues.edu.sv.education.service.auth.JwtService;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 public class JwtFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
 
-    /** Solo serializa los dos campos del cuerpo de error; no necesita configuracion. */
+    /** Solo serializa el cuerpo de error; no necesita configuracion. */
     private static final ObjectMapper JSON = new ObjectMapper();
     @Override
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
@@ -61,7 +61,7 @@ public class JwtFilter extends OncePerRequestFilter {
         //extraer el token
         String header = req.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
-            noAutenticado(res, "No hay una sesion activa. Inicia sesion para continuar.");
+            noAutenticado(req, res, "No hay una sesion activa. Inicia sesion para continuar.");
             return;
         }
 
@@ -79,7 +79,7 @@ public class JwtFilter extends OncePerRequestFilter {
                     .map(SimpleGrantedAuthority::new)   // String → GrantedAuthority
                     .collect(Collectors.toList());
             if (usuarioId == null) {
-                noAutenticado(res, "Tu sesion no es valida. Inicia sesion de nuevo.");
+                noAutenticado(req, res, "Tu sesion no es valida. Inicia sesion de nuevo.");
                 return;
             }
 
@@ -96,7 +96,7 @@ public class JwtFilter extends OncePerRequestFilter {
             // pero escribirlo en cada peticion llena el registro del servidor
             // publico y no le dice nada a quien lo lee.
             logger.debug("Token rechazado: " + e.getMessage());
-            noAutenticado(res, "Tu sesion expiro o no es valida. Inicia sesion de nuevo.");
+            noAutenticado(req, res, "Tu sesion expiro o no es valida. Inicia sesion de nuevo.");
             return;
         }
 
@@ -125,15 +125,17 @@ public class JwtFilter extends OncePerRequestFilter {
      * describia la cabecera que falta, que es cierto y no le sirve de nada a
      * quien solo ve que lo sacaron del sistema.
      */
-    private void noAutenticado(HttpServletResponse res, String mensaje) throws IOException {
+    private void noAutenticado(HttpServletRequest req, HttpServletResponse res, String mensaje) throws IOException {
         res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         res.setContentType(MediaType.APPLICATION_JSON_VALUE);
         res.setCharacterEncoding(StandardCharsets.UTF_8.name());
         // Serializado, no concatenado: una comilla o un salto de linea en el
         // mensaje romperia el JSON a mano y el cliente recibiria basura
         // justo cuando intenta explicar un error.
-        JSON.writeValue(res.getWriter(), Map.of(
-                "error", "No autenticado",
-                "message", mensaje));
+        // Mismo cuerpo que el manejador global (error, message, codigo,
+        // timestamp y ruta): lo arma la misma fabrica.
+        JSON.writeValue(res.getWriter(), CuerpoDeError.de(
+                HttpServletResponse.SC_UNAUTHORIZED, "No autenticado", mensaje,
+                req.getRequestURI()));
     }
 }

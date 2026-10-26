@@ -69,9 +69,9 @@ jobs:
       # PruebaDeIntegracion.java lee estas system properties (con estos
       # mismos valores como default si se omiten); se pasan explicitas para
       # que el workflow no dependa de ese default si algun dia cambia.
-      # No se exportan MAIL_PASSWORD ni JWT_SECRET: application.properties ya
-      # trae valores por defecto pensados para que la suite arranque sin
-      # secretos configurados.
+      # No se exportan MAIL_PASSWORD ni JWT_SECRET: el correo esta simulado y
+      # PruebaDeIntegracion pone una clave JWT propia de pruebas, asi que la
+      # suite arranca sin secretos configurados.
       - name: Ejecutar ./mvnw -B test contra el Postgres del servicio
         run: >-
           ./mvnw -B
