@@ -315,13 +315,12 @@ public class RecuperacionDeContrasenaService {
      * rodeo. La solucion de verdad es separar las dos ideas en dos columnas,
      * y eso le toca a HU-05, no a esta historia.
      *
-     * ── No se cierran las sesiones abiertas ───────────────────────────────
-     * JwtService no tiene revocacion: los access token ya emitidos valen hasta
-     * su "exp". Es la misma limitacion conocida que documenta
-     * UserService.asignarContrasena, y la mitigacion es que duran 15 minutos.
-     * Vale la pena tenerla presente aqui porque es peor: si la contrasena se
-     * esta recuperando porque la cuenta estaba comprometida, el intruso
-     * conserva su sesion ese rato.
+     * ── Si se cierran las sesiones abiertas ───────────────────────────────
+     * Si la contrasena se recupera porque la cuenta estaba comprometida, el
+     * intruso no puede conservar su sesion. Cada token lleva la version de
+     * sesion de la cuenta (users.version_de_sesion, V30) y restablecer la
+     * incrementa: el JwtFilter rechaza con 401 los tokens de acceso anteriores
+     * y AuthService.refresh los de refresco.
      */
     @Transactional
     public RecuperacionResponseDto restablecer(String token, String contrasenaNueva) {
@@ -338,6 +337,9 @@ public class RecuperacionDeContrasenaService {
         // arriba sobre por que tocarlo aqui seria saltarse una desactivacion.
         User usuario = enlace.getUsuario();
         usuario.setPassword(passwordEncoder.encode(contrasenaNueva));
+        // Cierra las sesiones abiertas (criterio 4): todo token emitido antes
+        // lleva la version anterior y el filtro JWT lo rechaza.
+        usuario.setVersionDeSesion(usuario.getVersionDeSesion() + 1);
         userRepository.save(usuario);
 
         // Se queman TODOS los enlaces pendientes de esta cuenta, no solo el

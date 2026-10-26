@@ -15,17 +15,20 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ues.edu.sv.education.controller.error.CuerpoDeError;
+import ues.edu.sv.education.repository.UserRepository;
 import ues.edu.sv.education.service.auth.JwtService;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
     /** Solo serializa el cuerpo de error; no necesita configuracion. */
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -80,6 +83,18 @@ public class JwtFilter extends OncePerRequestFilter {
                     .collect(Collectors.toList());
             if (usuarioId == null) {
                 noAutenticado(req, res, "Tu sesion no es valida. Inicia sesion de nuevo.");
+                return;
+            }
+
+            // Sesion cerrada despues de emitir el token (HU-03 criterio 4).
+            // Restablecer la contrasena sube la version de sesion de la cuenta
+            // (V30); un token con una version anterior es de una sesion que ya
+            // no existe, aunque su firma y su "exp" sigan siendo validos. Una
+            // consulta por peticion, de una sola columna: es el precio de poder
+            // cerrar sesiones sin guardar una lista de tokens.
+            Optional<Integer> versionActual = userRepository.versionDeSesionDe(Integer.valueOf(usuarioId));
+            if (versionActual.isPresent() && versionActual.get() != jwtService.versionDeSesion(claims)) {
+                noAutenticado(req, res, "Tu sesion se cerro porque se restablecio la contrasena. Inicia sesion de nuevo.");
                 return;
             }
 

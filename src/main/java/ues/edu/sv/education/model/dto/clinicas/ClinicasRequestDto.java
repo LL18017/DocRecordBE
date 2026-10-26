@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 @Schema(description = "Datos requeridos para registrar una clínica")
@@ -50,12 +51,14 @@ public record ClinicasRequestDto(
         String horario,
 
         // ── Las coordenadas ──────────────────────────────────────────────────
-        // Siguen siendo OPCIONALES: una clínica se registra mucho antes de que
-        // alguien vaya a tomarle el GPS, y exigirlas obligaba a inventar un
-        // punto para poder guardar. En un sistema de georreferenciación, una
-        // coordenada falsa es peor que una ausente.
+        // OBLIGATORIAS en el alta (HU-26 criterio 1, grupo AltaDeClinica): la
+        // clínica es un punto en el mapa público, y sin coordenadas no aparece.
+        // En la EDICIÓN siguen siendo opcionales: las clínicas registradas
+        // antes de este criterio no las tienen (la columna sigue admitiendo
+        // null) y deben poder corregirse y completarse sin que el formulario
+        // las rechace por eso.
         //
-        // Pero opcional no es «cualquier cosa», y el rango ya no es el planeta
+        // Y si vienen, no son «cualquier cosa»: el rango no es el planeta
         // entero. El Salvador va de 13.0 a 14.5 de latitud y de -90.2 a -87.6 de
         // longitud; acotarlo ahí convierte en un rechazo inmediato el error que
         // la propia historia señala: invertir latitud y longitud al capturarlas.
@@ -69,19 +72,21 @@ public record ClinicasRequestDto(
         // un script o por psql.
 
         @Schema(
-                description = "Latitud. Opcional; si se envía debe caer dentro de El Salvador (13.0 a 14.5)",
+                description = "Latitud. Obligatoria al crear; debe caer dentro de El Salvador (13.0 a 14.5)",
                 example = "13.9942",
                 nullable = true
         )
+        @NotNull(groups = AltaDeClinica.class, message = "La latitud es obligatoria")
         @DecimalMin(value = "13.0", message = "La latitud debe estar entre 13.0 y 14.5 (territorio salvadoreño). ¿Se invirtieron latitud y longitud?")
         @DecimalMax(value = "14.5", message = "La latitud debe estar entre 13.0 y 14.5 (territorio salvadoreño). ¿Se invirtieron latitud y longitud?")
         Double latitud,
 
         @Schema(
-                description = "Longitud. Opcional; si se envía debe caer dentro de El Salvador (-90.2 a -87.6)",
+                description = "Longitud. Obligatoria al crear; debe caer dentro de El Salvador (-90.2 a -87.6)",
                 example = "-89.5597",
                 nullable = true
         )
+        @NotNull(groups = AltaDeClinica.class, message = "La longitud es obligatoria")
         @DecimalMin(value = "-90.2", message = "La longitud debe estar entre -90.2 y -87.6 (territorio salvadoreño). ¿Se invirtieron latitud y longitud?")
         @DecimalMax(value = "-87.6", message = "La longitud debe estar entre -90.2 y -87.6 (territorio salvadoreño). ¿Se invirtieron latitud y longitud?")
         Double longitud

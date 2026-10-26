@@ -8,7 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.clinicas.AltaDeClinica;
 import ues.edu.sv.education.model.dto.clinicas.CambiarEstadoClinicaRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasRequestDto;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
@@ -65,7 +67,9 @@ public class ClinicasController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
     public ResponseEntity<ClinicasResponseDto> crear(
-            @Valid @RequestBody ClinicasRequestDto dto
+            // Grupo AltaDeClinica: al crear, las coordenadas son obligatorias;
+            // al editar (PUT, mas abajo) no.
+            @Validated(AltaDeClinica.class) @RequestBody ClinicasRequestDto dto
     ) {
 
         ClinicasResponseDto response = clinicasService.crear(dto);
@@ -96,7 +100,8 @@ public class ClinicasController {
 
     @Operation(
             summary = "Eliminar una clínica",
-            description = "Elimina una clínica existente. Un MEDICO solo puede eliminar las suyas; un ADMIN puede eliminar cualquiera."
+            description = "Da de baja una clínica (baja lógica). Un MEDICO solo puede darse de baja las suyas; un ADMIN puede cualquiera. "
+                    + "Responde 409 listando las citas si la sede tiene citas futuras agendadas."
     )
     @DeleteMapping("/{clinicaId}")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
@@ -115,7 +120,8 @@ public class ClinicasController {
             summary = "Dar de alta o de baja una clínica",
             description = "Cambia el estado entre ACTIVA e INACTIVA. NO borra nada: las consultas "
                     + "que se atendieron ahí ocurrieron ahí, y el personal asignado sigue asignado. "
-                    + "Una clínica inactiva solo deja de ofrecerse para atender."
+                    + "Una clínica inactiva solo deja de ofrecerse para atender. Pasar a INACTIVA "
+                    + "responde 409, con la lista de citas, si la sede tiene citas futuras agendadas."
     )
     @PatchMapping("/{clinicaId}/estado")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")

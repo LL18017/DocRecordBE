@@ -7,8 +7,16 @@ import ues.edu.sv.education.model.entity.Medico;
 import ues.edu.sv.education.repository.proyeccion.EspecialidadDePersona;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface MedicoRepository extends JpaRepository<Medico, Long> {
+
+    /**
+     * El medico con ese numero de junta, sin distinguir mayusculas. La columna
+     * es UNIQUE, pero comparar a mano deja decir "ese numero ya esta
+     * registrado" con un 409 en vez de un fallo de integridad generico.
+     */
+    Optional<Medico> findByRegistroJuntaIgnoreCase(String registroJunta);
 
     /**
      * La especialidad de varios medicos en una sola consulta.

@@ -249,7 +249,8 @@ class ConsultaCrudIT extends PruebaClinica {
                         .content("""
                                 {"name":"Sucursal Santa Ana","departamento":"Santa Ana",
                                  "municipio":"Santa Ana","direccion":"Calle Principal",
-                                 "telefono":"2440-0000","horario":"Lunes a viernes, 8:00 a 16:00"}
+                                 "telefono":"2440-0000","horario":"Lunes a viernes, 8:00 a 16:00",
+                                 "latitud":13.9942,"longitud":-89.5597}
                                 """))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();

@@ -116,9 +116,9 @@ public class AuthController {
                     + "correoDeVerificacionEnviado: si viene en false la cuenta existe pero el correo "
                     + "de confirmacion no se pudo enviar, y hay que decirselo al usuario en vez de "
                     + "mandarlo a revisar una bandeja donde no va a llegar nada"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (nombres, apellidos, email, contraseña o especialidad faltantes/incorrectos)"),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (nombres, apellidos, email, contraseña, especialidad o número de junta faltantes/incorrectos)"),
             @ApiResponse(responseCode = "404", description = "La especialidad indicada no existe"),
-            @ApiResponse(responseCode = "409", description = "El email ya está registrado y confirmado")
+            @ApiResponse(responseCode = "409", description = "\"Este correo ya está registrado\" (cuenta confirmada), o el número de junta ya pertenece a otro médico")
     })
     @PostMapping("/register")
     public ResponseEntity<RegistroMedicoResponseDto> registrarMedico(@Valid @RequestBody RegistroMedicoRequestDto request) {

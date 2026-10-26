@@ -32,6 +32,9 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
 
     private static final AtomicInteger CONTADOR = new AtomicInteger();
 
+    /** Un punto valido: el alta exige las dos coordenadas (criterio 1). */
+    private static final String EN_SANTA_ANA = ",\"latitud\":13.9942,\"longitud\":-89.5597";
+
     /** Cuerpo completo, con todo lo que el criterio 1 exige. */
     private String cuerpoDe(String nombre, String municipio, String coordenadas) {
         return """
@@ -87,7 +90,7 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
                         .content("""
                                 {"name":"Clinica Sin Municipio","departamento":"Santa Ana",
                                  "direccion":"Alguna calle","telefono":"2440-0000",
-                                 "horario":"8 a 16"}
+                                 "horario":"8 a 16","latitud":13.9942,"longitud":-89.5597}
                                 """))
                 .andExpect(status().isBadRequest());
     }
@@ -128,16 +131,19 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("una clínica sin coordenadas sigue pudiendo registrarse")
-    void lasCoordenadasSiguenSiendoOpcionales() throws Exception {
-        // Se da de alta mucho antes de que alguien vaya a tomarle el GPS.
-        // Exigirlas sólo consigue que alguien escriba una cualquiera, y una
-        // coordenada falsa es peor que una ausente.
-        JsonNode creada = crear(tokenDeMedico(), cuerpoDe(nombreUnico(), "Santa Ana", ""));
+    @DisplayName("el alta sin latitud ni longitud se rechaza con 400 y un mensaje por cada una")
+    void lasCoordenadasSonObligatoriasAlCrear() throws Exception {
+        // Una clínica sin punto no aparece en el mapa público, que es para lo
+        // que se registra (criterio 1).
+        String respuesta = mockMvc.perform(post("/clinics")
+                        .header("Authorization", "Bearer " + tokenDeMedico())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cuerpoDe(nombreUnico(), "Santa Ana", "")))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
 
-        assertTrue(creada.get("latitud").isNull());
-        assertTrue(creada.get("longitud").isNull());
-        assertEquals("ACTIVA", creada.get("estado").asText());
+        assertTrue(respuesta.contains("La latitud es obligatoria"), respuesta);
+        assertTrue(respuesta.contains("La longitud es obligatoria"), respuesta);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -150,12 +156,12 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
         String token = tokenDeMedico();
         String nombre = nombreUnico();
 
-        crear(token, cuerpoDe(nombre, "Santa Ana", ""));
+        crear(token, cuerpoDe(nombre, "Santa Ana", EN_SANTA_ANA));
 
         mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(cuerpoDe(nombre, "Santa Ana", "")))
+                        .content(cuerpoDe(nombre, "Santa Ana", EN_SANTA_ANA)))
                 .andExpect(status().isConflict());
     }
 
@@ -167,12 +173,12 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
         String token = tokenDeMedico();
         int n = CONTADOR.incrementAndGet();
 
-        crear(token, cuerpoDe("Clinica San Jose " + n, "Sonsonate", ""));
+        crear(token, cuerpoDe("Clinica San Jose " + n, "Sonsonate", EN_SANTA_ANA));
 
         mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(cuerpoDe("CLÍNICA SAN JOSÉ " + n, "sonsonate", "")))
+                        .content(cuerpoDe("CLÍNICA SAN JOSÉ " + n, "sonsonate", EN_SANTA_ANA)))
                 .andExpect(status().isConflict());
     }
 
@@ -184,8 +190,8 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
         String token = tokenDeMedico();
         String nombre = nombreUnico();
 
-        crear(token, cuerpoDe(nombre, "Santa Ana", ""));
-        JsonNode otra = crear(token, cuerpoDe(nombre, "San Miguel", ""));
+        crear(token, cuerpoDe(nombre, "Santa Ana", EN_SANTA_ANA));
+        JsonNode otra = crear(token, cuerpoDe(nombre, "San Miguel", EN_SANTA_ANA));
 
         assertEquals("San Miguel", otra.get("municipio").asText());
     }
@@ -198,7 +204,7 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
     @DisplayName("dar de baja una clínica cambia su estado y no la borra")
     void darDeBajaNoBorra() throws Exception {
         String token = tokenDeMedico();
-        JsonNode creada = crear(token, cuerpoDe(nombreUnico(), "Santa Ana", ""));
+        JsonNode creada = crear(token, cuerpoDe(nombreUnico(), "Santa Ana", EN_SANTA_ANA));
         int id = creada.get("clinicaId").asInt();
 
         String cuerpo = mockMvc.perform(patch("/clinics/{id}/estado", id)
@@ -231,7 +237,7 @@ class ClinicaGeorreferenciadaIT extends PruebaClinica {
     @DisplayName("un estado inexistente se rechaza con 400")
     void estadoInvalidoSeRechaza() throws Exception {
         String token = tokenDeMedico();
-        int id = crear(token, cuerpoDe(nombreUnico(), "Santa Ana", "")).get("clinicaId").asInt();
+        int id = crear(token, cuerpoDe(nombreUnico(), "Santa Ana", EN_SANTA_ANA)).get("clinicaId").asInt();
 
         mockMvc.perform(patch("/clinics/{id}/estado", id)
                         .header("Authorization", "Bearer " + token)

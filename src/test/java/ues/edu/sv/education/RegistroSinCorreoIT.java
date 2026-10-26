@@ -69,8 +69,8 @@ class RegistroSinCorreoIT extends PruebaDeIntegracion {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Medico","apellidos":"Sin Correo",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correo, CLAVE)))
+                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(correo, CLAVE, juntaUnica())))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
     }

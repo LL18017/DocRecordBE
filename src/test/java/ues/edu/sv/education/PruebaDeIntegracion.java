@@ -55,6 +55,18 @@ import java.util.Properties;
 public abstract class PruebaDeIntegracion {
 
     /**
+     * Numero de junta de vigilancia distinto en cada llamada, para registrar
+     * medicos por /auth/register (HU-02 criterio 1): la columna es UNIQUE. Se
+     * parte de la hora para que dos corridas sobre la misma base no repitan.
+     */
+    private static final java.util.concurrent.atomic.AtomicLong JUNTAS =
+            new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis() % 100_000_000L);
+
+    protected static String juntaUnica() {
+        return "JVPM-" + JUNTAS.incrementAndGet();
+    }
+
+    /**
      * El unico JavaMailSender del contexto de pruebas, y es falso.
      *
      * Cada registro de usuario manda un correo de confirmacion, y el trabajo

@@ -85,9 +85,9 @@ class SeguridadIT extends PruebaDeIntegracion {
                         .content("""
                                 {"nombres":"Medico","apellidos":"De Pruebas",
                                  "email":"%s","password":"%s",
-                                 "especialidadId":1,
+                                 "especialidadId":1,"registroJunta":"%s",
                                  "roles":[1],"userType":1}
-                                """.formatted(correo, clave)))
+                                """.formatted(correo, clave, juntaUnica())))
                 .andExpect(status().is2xxSuccessful());
 
         // La cuenta nace deshabilitada a la espera del correo de confirmacion.

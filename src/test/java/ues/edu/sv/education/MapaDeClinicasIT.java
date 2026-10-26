@@ -3,7 +3,10 @@ package ues.edu.sv.education;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import ues.edu.sv.education.model.entity.Clinicas;
+import ues.edu.sv.education.repository.ClinicaRepository;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -37,6 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * cuantas sedes dejaron las demas clases.
  */
 class MapaDeClinicasIT extends PruebaClinica {
+
+    @Autowired private ClinicaRepository clinicas;
 
     /** Lo unico que el mapa publica de una clinica. Ni el dueño ni el estado. */
     private static final Set<String> CAMPOS_PUBLICOS = Set.of(
@@ -155,7 +160,13 @@ class MapaDeClinicasIT extends PruebaClinica {
         // Existe y atiende; solo le falta que alguien le tome el GPS. Es la
         // pagina la que la lista aparte en vez de inventarle un punto.
         String depto = departamentoUnico();
-        crearClinica(tokenDeMedico(), "Clinica Sin Gps " + siguiente(), depto, "");
+        // El alta ya exige coordenadas (HU-26): una sin GPS es una anterior a
+        // ese criterio, y asi llegaron, por la base.
+        int id = crearClinica(tokenDeMedico(), "Clinica Sin Gps " + siguiente(), depto, EN_SANTA_ANA);
+        Clinicas anterior = clinicas.findById(id).orElseThrow();
+        anterior.setLatitud(null);
+        anterior.setLongitud(null);
+        clinicas.saveAndFlush(anterior);
 
         JsonNode lista = publicas(depto);
         assertEquals(1, lista.size());

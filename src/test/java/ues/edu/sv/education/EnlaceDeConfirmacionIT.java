@@ -46,8 +46,8 @@ class EnlaceDeConfirmacionIT extends PruebaClinica {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Ana","apellidos":"Melendez",
-                                 "email":"enlace.publico.%d@ues.edu.sv","password":"%s","especialidadId":1}
-                                """.formatted(CONTADOR.incrementAndGet(), CLAVE)))
+                                 "email":"enlace.publico.%d@ues.edu.sv","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(CONTADOR.incrementAndGet(), CLAVE, juntaUnica())))
                 .andExpect(status().isCreated());
 
         String texto = enlaceDelUltimoCorreo();
