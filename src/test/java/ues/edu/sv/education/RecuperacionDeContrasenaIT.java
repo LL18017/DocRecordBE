@@ -1,5 +1,7 @@
 package ues.edu.sv.education;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -313,10 +315,17 @@ class RecuperacionDeContrasenaIT extends PruebaClinica {
                 "un token usado no puede responder distinto que uno que no existe");
         assertEquals(porInexistente.getStatus(), porVencido.getStatus(),
                 "un token vencido no puede responder distinto que uno que no existe");
-        assertEquals(porInexistente.getContentAsString(), porUsado.getContentAsString(),
+        // Cuerpo entero salvo `timestamp`, que es la hora de cada respuesta.
+        assertEquals(sinMarcaDeTiempo(porInexistente), sinMarcaDeTiempo(porUsado),
                 "el cuerpo delata que ese token existia");
-        assertEquals(porInexistente.getContentAsString(), porVencido.getContentAsString(),
+        assertEquals(sinMarcaDeTiempo(porInexistente), sinMarcaDeTiempo(porVencido),
                 "el cuerpo delata que ese token existia");
+    }
+
+    private JsonNode sinMarcaDeTiempo(MockHttpServletResponse respuesta) throws Exception {
+        ObjectNode nodo = (ObjectNode) json.readTree(respuesta.getContentAsString());
+        nodo.remove("timestamp");
+        return nodo;
     }
 
     // ══════════════════════════════════════════════════════════════════════

@@ -1,8 +1,11 @@
 package ues.edu.sv.education.controller.error;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -21,15 +24,18 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * Traduce cualquier excepcion que salga de un controller a una respuesta HTTP.
  *
  * ── El contrato (TT-01, criterio 1) ───────────────────────────────────────
- * Todo cuerpo de error de esta API es el mismo objeto de dos claves:
+ * Todo cuerpo de error de esta API trae las mismas cinco claves (ver
+ * CuerpoDeError):
  *
- *     {"error": <categoria>, "message": <motivo concreto>}
+ *     {"error": <categoria>, "message": <motivo concreto>,
+ *      "codigo": <estado HTTP>, "timestamp": <ISO-8601>, "ruta": <URI>}
  *
  * `error` dice de que tipo de fallo se trata ("Registro no encontrado",
  * "Conflicto"); `message` dice que paso exactamente, redactado para que una
@@ -39,18 +45,26 @@ import java.util.stream.Collectors;
  * un cuerpo sin `message` deja al usuario con el texto generico por codigo
  * HTTP -"Los datos enviados no son validos"- en vez del motivo real.
  *
- * El codigo HTTP NO viaja en el cuerpo: ya viaja en el estado de la respuesta,
- * que es de donde el cliente lo lee.
+ * `codigo`, `timestamp` y `ruta` se agregaron DESPUES, sin tocar las dos
+ * primeras, para que el cliente que ya leia `message` siga funcionando igual.
+ * `codigo` repite el estado HTTP a proposito: criterio de TT-01, y asi el
+ * cuerpo se entiende tambien guardado en un registro, sin la cabecera.
  *
- * Unica excepcion, y es aditiva: los dos manejadores de validacion mandan
- * ADEMAS una entrada por campo invalido, porque el par no puede decir QUE
- * campo fallo (ver respuestaDeValidacion, al final de la clase).
+ * El 500 agrega ademas `idError` (un UUID) que tambien queda en el registro del
+ * servidor junto con la traza: es lo que permite rastrear el fallo que un
+ * usuario reporta sin exponerle la traza (ver handleGenericException).
+ *
+ * Los dos manejadores de validacion mandan ADEMAS una entrada por campo
+ * invalido, porque el par no puede decir QUE campo fallo (ver
+ * respuestaDeValidacion, al final de la clase).
  *
  * El JwtFilter responde con este mismo formato por su cuenta, porque corre
  * antes del DispatcherServlet y ningun @ExceptionHandler lo alcanza.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /*
      * ============================================================
@@ -71,15 +85,11 @@ public class GlobalExceptionHandler {
      * se devuelve HTTP 404.
      */
     @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleEntityNotFoundException(
-            EntityNotFoundException ex) {
+    public ResponseEntity<Map<String, Object>> handleEntityNotFoundException(
+            EntityNotFoundException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of(
-                        "error", "Registro no encontrado",
-                        "message", ex.getMessage()
-                ));
+        return respuesta(HttpStatus.NOT_FOUND, "Registro no encontrado", ex.getMessage(), request);
     }
     /*
      * ============================================================
@@ -100,15 +110,11 @@ public class GlobalExceptionHandler {
      * se devuelve HTTP 404.
      */
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<Map<String, String>> handleNoResourceFoundException(
-            NoResourceFoundException ex) {
+    public ResponseEntity<Map<String, Object>> handleNoResourceFoundException(
+            NoResourceFoundException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of(
-                        "error", "Recurso no encontrado",
-                        "message", ex.getMessage()
-                ));
+        return respuesta(HttpStatus.NOT_FOUND, "Recurso no encontrado", ex.getMessage(), request);
     }
 
     /*
@@ -123,15 +129,11 @@ public class GlobalExceptionHandler {
      * Exception.class y una URL mal escrita responde 500 en vez de 404.
      */
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    public ResponseEntity<Map<String, String>> handleSpringNoResourceFoundException(
-            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+    public ResponseEntity<Map<String, Object>> handleSpringNoResourceFoundException(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of(
-                        "error", "Endpoint no encontrado",
-                        "message", "La URL solicitada no existe"
-                ));
+        return respuesta(HttpStatus.NOT_FOUND, "Endpoint no encontrado", "La URL solicitada no existe", request);
     }
 
     /*
@@ -148,7 +150,9 @@ public class GlobalExceptionHandler {
      * codigo que llevara.
      */
     @ExceptionHandler(GeneralException.class)
-    public ResponseEntity<Map<String, String>> handleGeneralException(GeneralException ex) {
+    public ResponseEntity<Map<String, Object>> handleGeneralException(
+            GeneralException ex,
+            HttpServletRequest request) {
 
         HttpStatus status;
         try {
@@ -157,12 +161,7 @@ public class GlobalExceptionHandler {
             status = HttpStatus.BAD_REQUEST;
         }
 
-        return ResponseEntity
-                .status(status)
-                .body(Map.of(
-                        "error", "Error",
-                        "message", ex.getMessage()
-                ));
+        return respuesta(status, "Error", ex.getMessage(), request);
     }
 
 
@@ -184,15 +183,11 @@ public class GlobalExceptionHandler {
      * Para un conflicto es más correcto utilizar 409.
      */
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, String>> handleIllegalStateException(
-            IllegalStateException ex) {
+    public ResponseEntity<Map<String, Object>> handleIllegalStateException(
+            IllegalStateException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(Map.of(
-                        "error", "Conflicto",
-                        "message", ex.getMessage()
-                ));
+        return respuesta(HttpStatus.CONFLICT, "Conflicto", ex.getMessage(), request);
     }
 
 
@@ -230,8 +225,9 @@ public class GlobalExceptionHandler {
      * El par {error, message} lo añade respuestaDeValidacion; ahí está por qué.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidationException(
-            MethodArgumentNotValidException ex) {
+    public ResponseEntity<Map<String, Object>> handleValidationException(
+            MethodArgumentNotValidException ex,
+            HttpServletRequest request) {
 
         // LinkedHashMap y no HashMap: de este orden sale el de `message`, y con
         // un HashMap el mismo cuerpo inválido producía un texto distinto en cada
@@ -247,7 +243,7 @@ public class GlobalExceptionHandler {
                         )
                 );
 
-        return respuestaDeValidacion(errores);
+        return respuestaDeValidacion(errores, request);
     }
 
 
@@ -271,8 +267,9 @@ public class GlobalExceptionHandler {
      * Puede producir ConstraintViolationException.
      */
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<Map<String, String>> handleConstraintViolationException(
-            ConstraintViolationException ex) {
+    public ResponseEntity<Map<String, Object>> handleConstraintViolationException(
+            ConstraintViolationException ex,
+            HttpServletRequest request) {
 
         // Mismo motivo que en el manejador de arriba para no usar HashMap.
         Map<String, String> errores = new LinkedHashMap<>();
@@ -285,7 +282,7 @@ public class GlobalExceptionHandler {
                         )
                 );
 
-        return respuestaDeValidacion(errores);
+        return respuestaDeValidacion(errores, request);
     }
 
 
@@ -320,8 +317,9 @@ public class GlobalExceptionHandler {
      * DataIntegrityViolationException
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(
-            DataIntegrityViolationException ex) {
+    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request) {
 
         String message = ex.getMostSpecificCause().getMessage();
 
@@ -330,12 +328,7 @@ public class GlobalExceptionHandler {
          */
         if (message != null && message.contains("(email)")) {
 
-            return ResponseEntity
-                    .status(HttpStatus.CONFLICT)
-                    .body(Map.of(
-                            "error", "Correo duplicado",
-                            "message", "El correo electrónico ya está registrado"
-                    ));
+            return respuesta(HttpStatus.CONFLICT, "Correo duplicado", "El correo electrónico ya está registrado", request);
         }
 
         /*
@@ -344,12 +337,7 @@ public class GlobalExceptionHandler {
          * No devolvemos el mensaje completo de PostgreSQL porque
          * podría revelar información interna de la base de datos.
          */
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(Map.of(
-                        "error", "Violación de integridad",
-                        "message", "La operación no puede realizarse porque los datos entran en conflicto con información existente"
-                ));
+        return respuesta(HttpStatus.CONFLICT, "Violación de integridad", "La operación no puede realizarse porque los datos entran en conflicto con información existente", request);
     }
 
 
@@ -377,15 +365,11 @@ public class GlobalExceptionHandler {
      * cuando se espera Integer.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Map<String, String>> handleHttpMessageNotReadable(
-            HttpMessageNotReadableException ex) {
+    public ResponseEntity<Map<String, Object>> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(Map.of(
-                        "error", "Solicitud inválida",
-                        "message", "El cuerpo de la solicitud no tiene un formato válido"
-                ));
+        return respuesta(HttpStatus.BAD_REQUEST, "Solicitud inválida", "El cuerpo de la solicitud no tiene un formato válido", request);
     }
 
 
@@ -407,15 +391,11 @@ public class GlobalExceptionHandler {
      * Entonces se devuelve 405.
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<Map<String, String>> handleMethodNotSupported(
-            HttpRequestMethodNotSupportedException ex) {
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(Map.of(
-                        "error", "Método HTTP no permitido",
-                        "message", "El método HTTP utilizado no está permitido para este endpoint"
-                ));
+        return respuesta(HttpStatus.METHOD_NOT_ALLOWED, "Método HTTP no permitido", "El método HTTP utilizado no está permitido para este endpoint", request);
     }
 
 
@@ -440,15 +420,11 @@ public class GlobalExceptionHandler {
      * spring.mvc.throw-exception-if-no-handler-found=true
      */
     @ExceptionHandler(NoHandlerFoundException.class)
-    public ResponseEntity<Map<String, String>> handleNoHandlerFound(
-            NoHandlerFoundException ex) {
+    public ResponseEntity<Map<String, Object>> handleNoHandlerFound(
+            NoHandlerFoundException ex,
+            HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of(
-                        "error", "Endpoint no encontrado",
-                        "message", "La URL solicitada no existe"
-                ));
+        return respuesta(HttpStatus.NOT_FOUND, "Endpoint no encontrado", "La URL solicitada no existe", request);
     }
 
 
@@ -490,21 +466,22 @@ public class GlobalExceptionHandler {
      * salgan idénticos (HU-01 criterio 2, ver SeguridadIT).
      */
     @ExceptionHandler(CustomAuthenticationException.class)
-    public ResponseEntity<Map<String, String>> handleAuthenticationError(
-            CustomAuthenticationException ex) {
+    public ResponseEntity<Map<String, Object>> handleAuthenticationError(
+            CustomAuthenticationException ex,
+            HttpServletRequest request) {
+
+        // El código de la excepción es un int libre. Hoy todos los usos son
+        // 401; si alguien la lanza con otro, la categoría dejaría de ser cierta
+        // y se dice la genérica en vez de afirmar algo que la respuesta
+        // contradice.
+        String categoria = ex.getErrorCode() == HttpStatus.UNAUTHORIZED.value()
+                ? "No autenticado"
+                : "Error de autenticación";
 
         return ResponseEntity
                 .status(ex.getErrorCode())
-                .body(Map.of(
-                        // El código de la excepción es un int libre. Hoy todos
-                        // los usos son 401; si alguien la lanza con otro, la
-                        // categoría dejaría de ser cierta y se dice la genérica
-                        // en vez de afirmar algo que la respuesta contradice.
-                        "error", ex.getErrorCode() == HttpStatus.UNAUTHORIZED.value()
-                                ? "No autenticado"
-                                : "Error de autenticación",
-                        "message", ex.getMessage()
-                ));
+                .body(CuerpoDeError.de(ex.getErrorCode(), categoria, ex.getMessage(),
+                        request.getRequestURI()));
     }
 
 
@@ -539,14 +516,9 @@ public class GlobalExceptionHandler {
      * servidor, no la respuesta.
      */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, String>> handleAccessDenied() {
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(HttpServletRequest request) {
 
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(Map.of(
-                        "error", "Acceso denegado",
-                        "message", "No tienes permisos para realizar esta acción"
-                ));
+        return respuesta(HttpStatus.FORBIDDEN, "Acceso denegado", "No tienes permisos para realizar esta acción", request);
     }
 
 
@@ -579,56 +551,60 @@ public class GlobalExceptionHandler {
      * solicitud: 502. Sin estos tres el error terminaria en el generico, 500.
      */
     @ExceptionHandler(TransientAiException.class)
-    public ResponseEntity<Map<String, String>> handleTransientAiException(
-            TransientAiException ex) {
-        return ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "error", "Servicio no disponible",
-                        "message", "El servicio de inteligencia artificial no está disponible temporalmente."
-                ));
+    public ResponseEntity<Map<String, Object>> handleTransientAiException(
+            TransientAiException ex,
+            HttpServletRequest request) {
+        return respuesta(HttpStatus.SERVICE_UNAVAILABLE, "Servicio no disponible", "El servicio de inteligencia artificial no está disponible temporalmente.", request);
     }
 
     @ExceptionHandler(NonTransientAiException.class)
-    public ResponseEntity<Map<String, String>> handleNonTransientAiException(
-            NonTransientAiException ex) {
-        return ResponseEntity
-                .status(HttpStatus.BAD_GATEWAY)
-                .body(Map.of(
-                        "error", "Error del servicio de IA",
-                        "message", "El servicio de inteligencia artificial rechazó la solicitud."
-                ));
+    public ResponseEntity<Map<String, Object>> handleNonTransientAiException(
+            NonTransientAiException ex,
+            HttpServletRequest request) {
+        return respuesta(HttpStatus.BAD_GATEWAY, "Error del servicio de IA", "El servicio de inteligencia artificial rechazó la solicitud.", request);
     }
 
     @ExceptionHandler(ResourceAccessException.class)
-    public ResponseEntity<Map<String, String>> handleResourceAccessException(
-            ResourceAccessException ex) {
-        return ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "error", "Servicio no disponible",
-                        "message", "No se pudo conectar con el servicio de inteligencia artificial."
-                ));
+    public ResponseEntity<Map<String, Object>> handleResourceAccessException(
+            ResourceAccessException ex,
+            HttpServletRequest request) {
+        return respuesta(HttpStatus.SERVICE_UNAVAILABLE, "Servicio no disponible", "No se pudo conectar con el servicio de inteligencia artificial.", request);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, String>> handleGenericException(
-            Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGenericException(
+            Exception ex,
+            HttpServletRequest request) {
 
-        /*
-         * Esto aparecerá en los logs del servidor.
-         *
-         * En producción puedes utilizar Logger en lugar de
-         * System.err.
-         */
-        ex.printStackTrace();
+        // El detalle -con la traza- queda SOLO en el registro del servidor,
+        // atado a un identificador que tambien se le devuelve al usuario: asi
+        // quien reporta "me salio un error" puede darlo y se encuentra su
+        // traza exacta sin exponerla en la respuesta (TT-01).
+        String idError = UUID.randomUUID().toString();
+        LOG.error("Error interno [idError={}] en {} {}", idError,
+                request.getMethod(), request.getRequestURI(), ex);
+
+        Map<String, Object> cuerpo = CuerpoDeError.de(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Error interno",
+                "Ocurrió un error inesperado en el servidor. Si el problema continúa, indique el código de error: "
+                        + idError,
+                request.getRequestURI());
+        cuerpo.put("idError", idError);
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of(
-                        "error", "Error interno",
-                        "message", "Ocurrió un error inesperado en el servidor"
-                ));
+                .body(cuerpo);
+    }
+
+
+    /** Respuesta de error con el cuerpo uniforme de la API (ver CuerpoDeError). */
+    private static ResponseEntity<Map<String, Object>> respuesta(
+            HttpStatus estado, String error, String message, HttpServletRequest request) {
+
+        return ResponseEntity
+                .status(estado)
+                .body(CuerpoDeError.de(estado, error, message, request.getRequestURI()));
     }
 
 
@@ -655,15 +631,15 @@ public class GlobalExceptionHandler {
      * se llame `error` o `message`, quien gana es el contrato. Al revés, el
      * cuerpo dejaría de cumplirlo sin que nadie se enterara.
      */
-    private static ResponseEntity<Map<String, String>> respuestaDeValidacion(
-            Map<String, String> porCampo) {
+    private static ResponseEntity<Map<String, Object>> respuestaDeValidacion(
+            Map<String, String> porCampo, HttpServletRequest request) {
 
         String motivo = porCampo.values().stream()
                 .filter(mensaje -> mensaje != null && !mensaje.isBlank())
                 .map(mensaje -> mensaje.matches(".*[.!?]") ? mensaje : mensaje + ".")
                 .collect(Collectors.joining(" "));
 
-        Map<String, String> cuerpo = new LinkedHashMap<>(porCampo);
+        Map<String, Object> cuerpo = new LinkedHashMap<>(porCampo);
         cuerpo.put("error", "Datos inválidos");
         cuerpo.put("message", motivo.isBlank()
                 // Puede no quedar ningún mensaje aprovechable: una restricción
@@ -672,6 +648,7 @@ public class GlobalExceptionHandler {
                 // interfaz es lo mismo que no mandarlo.
                 ? "Los datos enviados no son válidos"
                 : motivo);
+        CuerpoDeError.completar(cuerpo, HttpStatus.BAD_REQUEST.value(), request.getRequestURI());
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)

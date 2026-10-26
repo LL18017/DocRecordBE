@@ -2,6 +2,7 @@ package ues.edu.sv.education;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -221,8 +222,17 @@ class SeguridadIT extends PruebaDeIntegracion {
         // Sigue comparandose entero ahora que TT-01 unifico el formato, porque
         // es lo que detecta una divergencia futura: dos manejadores distintos
         // respondiendo cada uno lo suyo vuelve a delatar cual correo existe.
-        assertEquals(claveMala.getContentAsString(), inexistente.getContentAsString(),
+        // Solo se excluye `timestamp`: es la hora de cada respuesta y cambia
+        // entre dos peticiones aunque el sistema responda lo mismo.
+        assertEquals(sinMarcaDeTiempo(claveMala.getContentAsString()),
+                sinMarcaDeTiempo(inexistente.getContentAsString()),
                 "el cuerpo de la respuesta delata si el correo existe");
+    }
+
+    private JsonNode sinMarcaDeTiempo(String cuerpo) throws Exception {
+        ObjectNode nodo = (ObjectNode) json.readTree(cuerpo);
+        nodo.remove("timestamp");
+        return nodo;
     }
 
     @Test
