@@ -1,16 +1,20 @@
 Recordatorio de cita médica - DocRecord Sv
 
-Te recordamos que tienes una cita médica programada en DocRecord Sv.
+Te recordamos que tienes una cita médica programada para mañana en DocRecord Sv.
 
-Fecha y hora: [(${fechaHora})]
-Médico asignado: [(${medico})]
+Fecha:     [(${fecha})]
+Hora:      [(${hora})]
+Médico:    [(${medico})]
+[# th:if="${clinica != null}"]Clínica:   [(${clinica})]
+[/][# th:if="${direccion != null}"]Dirección: [(${direccion})]
+[/]
+Procura llegar con anticipación y, si tienes estudios o documentos médicos
+relevantes, llévalos contigo.
 
-RECOMENDACIONES PARA TU CITA
+¿NO PUEDES ASISTIR? Para cancelar o reprogramar tu cita, comunícate con el
+personal de la clínica o ingresa a DocRecord Sv:
 
-  1. Procura llegar con anticipación.
-  2. Si tienes estudios o documentos médicos relevantes, llévalos contigo.
-  3. Si no puedes asistir, contacta a la clínica para consultar cómo
-     reprogramar tu cita.
+  [(${enlace})]
 
 --
 DocRecord Sv - Sistema de Gestión Clínica Ambulatoria

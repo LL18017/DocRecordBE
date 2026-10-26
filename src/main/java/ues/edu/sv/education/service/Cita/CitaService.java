@@ -91,22 +91,39 @@ public class CitaService {
         // quedaria PENDIENTE reintentandose cada 15 segundos.
         String correo = paciente.getPersona().getEmail();
         if (correo != null && !correo.isBlank()) {
-            Event event = Event.builder()
-                    .eventType(
-                            eventTypeRepository.getReferenceById(EventCodeEnums.APPOINTMENT_CREATED.getId())
-                    )
-                    .description("Se ha realizado una cita")
-                    .eventStatus(
-                            eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId())
-                    )
-                    .userEmail(correo)
-                    .ref(String.valueOf(cita.getCitaId()))
-                    .createdAt(LocalDateTime.now())
-                    .build();
-
-            eventRepository.save(event);
+            registrarAviso(EventCodeEnums.APPOINTMENT_CREATED, "Se ha realizado una cita", cita, correo);
         }
         return citaMapper.toResponse(cita);
+    }
+
+    /**
+     * Deja el aviso PENDIENTE para que EventProcessorService lo mande (el
+     * correo no cuelga de la peticion). Un solo evento por cambio: el
+     * procesador decide a quienes les escribe segun el tipo.
+     */
+    private void registrarAviso(EventCodeEnums tipo, String descripcion, Cita cita, String correo) {
+        eventRepository.save(Event.builder()
+                .eventType(eventTypeRepository.getReferenceById(tipo.getId()))
+                .description(descripcion)
+                .eventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId()))
+                .userEmail(correo)
+                .ref(String.valueOf(cita.getCitaId()))
+                .createdAt(LocalDateTime.now())
+                .build());
+    }
+
+    /**
+     * El correo al que se ancla el evento: el del paciente y, si no tiene, el
+     * del medico. Sin ninguno de los dos no hay a quien avisar y no se crea
+     * evento. (El procesador escribe a ambos cuando cada uno tiene correo.)
+     */
+    private static String correoDeAviso(Cita cita) {
+        String paciente = cita.getPaciente().getPersona().getEmail();
+        if (paciente != null && !paciente.isBlank()) {
+            return paciente;
+        }
+        String medico = cita.getMedico().getEmail();
+        return medico == null || medico.isBlank() ? null : medico;
     }
 
     @Transactional(readOnly = true)
@@ -206,8 +223,23 @@ public class CitaService {
             }
             validarDisponibilidad(cita.getPaciente().getPersonaId(), medico.getUserID(), fecha, cita.getCitaId());
 
+            // HU-32 criterio 4: solo se avisa si de verdad cambio la fecha o el
+            // medico; mandar la misma fecha no mueve nada.
+            LocalDateTime fechaAnterior = cita.getFechaHora();
+            Integer medicoAnteriorId = cita.getMedico().getUserID();
+            boolean cambioReal = !fecha.equals(fechaAnterior) || !medico.getUserID().equals(medicoAnteriorId);
+
             cita.setMedico(medico);
             cita.setFechaHora(fecha);
+
+            if (cambioReal) {
+                String correo = correoDeAviso(cita);
+                if (correo != null) {
+                    registrarAviso(EventCodeEnums.APPOINTMENT_RESCHEDULED,
+                            new DetalleDeReprogramacion(fechaAnterior, medicoAnteriorId).codificar(),
+                            cita, correo);
+                }
+            }
         }
 
         if (dto.tipoCitaId() != null && dto.tipoCitaId() > 0) {
@@ -248,7 +280,15 @@ public class CitaService {
 
         cita.setEstado(Cita.CANCELADA);
         cita.setMotivoCancelacion(motivo.trim());
-        return citaMapper.toResponse(guardar(cita));
+        Cita guardada = guardar(cita);
+
+        // HU-32 criterio 4: se avisa al paciente y al medico. Sin correo de
+        // ninguno de los dos no hay a quien escribir y no se encola nada.
+        String correo = correoDeAviso(guardada);
+        if (correo != null) {
+            registrarAviso(EventCodeEnums.APPOINTMENT_CANCELLED, "Cita cancelada", guardada, correo);
+        }
+        return citaMapper.toResponse(guardada);
     }
 
     private Cita guardar(Cita cita) {

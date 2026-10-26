@@ -1,6 +1,7 @@
 package ues.edu.sv.education.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -133,8 +134,11 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
             @Param("excluirCitaId") Integer excluirCitaId
     );
 
-    // Solo las AGENDADAS: a una cita cancelada o atendida no se le recuerda
-    // nada (HU-33, criterio 3).
+    // HU-33: las citas AGENDADAS de la ventana que todavia no tienen
+    // recordatorio. A una cita cancelada o atendida no se le recuerda nada
+    // (criterio 3), y la marca recordatorio_enviado_en garantiza "una sola vez"
+    // (criterio 1). La clinica va con LEFT JOIN: las citas anteriores a V24 no
+    // la guardaron.
     @Query("""
     SELECT c
     FROM Cita c
@@ -142,13 +146,40 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
         JOIN FETCH p.persona
         JOIN FETCH c.medico m
         JOIN FETCH m.persona
-    WHERE  c.fechaHora between :fechaInicio and :fechaFinal
+      LEFT JOIN FETCH c.clinica
+    WHERE c.fechaHora BETWEEN :desde AND :hasta
       AND c.estado = 'AGENDADA'
+      AND c.recordatorioEnviadoEn IS NULL
+    ORDER BY c.fechaHora ASC
 """)
-    List<Cita> findByFechaHoraBetween(
-            @Param("fechaInicio") LocalDateTime fechaHora,
-            @Param("fechaFinal") LocalDateTime fechaFinal
+    List<Cita> pendientesDeRecordatorio(
+            @Param("desde") LocalDateTime desde,
+            @Param("hasta") LocalDateTime hasta
     );
+
+    /**
+     * Reclama el recordatorio de una cita: la marca solo si todavia no estaba
+     * marcada. Devuelve 1 si la reclamo quien llama y 0 si otro (u otra
+     * pasada) ya lo hizo, de modo que dos ejecuciones simultaneas nunca
+     * mandan el mismo aviso.
+     */
+    @Modifying
+    @Query("""
+    UPDATE Cita c
+       SET c.recordatorioEnviadoEn = :ahora
+     WHERE c.citaId = :citaId
+       AND c.recordatorioEnviadoEn IS NULL
+       AND c.estado = 'AGENDADA'
+""")
+    int reclamarRecordatorio(
+            @Param("citaId") Integer citaId,
+            @Param("ahora") LocalDateTime ahora
+    );
+
+    /** Deshace la marca cuando el correo no salio, para reintentar en la pasada siguiente. */
+    @Modifying
+    @Query("UPDATE Cita c SET c.recordatorioEnviadoEn = NULL WHERE c.citaId = :citaId")
+    int liberarRecordatorio(@Param("citaId") Integer citaId);
 
     @Query("""
         SELECT c
@@ -157,6 +188,7 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
         JOIN FETCH p.persona
         JOIN FETCH c.medico m
         JOIN FETCH m.persona
+        LEFT JOIN FETCH c.clinica
         WHERE c.citaId = :citaId
     """)
     Optional<Cita> buscarCitaConPersonas(

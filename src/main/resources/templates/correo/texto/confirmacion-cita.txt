@@ -1,0 +1,19 @@
+Cita médica agendada - DocRecord Sv
+
+Se agendó una cita médica a tu nombre en DocRecord Sv.
+
+Fecha:     [(${fecha})]
+Hora:      [(${hora})]
+Médico:    [(${medico})]
+[# th:if="${clinica != null}"]Clínica:   [(${clinica})]
+[/][# th:if="${direccion != null}"]Dirección: [(${direccion})]
+[/]
+Para cancelar o reprogramar tu cita, comunícate con el personal de la clínica
+o ingresa a DocRecord Sv:
+
+  [(${enlace})]
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -133,7 +134,15 @@ public class PrescripcionService {
         if (!alertas.isEmpty()) {
             registrarEnBitacora(prescripcionEnt, alertas, justificacion);
         }
-        return toDto(prescripcionEnt);
+
+        // HU-25 criterio 1: la receta sale al correo del paciente sin que el
+        // medico haga nada mas. Criterio 2: si el paciente no tiene correo no
+        // se encola un envio vacio; la respuesta lo dice (SIN_CORREO) para que
+        // la pantalla avise y ofrezca imprimirla.
+        if (tieneCorreo(consulta)) {
+            encolarEnvio(consulta);
+        }
+        return toDto(prescripcionEnt, enviosDe(List.of(prescripcionEnt)));
     }
 
     /**
@@ -268,34 +277,66 @@ public class PrescripcionService {
                 .build());
     }
 
+    /**
+     * Envio manual (o reenvio) de la receta al correo del paciente. Es el
+     * camino del boton "Enviar/Reenviar por correo", sobre todo cuando el
+     * envio automatico fallo (HU-25, criterio 4).
+     * <p>
+     * Sin correo es 422 y no un evento: un envio sin destinatario no tiene a
+     * quien llegar y la pantalla debe decir que se imprima.
+     */
     @Transactional
     public void enviarReceta(long consultaId) {
 
         Consulta consulta = buscarConsultaOFallar(consultaId);
 
-        // Una receta sin medicamentos no es una receta, es un papel firmado.
-        // El @NotEmpty del DTO ya lo rechaza con 400; esto es la misma regla
-        // dicha donde vive el dominio, para que siga siendo cierta aunque a
-        // este servicio se le llame desde otro lado.
         List<Prescripcion> prescripciones = prescripcionRepository.buscarPorConsulta(consultaId);
         if (prescripciones == null || prescripciones.isEmpty()) {
-            throw new GeneralException("Una receta debe llevar al menos un medicamento", "422");
+            throw new GeneralException("La consulta no tiene recetas para enviar", "422");
         }
-        Event event = Event.builder()
-                .eventType(
-                        eventTypeRepository.getReferenceById(EventCodeEnums.PREESCRIPTION_SEND.getId())
-                )
+        if (!tieneCorreo(consulta)) {
+            throw new GeneralException("El paciente no tiene un correo registrado. "
+                    + "Registre su correo o imprima la receta para entregársela", "422");
+        }
+        encolarEnvio(consulta);
+    }
+
+    private static boolean tieneCorreo(Consulta consulta) {
+        String correo = consulta.getPaciente().getPersona().getEmail();
+        return correo != null && !correo.isBlank();
+    }
+
+    /**
+     * Deja el envio PENDIENTE para que EventProcessorService lo mande: asi lo
+     * lento del SMTP no cae sobre la peticion del medico. La referencia es la
+     * consulta, y el correo lleva todas las recetas de esa consulta.
+     */
+    private void encolarEnvio(Consulta consulta) {
+        eventRepository.save(Event.builder()
+                .eventType(eventTypeRepository.getReferenceById(EventCodeEnums.PREESCRIPTION_SEND.getId()))
                 .description("Se ha realizado un preescripcion")
-                .eventStatus(
-                        eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId())
-                )
-                .userEmail(consulta.getPaciente().getPersona().getEmail())
-                .ref(String.valueOf(consultaId))
+                .eventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PENDING.getId()))
+                .userEmail(consulta.getPaciente().getPersona().getEmail().trim())
+                .ref(String.valueOf(consulta.getConsultaId()))
                 .createdAt(LocalDateTime.now())
-                .build();
+                .build());
+    }
 
-        eventRepository.save(event);
-
+    /** El ultimo envio de cada consulta de las recetas dadas, por id de consulta. */
+    private Map<Long, Event> enviosDe(Collection<Prescripcion> recetas) {
+        List<String> refs = recetas.stream()
+                .map(r -> String.valueOf(r.getConsulta().getConsultaId()))
+                .distinct()
+                .toList();
+        Map<Long, Event> ultimos = new HashMap<>();
+        if (refs.isEmpty()) {
+            return ultimos;
+        }
+        // Vienen del mas reciente al mas antiguo: el primero de cada ref es el ultimo envio.
+        for (Event e : eventRepository.delTipoConReferencias(EventCodeEnums.PREESCRIPTION_SEND.getId(), refs)) {
+            ultimos.putIfAbsent(Long.valueOf(e.getRef()), e);
+        }
+        return ultimos;
     }
 
     // Tope de tamano de pagina: sin el, "todos" seguiria siendo posible con un
@@ -399,12 +440,15 @@ public class PrescripcionService {
         Page<Prescripcion> resultado = prescripcionRepository.buscar(
                 pacienteId, medicoId, consultaId, desdeFechaHora, hastaFechaHora, pageable);
 
-        return PaginaDto.de(resultado.map(this::toDto));
+        // Los envios de toda la pagina en una sola consulta, no uno por receta.
+        Map<Long, Event> envios = enviosDe(resultado.getContent());
+        return PaginaDto.de(resultado.map(r -> toDto(r, envios)));
     }
 
     @Transactional(readOnly = true)
     public PrescripcionResponseDto obtener(Long prescripcionId) {
-        return toDto(buscarPrescripcionOFallar(prescripcionId));
+        Prescripcion receta = buscarPrescripcionOFallar(prescripcionId);
+        return toDto(receta, enviosDe(List.of(receta)));
     }
 
     /**
@@ -583,7 +627,7 @@ public class PrescripcionService {
         return (valor == null || valor.isBlank()) ? null : valor.trim();
     }
 
-    private PrescripcionResponseDto toDto(Prescripcion prescripcion) {
+    private PrescripcionResponseDto toDto(Prescripcion prescripcion, Map<Long, Event> envios) {
 
         Persona personaMedico = prescripcion.getMedico().getPersona();
         Paciente paciente = prescripcion.getConsulta().getPaciente();
@@ -631,8 +675,39 @@ public class PrescripcionService {
                 prescripcion.getMotivoAnulacion(),
                 prescripcion.getAnuladaEn(),
                 anuladaPor == null ? null
-                        : anuladaPor.getPersona().getNombres() + " " + anuladaPor.getPersona().getApellidos()
+                        : anuladaPor.getPersona().getNombres() + " " + anuladaPor.getPersona().getApellidos(),
+                estadoDelEnvio(prescripcion, envios),
+                fechaDelEnvio(prescripcion, envios)
         );
+    }
+
+    /**
+     * PENDIENTE, ENVIADO o FALLIDO segun el ultimo envio de la consulta (HU-25,
+     * criterio 4). Sin envio: SIN_CORREO si el paciente no tiene correo (no hay
+     * nada que reenviar, solo imprimir) o null si es una receta anterior al
+     * envio automatico.
+     */
+    private String estadoDelEnvio(Prescripcion receta, Map<Long, Event> envios) {
+        Event envio = envios.get(receta.getConsulta().getConsultaId());
+        if (envio == null) {
+            return tieneCorreo(receta.getConsulta()) ? null : "SIN_CORREO";
+        }
+        int estado = envio.getEventStatus().getEventStatusId();
+        if (estado == EventStatusEnums.PROCESSED.getId()) {
+            return "ENVIADO";
+        }
+        if (estado == EventStatusEnums.FAILED.getId()) {
+            return "FALLIDO";
+        }
+        return "PENDIENTE";
+    }
+
+    private LocalDateTime fechaDelEnvio(Prescripcion receta, Map<Long, Event> envios) {
+        Event envio = envios.get(receta.getConsulta().getConsultaId());
+        if (envio == null) {
+            return null;
+        }
+        return envio.getProcessedAt() != null ? envio.getProcessedAt() : envio.getCreatedAt();
     }
 
     private Map<String, Object> datosCorreo(

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<!--
+  Aviso de reprogramación de una cita (HU-32, criterio 4). Lo reciben el
+  paciente, el médico de la cita y, si cambió el médico, el médico anterior.
+
+  Variables Thymeleaf:
+  - rol: PACIENTE, MEDICO o MEDICO_ANTERIOR (quien lo recibe).
+  - paciente: nombre del paciente (se muestra a los médicos).
+  - fecha, hora, medico, clinica, direccion: los datos vigentes de la cita.
+  - fechaAnterior, horaAnterior: los de antes del cambio.
+  - enlace: dirección de la aplicación.
+-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cita médica reprogramada | DocRecord Sv</title>
+</head>
+
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    La cita médica se reprogramó para el [[${fecha}]] a las [[${hora}]].
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       border="0" bgcolor="#EEF2F7"
+       style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0"
+                   cellspacing="0" border="0" bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;
+                          border-radius:10px;overflow:hidden;">
+
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+
+                <tr>
+                    <td bgcolor="#E8A838" height="4"
+                        style="background-color:#E8A838;height:4px;
+                               line-height:4px;font-size:0;">&nbsp;</td>
+                </tr>
+
+                <!-- Título y mensaje -->
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            Se reprogramó una cita médica
+                        </h1>
+
+                        <p th:if="${rol == 'PACIENTE'}" style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Tu cita médica en DocRecord Sv cambió de fecha u hora, o de médico. Estos son los datos vigentes y los anteriores.
+                        </p>
+                        <p th:if="${rol == 'MEDICO'}" style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Una cita de su agenda en DocRecord Sv cambió de fecha u hora.
+                        </p>
+                        <p th:if="${rol == 'MEDICO_ANTERIOR'}" style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Una cita que estaba a su cargo se reasignó a otro médico y ya no figura en su agenda.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- Datos de la cita -->
+                <tr>
+                    <td style="padding:0 28px 24px 28px;">
+                        <table role="presentation" width="100%"
+                               cellpadding="0" cellspacing="0" border="0"
+                               bgcolor="#F1F5F9"
+                               style="background-color:#F1F5F9;border-radius:6px;">
+
+                            <tr><td height="16" style="height:16px;line-height:16px;font-size:0;">&nbsp;</td></tr>
+                            <tr th:if="${rol != 'PACIENTE'}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Paciente
+                                </td>
+                            </tr>
+                            <tr th:if="${rol != 'PACIENTE'}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${paciente}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${rol != 'MEDICO_ANTERIOR'}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Nueva fecha
+                                </td>
+                            </tr>
+                            <tr th:if="${rol != 'MEDICO_ANTERIOR'}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:26px;font-weight:bold;color:#1E3A5F;"
+                                    th:text="${fecha}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${rol != 'MEDICO_ANTERIOR'}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Nueva hora
+                                </td>
+                            </tr>
+                            <tr th:if="${rol != 'MEDICO_ANTERIOR'}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${hora}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Médico
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${medico}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${clinica != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Clínica
+                                </td>
+                            </tr>
+                            <tr th:if="${clinica != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${clinica}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${direccion != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Dirección
+                                </td>
+                            </tr>
+                            <tr th:if="${direccion != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${direccion}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Fecha y hora anteriores
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${fechaAnterior + ', ' + horaAnterior}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- Cancelar o reprogramar -->
+                <tr>
+                    <td style="padding:0 28px 28px 28px;">
+                        <table role="presentation" width="100%"
+                               cellpadding="0" cellspacing="0" border="0"
+                               bgcolor="#F1F5F9"
+                               style="background-color:#F1F5F9;border-radius:6px;">
+                            <tr>
+                                <td style="padding:16px;
+                                           font-family:Arial,Helvetica,sans-serif;
+                                           font-size:15px;line-height:22px;
+                                           color:#334155;">
+                                    <strong style="color:#334155;">
+                                        ¿Necesitas otro cambio?
+                                    </strong>
+                                    <br><br>
+                                    Para cancelar o reprogramar de nuevo, comunícate con el personal de la clínica o ingresa a DocRecord Sv desde este enlace:
+                                    <br><br>
+                                    <a th:href="${enlace}" th:text="${enlace}" href="#"
+                                       style="color:#1E3A5F;text-decoration:underline;">enlace</a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+
+            </table>
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

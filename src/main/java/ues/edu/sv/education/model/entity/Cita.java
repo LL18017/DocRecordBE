@@ -71,4 +71,11 @@ public class Cita {
      */
     @Column(name = "motivo_cancelacion", length = 255)
     private String motivoCancelacion;
+
+    /**
+     * Cuando se mando el recordatorio de 24 horas (HU-33). Null si aun no. Es
+     * la marca que impide que el trabajo programado avise dos veces.
+     */
+    @Column(name = "recordatorio_enviado_en")
+    private LocalDateTime recordatorioEnviadoEn;
 }
