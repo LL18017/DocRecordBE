@@ -79,6 +79,27 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
             @Param("desde") LocalDateTime desde
     );
 
+    /**
+     * Las citas AGENDADAS a futuro de una sede, las mas proximas primero
+     * (HU-27 criterio 3). Con paciente y persona cargados porque el rechazo de
+     * la baja las nombra. Las canceladas y las atendidas no estorban: ya no
+     * van a ocurrir ahi.
+     */
+    @Query("""
+    SELECT c
+    FROM Cita c
+      JOIN FETCH c.paciente p
+        JOIN FETCH p.persona
+    WHERE c.clinica.clinicaId = :clinicaId
+      AND c.estado = 'AGENDADA'
+      AND c.fechaHora > :desde
+    ORDER BY c.fechaHora ASC
+""")
+    List<Cita> futurasAgendadasDeClinica(
+            @Param("clinicaId") Integer clinicaId,
+            @Param("desde") LocalDateTime desde
+    );
+
     List<Cita> findByEstado(String estado);
 
     // Las dos de disponibilidad ignoran las canceladas: cancelar libera la

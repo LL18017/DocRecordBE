@@ -12,18 +12,24 @@ import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.mappers.ClinicaMapper;
 import ues.edu.sv.education.model.enums.RolesEnum;
+import ues.edu.sv.education.model.entity.Cita;
+import ues.edu.sv.education.repository.CitaRepository;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.UserRepository;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ClinicaService {
     private final UserRepository userRepository;
     private final ClinicaRepository clinicasRepository;
+    private final CitaRepository citaRepository;
 
     /**
      * Las clinicas en las que este usuario puede operar hoy.
@@ -102,8 +108,9 @@ public class ClinicaService {
         return clinicasRepository.findAll().stream().map(this::toResponseDto).toList();
     }
 
-    // Las coordenadas pueden llegar null: la columna las admite y una clinica
-    // se da de alta con su nombre mucho antes de que alguien le tome el GPS.
+    // Las coordenadas son obligatorias en el alta (HU-26 criterio 1): lo
+    // exige el DTO con el grupo AltaDeClinica. La columna sigue admitiendo
+    // null, que es lo que tienen las clinicas anteriores a ese criterio.
     @Transactional
     public ClinicasResponseDto crear(ClinicasRequestDto dto) {
 
@@ -201,8 +208,57 @@ public class ClinicaService {
 
         exigirPropietarioOAdmin(clinica);
 
+        exigirSinCitasFuturas(clinica);
+
         clinica.setEstado(Clinicas.ESTADO_INACTIVA);
         clinicasRepository.save(clinica);
+    }
+
+    /** Cuantas citas se nombran en el rechazo de la baja; el total va siempre. */
+    private static final int CITAS_A_LISTAR = 5;
+
+    private static final DateTimeFormatter FECHA_Y_HORA =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+
+    /**
+     * No deja dar de baja una sede con citas futuras agendadas (HU-27
+     * criterio 3).
+     *
+     * Dar de baja la sede sin mirar esto deja a pacientes con una cita en un
+     * lugar que ya no se ofrece: nadie les avisa y nadie la atiende. Hay que
+     * reprogramarlas o cancelarlas primero, y para eso quien intenta la baja
+     * necesita saber CUALES son: el mensaje dice cuantas hay y nombra las
+     * primeras (fecha, hora y paciente) con ese fin.
+     *
+     * Solo cuenta las AGENDADAS a futuro: una cita cancelada o ya atendida no
+     * va a ocurrir en esa sede. Si la clinica ya esta inactiva no se comprueba:
+     * la baja es idempotente y no cambia nada.
+     */
+    private void exigirSinCitasFuturas(Clinicas clinica) {
+        if (Clinicas.ESTADO_INACTIVA.equals(clinica.getEstado())) return;
+
+        List<Cita> citas = citaRepository.futurasAgendadasDeClinica(
+                clinica.getClinicaId(), LocalDateTime.now());
+        if (citas.isEmpty()) return;
+
+        String primeras = citas.stream()
+                .limit(CITAS_A_LISTAR)
+                .map(cita -> cita.getFechaHora().format(FECHA_Y_HORA) + " - "
+                        + cita.getPaciente().getPersona().getNombres() + " "
+                        + cita.getPaciente().getPersona().getApellidos())
+                .collect(Collectors.joining("; "));
+
+        String resto = citas.size() > CITAS_A_LISTAR
+                ? " (y " + (citas.size() - CITAS_A_LISTAR) + " más)"
+                : "";
+
+        throw new GeneralException(
+                "No se puede dar de baja la clínica: tiene " + citas.size()
+                        + (citas.size() == 1 ? " cita futura agendada" : " citas futuras agendadas")
+                        + ". Reprográmelas o cancélelas primero. "
+                        + (citas.size() == 1 ? "Cita: " : "Primeras citas: ")
+                        + primeras + resto + ".",
+                "409");
     }
 
     // ADMIN administra cualquier clinica; MEDICO solo las suyas. Que el
@@ -291,6 +347,11 @@ public class ClinicaService {
                 .orElseThrow(() -> new NoResourceFoundException("Clínica no encontrada", "404"));
 
         exigirPropietarioOAdmin(clinica);
+
+        // Solo la baja tiene precondiciones; reactivar siempre se puede.
+        if (Clinicas.ESTADO_INACTIVA.equals(limpio)) {
+            exigirSinCitasFuturas(clinica);
+        }
 
         clinica.setEstado(limpio);
         return toResponseDto(clinicasRepository.save(clinica));

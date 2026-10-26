@@ -81,8 +81,8 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Medico","apellidos":"Del Turno",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correo, CLAVE)))
+                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(correo, CLAVE, juntaUnica())))
                 .andExpect(status().is2xxSuccessful());
 
         User usuario = usuarios.findByEmailIgnoreCase(correo)
@@ -261,7 +261,8 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
                         .content("""
                                 {"name":"Sede %d","departamento":"Santa Ana","municipio":"Municipio %d",
                                  "direccion":"Calle Principal","telefono":"2440-0000",
-                                 "horario":"Lunes a viernes, 8:00 a 16:00"}
+                                 "horario":"Lunes a viernes, 8:00 a 16:00",
+                                 "latitud":13.9942,"longitud":-89.5597}
                                 """.formatted(siguiente(), siguiente())))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();

@@ -2,6 +2,7 @@ package ues.edu.sv.education;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -353,6 +355,84 @@ class RecuperacionDeContrasenaIT extends PruebaClinica {
         assertFalse(despues.isEnabled(),
                 "restablecer la contrasena no puede reactivar una cuenta deshabilitada");
         iniciarSesion(cuenta.getEmail(), CLAVE_NUEVA).andExpect(status().is4xxClientError());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-03 criterio 4: restablecer cierra las sesiones abiertas
+    // ══════════════════════════════════════════════════════════════════════
+
+    private JsonNode sesionAbierta(String correo) throws Exception {
+        String cuerpo = iniciarSesion(correo, CLAVE)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return new ObjectMapper().readTree(cuerpo);
+    }
+
+    private ResultActions pedirMisClinicas(String token) throws Exception {
+        return mockMvc.perform(get("/clinics/mias").header("Authorization", "Bearer " + token));
+    }
+
+    private ResultActions refrescar(String refreshToken) throws Exception {
+        return mockMvc.perform(post("/auth/refresh").header("Authorization", "Bearer " + refreshToken));
+    }
+
+    @Test
+    @DisplayName("HU-03 criterio 4: tras restablecer, los tokens de acceso y de refresco anteriores dejan de servir")
+    void hu03Criterio4_restablecerCierraLasSesionesAbiertas() throws Exception {
+        User cuenta = crearCuenta("recuperacion.sesiones");
+        JsonNode antes = sesionAbierta(cuenta.getEmail());
+        String accesoViejo = antes.get("token").asText();
+        String refrescoViejo = antes.get("refreshToken").asText();
+
+        // Antes de restablecer, las dos credenciales sirven.
+        pedirMisClinicas(accesoViejo).andExpect(status().isOk());
+        refrescar(refrescoViejo).andExpect(status().isOk());
+
+        String token = tokenFabricado(cuenta, LocalDateTime.now().plusHours(1), false);
+        restablecer(token, CLAVE_NUEVA).andExpect(status().isOk());
+
+        // Sesion abierta con el token de acceso: 401 con el formato de la API.
+        String rechazo = pedirMisClinicas(accesoViejo)
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(rechazo.contains("\"message\""), rechazo);
+
+        // Y el refresh viejo no puede abrir una sesion nueva.
+        refrescar(refrescoViejo).andExpect(status().isUnauthorized());
+
+        // La cuenta no queda bloqueada: iniciar sesion de nuevo da tokens que
+        // si sirven, y su refresh tambien.
+        String nueva = iniciarSesion(cuenta.getEmail(), CLAVE_NUEVA)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode despues = new ObjectMapper().readTree(nueva);
+        pedirMisClinicas(despues.get("token").asText()).andExpect(status().isOk());
+        refrescar(despues.get("refreshToken").asText()).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("HU-03 criterio 4: restablecer una cuenta no cierra las sesiones de otra")
+    void hu03Criterio4_noCierraLasSesionesDeOtraCuenta() throws Exception {
+        User cuenta = crearCuenta("recuperacion.sesion.propia");
+        User ajena = crearCuenta("recuperacion.sesion.ajena");
+        String accesoAjeno = sesionAbierta(ajena.getEmail()).get("token").asText();
+
+        String token = tokenFabricado(cuenta, LocalDateTime.now().plusHours(1), false);
+        restablecer(token, CLAVE_NUEVA).andExpect(status().isOk());
+
+        pedirMisClinicas(accesoAjeno).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("HU-03 criterio 4: un enlace rechazado no cierra ninguna sesion")
+    void hu03Criterio4_unEnlaceRechazadoNoCierraSesiones() throws Exception {
+        User cuenta = crearCuenta("recuperacion.sesion.intacta");
+        String acceso = sesionAbierta(cuenta.getEmail()).get("token").asText();
+
+        String vencido = tokenFabricado(cuenta, LocalDateTime.now().minusMinutes(1), false);
+        restablecer(vencido, CLAVE_NUEVA).andExpect(status().isBadRequest());
+
+        pedirMisClinicas(acceso).andExpect(status().isOk());
     }
 
     // ══════════════════════════════════════════════════════════════════════

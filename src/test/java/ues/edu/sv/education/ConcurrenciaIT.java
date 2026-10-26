@@ -162,8 +162,8 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("""
                         {"nombres":"Medico","apellidos":"Concurrente","email":"%s",
-                         "password":"%s","especialidadId":1}
-                        """.formatted(correo, CLAVE)))
+                         "password":"%s","especialidadId":1,"registroJunta":"%s"}
+                        """.formatted(correo, CLAVE, juntaUnica())))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
             HttpResponse<String> r = cliente.send(registro, HttpResponse.BodyHandlers.ofString());
@@ -202,8 +202,8 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("""
                         {"nombres":"Enfermera","apellidos":"Concurrente","email":"%s",
-                         "password":"%s","especialidadId":1}
-                        """.formatted(correo, CLAVE)))
+                         "password":"%s","especialidadId":1,"registroJunta":"%s"}
+                        """.formatted(correo, CLAVE, juntaUnica())))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
             HttpResponse<String> r = cliente.send(registro, HttpResponse.BodyHandlers.ofString());

@@ -56,8 +56,8 @@ class CorreoDeConfirmacionIT extends PruebaDeIntegracion {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Ana","apellidos":"Melendez",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correo, CLAVE)))
+                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(correo, CLAVE, juntaUnica())))
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<MimeMessage> mensajes = ArgumentCaptor.forClass(MimeMessage.class);

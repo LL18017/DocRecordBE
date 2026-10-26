@@ -39,6 +39,15 @@ public interface UserRepository extends JpaRepository<User,Integer> {
     Optional<User> findByEmailIgnoreCase(String email);
 
     /**
+     * Solo la version de sesion de una cuenta, para el filtro JWT: corre en
+     * CADA peticion autenticada, y cargar el usuario entero (roles, persona)
+     * solo para leer un entero seria pagar mucho por poco. Vacio si la cuenta
+     * ya no existe.
+     */
+    @Query("SELECT u.versionDeSesion FROM User u WHERE u.UserID = :userId")
+    Optional<Integer> versionDeSesionDe(@Param("userId") Integer userId);
+
+    /**
      * La misma busqueda que la de arriba, pero trayendo ya la Persona.
      *
      * Existe por el hilo de fondo de la recuperacion de contrasena, que corre
