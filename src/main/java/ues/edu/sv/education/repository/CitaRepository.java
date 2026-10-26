@@ -63,6 +63,22 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
             @Param("hasta") LocalDateTime hasta
     );
 
+    /** Las citas vivas a futuro de un medico en una sede (HU-29, criterio 4). */
+    @Query("""
+    SELECT c
+    FROM Cita c
+    WHERE c.medico.UserID = :medicoId
+      AND c.clinica.clinicaId = :clinicaId
+      AND c.estado = 'AGENDADA'
+      AND c.fechaHora > :desde
+    ORDER BY c.fechaHora ASC
+""")
+    List<Cita> futurasDelMedicoEnLaClinica(
+            @Param("medicoId") Integer medicoId,
+            @Param("clinicaId") Integer clinicaId,
+            @Param("desde") LocalDateTime desde
+    );
+
     List<Cita> findByEstado(String estado);
 
     // Las dos de disponibilidad ignoran las canceladas: cancelar libera la

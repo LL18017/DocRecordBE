@@ -19,6 +19,7 @@ import ues.edu.sv.education.model.enums.EventStatusEnums;
 import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.model.mappers.CitaMapper;
 import ues.edu.sv.education.repository.*;
+import ues.edu.sv.education.service.horario.HorarioDeMedicoService;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -60,6 +61,7 @@ public class CitaService {
     private final EventTypeRepository eventTypeRepository;
     private final EventRepository eventRepository;
     private final EventStatusRepository eventStatusRepository;
+    private final HorarioDeMedicoService horarios;
 
     public CitaResponseDto crear(CitaRequestDto dto) {
         LocalDateTime fecha = leerFecha(dto.fechaHora());
@@ -71,6 +73,7 @@ public class CitaService {
         Clinicas clinica = obtenerClinica(dto.clinicaId());
         TipoCita tipoCita = obtenerTipo(dto.tipoCitaId());
 
+        validarHorarioDelMedico(medico, clinica, fecha);
         validarDisponibilidad(paciente.getPersonaId(), medico.getUserID(), fecha, null);
 
         Cita cita = Cita.builder()
@@ -198,6 +201,9 @@ public class CitaService {
                 validarFutura(fecha);
             }
 
+            if (cita.getClinica() != null) {
+                validarHorarioDelMedico(medico, cita.getClinica(), fecha);
+            }
             validarDisponibilidad(cita.getPaciente().getPersonaId(), medico.getUserID(), fecha, cita.getCitaId());
 
             cita.setMedico(medico);
@@ -327,6 +333,20 @@ public class CitaService {
                     "La hora de la cita debe estar en un intervalo exacto", "400"
             );
         }
+    }
+
+    /** HU-30, criterio 3: dentro del horario del medico en esa sede (HU-29). */
+    private void validarHorarioDelMedico(User medico, Clinicas clinica, LocalDateTime fecha) {
+        if (!horarios.atiende(medico.getUserID(), clinica.getClinicaId(), fecha)) {
+            throw new GeneralException(
+                    "El médico no atiende en " + clinica.getName() + " en ese día y hora", "400");
+        }
+    }
+
+    /** Las horas libres de un medico en una sede un dia (HU-30, criterio 1). */
+    @Transactional(readOnly = true)
+    public List<String> franjasLibres(Integer clinicaId, Integer medicoId, LocalDate fecha) {
+        return horarios.franjasLibres(clinicaId, medicoId, fecha);
     }
 
     private static void validarFutura(LocalDateTime fechaHora) {

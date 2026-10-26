@@ -182,6 +182,20 @@ class AgendaDeCitasIT extends PruebaClinica {
     @Test
     @DisplayName("HU-32 c2: con menos de 4 horas no se cancela ni se reprograma")
     void laAnticipacionMinimaSeRespeta() throws Exception {
+        // Esta prueba corre a cualquier hora, y desde HU-29 una cita fuera del
+        // horario del medico se rechaza: se le da un horario de dia completo
+        // todos los dias para que lo unico que decida sea la anticipacion.
+        String admin = tokenDeAdministrador();
+        for (int dia = 1; dia <= 7; dia++) {
+            mockMvc.perform(post("/clinics/" + sede + "/medicos/" + medicoId + "/horarios")
+                            .header("Authorization", bearer(admin))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"diaSemana":%d,"horaInicio":"00:00","horaFin":"23:30"}
+                                    """.formatted(dia)))
+                    .andExpect(status().isCreated());
+        }
+
         // La siguiente franja de 30 minutos que empiece despues de una hora.
         LocalDateTime pronto = LocalDateTime.now(ZONA).plusHours(1).truncatedTo(ChronoUnit.HOURS).plusHours(1);
         int citaId = agendar(paciente, pronto.toString()).get("citaId").asInt();

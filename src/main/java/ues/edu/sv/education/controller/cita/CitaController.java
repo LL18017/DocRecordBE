@@ -101,6 +101,21 @@ public class CitaController {
     }
 
     @Operation(
+            summary = "Horas libres de un médico en una sede",
+            description = "Las franjas de 30 minutos dentro del horario del médico en la sede (HU-29), " +
+                    "sin las ocupadas por citas vivas ni las que ya pasaron. Si el médico no tiene " +
+                    "horarios cargados en la sede, se usa la jornada de 7:00 a 17:00."
+    )
+    @GetMapping("/franjas")
+    public ResponseEntity<List<String>> franjasLibres(
+            @RequestParam Integer clinicaId,
+            @RequestParam Integer medicoId,
+            @RequestParam LocalDate fecha
+    ) {
+        return ResponseEntity.ok(citaService.franjasLibres(clinicaId, medicoId, fecha));
+    }
+
+    @Operation(
             summary = "Médicos de una clínica",
             description = "Los médicos activos que atienden en la sede, para elegir con quién agendar."
     )
