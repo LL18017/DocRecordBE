@@ -159,6 +159,10 @@ public class EnfermeraService {
     /** Mismo criterio que PacienteService.resolverPersona: completar nunca destruye. */
     private Persona resolverPersona(PersonaRequestDto request) {
 
+        if (request.fechaNacimientoEsFutura()) {
+            throw new GeneralException("La fecha de nacimiento no puede ser posterior a hoy", "400");
+        }
+
         if (request.personaId() == null) {
             if (isBlank(request.nombres()) || isBlank(request.apellidos())) {
                 throw new GeneralException(
@@ -172,7 +176,7 @@ public class EnfermeraService {
                     .apellidos(request.apellidos())
                     .fechaNacimiento(request.fechaNacimiento())
                     .sexo(request.sexo())
-                    .telefono(request.telefono())
+                    .telefono(request.telefonoNormalizado())
                     .direccion(request.direccion())
                     .email(request.email())
                     .build());
@@ -194,7 +198,7 @@ public class EnfermeraService {
         if (request.apellidos() != null) persona.setApellidos(request.apellidos());
         if (request.fechaNacimiento() != null) persona.setFechaNacimiento(request.fechaNacimiento());
         if (request.sexo() != null) persona.setSexo(request.sexo());
-        if (request.telefono() != null) persona.setTelefono(request.telefono());
+        if (request.telefonoNormalizado() != null) persona.setTelefono(request.telefonoNormalizado());
         if (request.direccion() != null) persona.setDireccion(request.direccion());
         if (request.email() != null) persona.setEmail(request.email());
 

@@ -5,7 +5,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import ues.edu.sv.education.model.dto.auth.ReglaDeContrasena;
 import ues.edu.sv.education.model.dto.persona.PersonaRequestDto;
 
 /**
@@ -61,7 +63,7 @@ public record EnfermeraRequestDto(
 
         @Schema(description = "Contrasena inicial. Se guarda cifrada, nunca en claro")
         @NotBlank(message = "La contrasena es obligatoria")
-        @Size(min = 8, message = "La contrasena debe tener al menos 8 caracteres")
+        @Pattern(regexp = ReglaDeContrasena.PATRON, message = ReglaDeContrasena.MENSAJE)
         String password
 
 ) {

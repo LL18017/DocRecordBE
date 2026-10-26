@@ -5,7 +5,7 @@ Abre este enlace:
 
 [(${enlace})]
 
-El enlace vence en [(${minutos})] minutos. Después de eso deja de servir y hay
+El enlace vence en [(${horas})] horas. Después de eso deja de servir y hay
 que pedir uno nuevo: basta con llenar otra vez el formulario de registro con
 este mismo correo.
 

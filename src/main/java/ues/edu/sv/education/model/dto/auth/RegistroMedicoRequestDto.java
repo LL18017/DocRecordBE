@@ -2,6 +2,7 @@ package ues.edu.sv.education.model.dto.auth;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
+import ues.edu.sv.education.model.dto.auth.ReglaDeContrasena;
 
 @Schema(description = "Datos para la autogestion publica de una cuenta de medico")
 public record RegistroMedicoRequestDto(
@@ -24,6 +25,7 @@ public record RegistroMedicoRequestDto(
 
         @Schema(description = "Contrasena de la cuenta")
         @NotBlank(message = "La contrasena no puede estar vacia")
+        @Pattern(regexp = ReglaDeContrasena.PATRON, message = ReglaDeContrasena.MENSAJE)
         String password,
 
         @Schema(description = "ID de la especialidad medica", example = "1")

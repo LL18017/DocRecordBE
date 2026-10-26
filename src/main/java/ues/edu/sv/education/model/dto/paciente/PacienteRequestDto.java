@@ -18,7 +18,13 @@ public record PacienteRequestDto(
 
         @Schema(description = "Tipo de sangre", example = "O+")
         @Size(max = 3, message = "El tipo de sangre no puede superar los 3 caracteres")
-        String tipoSangre
+        String tipoSangre,
+
+        // Opcional. La sede activa de quien registra: el paciente guarda en
+        // que clinica se dio de alta (HU-07 criterio 4). Solo se usa en el
+        // alta; quien registra sale del token, nunca del cuerpo.
+        @Schema(description = "ID de la clinica (sede activa) donde se registra al paciente", example = "1")
+        Integer clinicaId
 
 ) {
 }

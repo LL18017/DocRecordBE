@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.User.AltaUsuarioResponseDto;
+import ues.edu.sv.education.model.dto.User.BitacoraDeUsuarioResponseDto;
+import ues.edu.sv.education.model.entity.BitacoraDeUsuario;
 import ues.edu.sv.education.model.dto.clinicas.ClinicasResponseDto;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
@@ -66,11 +68,16 @@ public class UserService {
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
+    // HU-05 criterio 5: quien hizo que sobre las cuentas.
+    private final BitacoraDeUsuarios bitacora;
     private final EnlaceDeConfirmacion enlaceDeConfirmacion;
     // El mismo bean que usa /auth/register: Argon2PasswordEncoder, definido en
     // Security/BasicConfiguration.passwordEncoder().
     private final PasswordEncoder passwordEncoder;
-    private static final long TOKEN_EXPIRATION_MINUTES = 5;
+    // HU-02 criterio 3: el enlace de confirmacion vale 24 horas. Eran 5 minutos
+    // y una cuenta dada de alta por un administrador casi nunca se confirmaba
+    // a tiempo: el enlace llegaba vencido y la persona no podia entrar.
+    private static final long TOKEN_EXPIRATION_HOURS = 24;
 
     public List<UserResponseDto> getAll(Integer inicio, Integer fin) {
         // Con Sort y no sin el: una pagina sin orden deja a PostgreSQL elegir
@@ -157,7 +164,11 @@ public class UserService {
         }
 
         objetivo.setActivo(activo);
-        return UserMapper.toDto(userRepository.save(objetivo));
+        User guardado = userRepository.save(objetivo);
+        bitacora.registrar(guardado.getUserID(),
+                activo ? BitacoraDeUsuario.ACTIVACION : BitacoraDeUsuario.DESACTIVACION,
+                null, administrador.getEmail());
+        return UserMapper.toDto(guardado);
     }
 
     // @Transactional porque ahora hace DOS escrituras que tienen que ir juntas:
@@ -166,6 +177,7 @@ public class UserService {
     // del servicio, sin forma de entender por que.
     @Transactional
     public UserResponseDto addRole(int userID, int roleID, Long especialidadId, Integer clinicaId) {
+        User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
             throw new NoResourceFoundException("No se encontro el usuario con id: " + userID, "404");
@@ -218,6 +230,8 @@ public class UserService {
         user.getRoles().add(role);
         asignarSedeSiFalta(user, sede);
         userRepository.save(user);
+        bitacora.registrar(user.getUserID(), BitacoraDeUsuario.ROL_ASIGNADO,
+                "Rol " + role.getName(), administrador.getEmail());
 
         // Asignar un rol clinico crea tambien su ficha: `enfermeras` para
         // ENFERMERA y `medicos` para MEDICO.
@@ -310,6 +324,10 @@ public class UserService {
      */
     @Transactional
     public UserResponseDto quitarRole(int userID, int roleID) {
+        // Primero quien opera: el registro de la bitacora lo necesita, y leerlo
+        // antes de tocar la coleccion evita el problema que explica el
+        // comentario de las guardas mas abajo.
+        User administrador = adminAutenticado.exigir();
 
         User user = userRepository.findById(userID)
                 .orElseThrow(() -> new NoResourceFoundException(
@@ -343,6 +361,8 @@ public class UserService {
 
         user.getRoles().remove(role);
         userRepository.save(user);
+        bitacora.registrar(user.getUserID(), BitacoraDeUsuario.ROL_RETIRADO,
+                "Rol " + role.getName(), administrador.getEmail());
 
         if (RolesEnum.ENFERMERA.getId() == roleID) {
             enfermeraRepository.findById(user.getPersona().getPersonaId())
@@ -515,6 +535,7 @@ public class UserService {
      */
     @Transactional
     public AltaUsuarioResponseDto createUser(UserRequestDto userRequest) {
+        User administrador = adminAutenticado.exigir();
         String[] nombreDividido = dividirNombreCompleto(userRequest.userName());
         Persona persona = personaRepository.save(
                 Persona.builder()
@@ -525,13 +546,10 @@ public class UserService {
         User user = UserMapper.toEntity(userRequest, persona,
                 passwordEncoder.encode(userRequest.password()));
         User savedUser = userRepository.save(user);
+        bitacora.registrar(savedUser.getUserID(), BitacoraDeUsuario.ALTA,
+                null, administrador.getEmail());
 
-        String token = UUID.randomUUID().toString();
-        verificationTokenRepository.save(new VerificationToken(
-                null, token, savedUser, LocalDateTime.now().plusMinutes(TOKEN_EXPIRATION_MINUTES), false));
-
-        boolean correoEnviado = enviarCorreoDeVerificacion(
-                savedUser.getEmail(), userRequest.userName(), token);
+        boolean correoEnviado = emitirYEnviarConfirmacion(savedUser, userRequest.userName());
 
         UserResponseDto dto = UserMapper.toDto(savedUser);
         return new AltaUsuarioResponseDto(
@@ -546,7 +564,7 @@ public class UserService {
         Map<String, Object> datos = new HashMap<>();
         datos.put("nombre", nombre);
         datos.put("enlace", enlace);
-        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+        datos.put("horas", TOKEN_EXPIRATION_HOURS);
         try {
             emailService.enviarCorreo(correoDestino, PlantillaDeCorreo.CONFIRMACION_DE_REGISTRO, datos);
             return true;
@@ -605,6 +623,52 @@ public class UserService {
         verificationTokenRepository.deleteAllByUser(objetivo);
 
         return UserMapper.toDto(objetivo);
+    }
+
+    /** Historial de administracion de una cuenta, lo mas reciente primero (HU-05 criterio 5). */
+    @Transactional(readOnly = true)
+    public List<BitacoraDeUsuarioResponseDto> bitacoraDe(int userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new NoResourceFoundException("No se encontro el usuario con id: " + userId, "404");
+        }
+        return bitacora.deUsuario(userId);
+    }
+
+    /**
+     * Reemite el enlace de confirmacion de una cuenta y lo manda otra vez.
+     *
+     * Es la salida cuando el correo del alta no llego o el enlace vencio: antes
+     * solo quedaba asignar una contrasena a mano. Invalida los enlaces
+     * anteriores (uno solo vigente por cuenta) y responde si el correo salio,
+     * igual que el alta. 409 si la cuenta ya esta confirmada: no hay nada que
+     * reenviar y mandar un enlace de confirmacion a una cuenta activa solo
+     * confunde.
+     */
+    @Transactional
+    public AltaUsuarioResponseDto reenviarConfirmacion(int userId) {
+        adminAutenticado.exigir();
+
+        User usuario = userRepository.findById(userId)
+                .orElseThrow(() -> new NoResourceFoundException(
+                        "No se encontro el usuario con id: " + userId, "404"));
+
+        if (usuario.isEnabled()) {
+            throw new GeneralException("La cuenta ya esta confirmada", "409");
+        }
+
+        verificationTokenRepository.deleteAllByUser(usuario);
+        UserResponseDto dto = UserMapper.toDto(usuario);
+        boolean enviado = emitirYEnviarConfirmacion(usuario, dto.userName());
+        return new AltaUsuarioResponseDto(
+                dto.userId(), dto.email(), dto.userName(), dto.roles(), enviado);
+    }
+
+    /** Guarda un token nuevo de 24 horas y manda el correo; devuelve si salio. */
+    private boolean emitirYEnviarConfirmacion(User usuario, String nombre) {
+        String token = UUID.randomUUID().toString();
+        verificationTokenRepository.save(new VerificationToken(
+                null, token, usuario, LocalDateTime.now().plusHours(TOKEN_EXPIRATION_HOURS), false));
+        return enviarCorreoDeVerificacion(usuario.getEmail(), nombre, token);
     }
 
     public void deleteUser(String userEmail) {

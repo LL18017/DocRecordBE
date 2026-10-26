@@ -2,6 +2,7 @@ package ues.edu.sv.education.model.dto.User;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
+import ues.edu.sv.education.model.dto.auth.ReglaDeContrasena;
 
 @Schema(description = "Datos requeridos para registrar un nuevo usuario")
 public record UserRequestDto(
@@ -18,6 +19,7 @@ public record UserRequestDto(
 
         @Schema(description = "Contraseña del usuario", example = "MiClave123!")
         @NotBlank(message = "La contraseña no puede estar vacía")
+        @Pattern(regexp = ReglaDeContrasena.PATRON, message = ReglaDeContrasena.MENSAJE)
         String password
 
         // Sin `roles` ni `userType`: el rol de un registro publico

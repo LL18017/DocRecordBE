@@ -56,7 +56,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authManager;
     private final PasswordEncoder passwordEncoder;
-    private static final long TOKEN_EXPIRATION_MINUTES = 5;
+    private static final long TOKEN_EXPIRATION_HOURS = 24; // HU-02 criterio 3
 
     /**
      * Donde vive el formulario de registro, que es el mecanismo de reenvio del
@@ -221,7 +221,7 @@ public class AuthService {
                 null,
                 token,
                 savedUser,
-                LocalDateTime.now().plusMinutes(TOKEN_EXPIRATION_MINUTES),
+                LocalDateTime.now().plusHours(TOKEN_EXPIRATION_HOURS),
                 false
         );
         verificationTokenRepository.save(verificationToken);
@@ -271,7 +271,7 @@ public class AuthService {
         Map<String, Object> datos = new HashMap<>();
         datos.put("nombre", nombre);
         datos.put("enlace", link);
-        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+        datos.put("horas", TOKEN_EXPIRATION_HOURS);
 
         try {
             emailService.enviarCorreo(toEmail, PlantillaDeCorreo.CONFIRMACION_DE_REGISTRO, datos);
@@ -283,9 +283,9 @@ public class AuthService {
             // justo lo que hace falta para saber si hay que rotar la clave,
             // esperar la cuota o revisar la red.
             log.error("No se pudo enviar el correo de confirmacion a {}. La cuenta quedo creada y "
-                    + "deshabilitada, con token de verificacion valido por {} minutos; el usuario "
+                    + "deshabilitada, con token de verificacion valido por {} horas; el usuario "
                     + "puede reintentar el registro para generar uno nuevo.",
-                    toEmail, TOKEN_EXPIRATION_MINUTES, e);
+                    toEmail, TOKEN_EXPIRATION_HOURS, e);
             return false;
         }
     }
@@ -334,7 +334,7 @@ public class AuthService {
     private void avisarQueElEnlaceVencio(String toEmail) {
         Map<String, Object> datos = new HashMap<>();
         datos.put("enlaceRegistro", urlDelFrontend + "/register");
-        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+        datos.put("horas", TOKEN_EXPIRATION_HOURS);
         try {
             emailService.enviarCorreo(toEmail, PlantillaDeCorreo.TOKEN_EXPIRADO, datos);
         } catch (MailException e) {

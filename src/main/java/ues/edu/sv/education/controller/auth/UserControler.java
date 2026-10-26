@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.User.AltaUsuarioResponseDto;
 import ues.edu.sv.education.model.dto.User.AsignarContrasenaRequestDto;
+import ues.edu.sv.education.model.dto.User.BitacoraDeUsuarioResponseDto;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.CambiarEstadoUsuarioRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
@@ -172,6 +173,31 @@ public class UserControler {
             @Valid @RequestBody CambiarEstadoUsuarioRequestDto request
     ) {
         return ResponseEntity.ok(userService.cambiarEstado(userId, request.activo()));
+    }
+
+    @Operation(
+            summary = "Historial de administración de una cuenta",
+            description = "Altas, activaciones y desactivaciones, y roles asignados o retirados, "
+                    + "con quién los hizo y cuándo; lo más reciente primero. 404 si el usuario no existe."
+    )
+    @GetMapping("/{userId}/bitacora")
+    public ResponseEntity<List<BitacoraDeUsuarioResponseDto>> bitacora(
+            @PathVariable("userId") int userId
+    ) {
+        return ResponseEntity.ok(userService.bitacoraDe(userId));
+    }
+
+    @Operation(
+            summary = "Reenviar el correo de confirmación de una cuenta",
+            description = "Emite un enlace nuevo (vale 24 horas), invalida los anteriores y lo manda otra "
+                    + "vez. correoDeVerificacionEnviado indica si el correo salió. 404 si el usuario no "
+                    + "existe; 409 si la cuenta ya está confirmada."
+    )
+    @PostMapping("/{userId}/confirmacion")
+    public ResponseEntity<AltaUsuarioResponseDto> reenviarConfirmacion(
+            @PathVariable("userId") int userId
+    ) {
+        return ResponseEntity.ok(userService.reenviarConfirmacion(userId));
     }
 
     @PostMapping("/{userId}/password")

@@ -9,7 +9,11 @@ import ues.edu.sv.education.model.dto.paciente.PacienteRequestDto;
 import ues.edu.sv.education.model.dto.paciente.PacienteResponseDto;
 import ues.edu.sv.education.model.dto.persona.PersonaRequestDto;
 import ues.edu.sv.education.model.dto.persona.PersonaResponseDto;
+import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.Paciente;
+import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.repository.ClinicaRepository;
+import ues.edu.sv.education.service.auth.UsuarioAutenticado;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.PersonaRepository;
@@ -23,6 +27,8 @@ public class PacienteService {
 
     private final PersonaRepository personaRepository;
     private final PacienteRepository pacienteRepository;
+    private final ClinicaRepository clinicaRepository;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     // La identidad se busca antes de crearse: si la persona ya existe (via
     // personaId) se REUTILIZA -completando los campos que lleguen, sin
@@ -31,6 +37,15 @@ public class PacienteService {
     @Transactional
     public PacienteResponseDto crear(PacienteRequestDto request) {
 
+        // Quien registra sale del token. La sede si viene del cliente (es la
+        // que tiene activa), pero se valida que exista antes de tocar nada.
+        User quienRegistra = usuarioAutenticado.exigir();
+        Clinicas sede = request.clinicaId() == null
+                ? null
+                : clinicaRepository.findById(request.clinicaId())
+                        .orElseThrow(() -> new NoResourceFoundException("Clinica no encontrada", "404"));
+
+        exigirFechaNoFutura(request.persona());
         Persona persona = resolverPersona(request.persona());
 
         if (persona.getFechaNacimiento() == null || persona.getSexo() == null) {
@@ -54,6 +69,8 @@ public class PacienteService {
                 // columnas, asi que un campo null aqui llegaria como null y
                 // chocaria contra el NOT NULL en vez de tomar el default.
                 .estado(Paciente.ESTADO_ACTIVO)
+                .registradoPor(quienRegistra)
+                .registradoEnClinica(sede)
                 .build();
 
         pacienteRepository.save(paciente);
@@ -104,6 +121,7 @@ public class PacienteService {
 
         Paciente paciente = buscarPacienteOFallar(personaId);
         paciente.setEstado(limpio);
+        marcarModificacion(paciente);
         return toDto(pacienteRepository.save(paciente));
     }
 
@@ -141,6 +159,7 @@ public class PacienteService {
         Paciente paciente = buscarPacienteOFallar(personaId);
         Persona persona = paciente.getPersona();
         PersonaRequestDto datos = request.persona();
+        exigirFechaNoFutura(datos);
 
         if (datos != null) {
             // El DUI es la identidad que sostiene el mecanismo de no duplicar
@@ -157,13 +176,14 @@ public class PacienteService {
             if (!isBlank(datos.apellidos())) persona.setApellidos(datos.apellidos());
             if (datos.fechaNacimiento() != null) persona.setFechaNacimiento(datos.fechaNacimiento());
             if (!isBlank(datos.sexo())) persona.setSexo(datos.sexo());
-            if (!isBlank(datos.telefono())) persona.setTelefono(datos.telefono());
+            if (!isBlank(datos.telefono())) persona.setTelefono(datos.telefonoNormalizado());
             if (!isBlank(datos.direccion())) persona.setDireccion(datos.direccion());
             if (!isBlank(datos.email())) persona.setEmail(datos.email());
         }
 
         if (!isBlank(request.tipoSangre())) paciente.setTipoSangre(request.tipoSangre());
 
+        marcarModificacion(paciente);
         personaRepository.save(persona);
         pacienteRepository.save(paciente);
 
@@ -195,7 +215,14 @@ public class PacienteService {
     public void eliminar(Long personaId) {
         Paciente paciente = buscarPacienteOFallar(personaId);
         paciente.setEstado(Paciente.ESTADO_INACTIVO);
+        marcarModificacion(paciente);
         pacienteRepository.save(paciente);
+    }
+
+    /** Deja constancia de quien toco al paciente y cuando (HU-09 criterio 4). */
+    private void marcarModificacion(Paciente paciente) {
+        paciente.setModificadoPor(usuarioAutenticado.exigir());
+        paciente.setModificadoEn(LocalDateTime.now());
     }
 
     private Paciente buscarPacienteOFallar(Long personaId) {
@@ -218,7 +245,7 @@ public class PacienteService {
                     .apellidos(request.apellidos())
                     .fechaNacimiento(request.fechaNacimiento())
                     .sexo(request.sexo())
-                    .telefono(request.telefono())
+                    .telefono(request.telefonoNormalizado())
                     .direccion(request.direccion())
                     .email(request.email())
                     .build());
@@ -244,11 +271,18 @@ public class PacienteService {
         if (request.apellidos() != null) persona.setApellidos(request.apellidos());
         if (request.fechaNacimiento() != null) persona.setFechaNacimiento(request.fechaNacimiento());
         if (request.sexo() != null) persona.setSexo(request.sexo());
-        if (request.telefono() != null) persona.setTelefono(request.telefono());
+        if (request.telefonoNormalizado() != null) persona.setTelefono(request.telefonoNormalizado());
         if (request.direccion() != null) persona.setDireccion(request.direccion());
         if (request.email() != null) persona.setEmail(request.email());
 
         return personaRepository.save(persona);
+    }
+
+    /** HU-07 / tutora: la fecha de nacimiento no puede ser posterior a hoy. */
+    private void exigirFechaNoFutura(PersonaRequestDto persona) {
+        if (persona != null && persona.fechaNacimientoEsFutura()) {
+            throw new GeneralException("La fecha de nacimiento no puede ser posterior a hoy", "400");
+        }
     }
 
     private boolean isBlank(String s) {
@@ -257,6 +291,7 @@ public class PacienteService {
 
     private PacienteResponseDto toDto(Paciente paciente) {
         Persona persona = paciente.getPersona();
+        Clinicas sede = paciente.getRegistradoEnClinica();
         return new PacienteResponseDto(
                 paciente.getPersonaId(),
                 paciente.getExpediente(),
@@ -273,7 +308,12 @@ public class PacienteService {
                         persona.getTelefono(),
                         persona.getDireccion(),
                         persona.getEmail()
-                )
+                ),
+                paciente.getRegistradoPor() == null ? null : paciente.getRegistradoPor().getEmail(),
+                sede == null ? null : sede.getClinicaId(),
+                sede == null ? null : sede.getName(),
+                paciente.getModificadoPor() == null ? null : paciente.getModificadoPor().getEmail(),
+                paciente.getModificadoEn()
         );
     }
 }

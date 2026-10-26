@@ -9,7 +9,7 @@
   formulario de registro ES el boton de reenviar. Eso es lo que este correo
   tiene que explicar.
 
-  Variables: enlaceRegistro, minutos.
+  Variables: enlaceRegistro, horas.
 */-->
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -45,7 +45,7 @@
                         </h1>
                         <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
                             El enlace para confirmar tu cuenta de DocRecord Sv venció. Dura
-                            <strong th:text="${minutos} + ' minutos'">5 minutos</strong> desde que se envía,
+                            <strong th:text="${horas} + ' horas'">24 horas</strong> desde que se envía,
                             y ese plazo ya pasó. Tu cuenta sigue creada, pero todavía sin activar.
                         </p>
                         <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
