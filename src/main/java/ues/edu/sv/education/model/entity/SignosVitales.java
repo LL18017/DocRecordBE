@@ -33,6 +33,11 @@ import java.time.LocalDateTime;
 @Builder
 public class SignosVitales {
 
+    /** Toda toma nace ACTIVA. */
+    public static final String ACTIVA = "ACTIVA";
+    /** Anulada: sigue en el expediente, marcada, pero ya no vale (ver V28). */
+    public static final String ANULADA = "ANULADA";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "signos_vitales_id")
@@ -91,4 +96,21 @@ public class SignosVitales {
 
     @Column(name = "observaciones")
     private String observaciones;
+
+    // ── Anulacion (HU-16 criterio 4, migracion V28) ────────────────────────
+    // Una toma no se borra: se anula dejando constancia de por que, quien y
+    // cuando. El Builder.Default evita que .builder() deje el estado en null.
+    @Builder.Default
+    @Column(name = "estado", nullable = false, length = 10)
+    private String estado = ACTIVA;
+
+    @Column(name = "motivo_anulacion", length = 500)
+    private String motivoAnulacion;
+
+    @Column(name = "anulada_en")
+    private LocalDateTime anuladaEn;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "anulada_por")
+    private Enfermera anuladaPor;
 }

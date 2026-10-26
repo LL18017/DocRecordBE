@@ -66,7 +66,22 @@ public record SignosVitalesResponseDto(
          * adultos aplicada a un nino da una etiqueta sin sentido, y una etiqueta
          * equivocada en un expediente orienta decisiones.
          */
-        @Schema(example = "Normal", nullable = true) String clasificacionImc
+        @Schema(example = "Normal", nullable = true) String clasificacionImc,
+
+        /**
+         * ACTIVA o ANULADA (HU-16 criterio 4). Una toma anulada sigue en el
+         * historico, marcada, pero no cuenta como "ultima".
+         */
+        @Schema(example = "ACTIVA", allowableValues = {"ACTIVA", "ANULADA"}) String estado,
+
+        /** Por que se anulo; null mientras la toma esta ACTIVA. */
+        @Schema(nullable = true) String motivoAnulacion,
+
+        /** Cuando se anulo; null mientras la toma esta ACTIVA. */
+        @Schema(nullable = true) LocalDateTime anuladaEn,
+
+        /** Quien la anulo; null mientras la toma esta ACTIVA. */
+        @Schema(nullable = true) EnfermeraTomaDto anuladaPor
 
 ) {
 }

@@ -107,8 +107,12 @@ public class ConsultaService {
         // la regla dejaria de aplicar despues de la primera visita del
         // paciente para siempre, que es justo lo contrario de lo que busca.
         // La ventana esta en VIGENCIA_DE_LA_TOMA_HORAS.
+        // Solo cuenta una toma ACTIVA: una anulada (HU-16 criterio 4) es una
+        // constante que enfermeria declaro invalida, y no puede habilitar la
+        // consulta.
         SignosVitales toma = signosVitalesRepository
-                .findFirstByPaciente_PersonaIdOrderByTomadoEnDesc(paciente.getPersonaId())
+                .findFirstByPaciente_PersonaIdAndEstadoOrderByTomadoEnDesc(
+                        paciente.getPersonaId(), SignosVitales.ACTIVA)
                 .filter(sv -> sv.getTomadoEn()
                         .isAfter(LocalDateTime.now().minusHours(VIGENCIA_DE_LA_TOMA_HORAS)))
                 .orElseThrow(() -> new GeneralException(
