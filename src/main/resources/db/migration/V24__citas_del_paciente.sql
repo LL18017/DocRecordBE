@@ -67,3 +67,15 @@ BEGIN
             WHERE estado <> 'CANCELADA';
     END IF;
 END $$;
+
+-- ── 5. Tipos de evento que el codigo usa y nadie sembraba ─────────────────
+-- data.sql siembra los tipos 1 a 5. EventCodeEnums declara tambien del 6 al
+-- 9, y el 9 (PREESCRIPTION_SEND) es el que crea el envio de la receta por
+-- correo (HU-25): en una base nueva, ese INSERT en `events` chocaba con la
+-- llave foranea. ON CONFLICT porque una base ya en uso puede tenerlos.
+INSERT INTO public.event_types (event_type_id, code, description) VALUES
+    (6, 'CONFIRM_ACOUNT', 'Confirmación de cuenta'),
+    (7, 'TOKEN_CREATED', 'Token creado'),
+    (8, 'TOKEN_USED', 'Token usado'),
+    (9, 'PREESCRIPTION_SEND', 'Envío de receta por correo')
+ON CONFLICT (event_type_id) DO NOTHING;
