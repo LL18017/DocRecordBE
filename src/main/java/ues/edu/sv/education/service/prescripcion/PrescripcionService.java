@@ -492,7 +492,8 @@ public class PrescripcionService {
         prescripcion.setAnuladaEn(LocalDateTime.now());
         prescripcion.setAnuladaPor(medicoAutenticado.usuario());
 
-        return toDto(prescripcionRepository.save(prescripcion));
+        Prescripcion anulada = prescripcionRepository.save(prescripcion);
+        return toDto(anulada, enviosDe(List.of(anulada)));
     }
 
     /**
