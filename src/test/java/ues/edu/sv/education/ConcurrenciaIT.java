@@ -250,7 +250,7 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + token)
                 .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"pacienteId":%d,"motivo":"Control de la prueba de concurrencia"}
+                        {"pacienteId":%d,"motivo":"Control de la prueba de concurrencia","diagnostico":"Sin hallazgos"}
                         """.formatted(pacienteId)))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
@@ -279,7 +279,7 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + token)
                 .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                        {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                         """.formatted(consultaId, medicamentos.buscar("", false).get(0).getMedicamentoId())))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {

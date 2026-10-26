@@ -168,7 +168,7 @@ class CatalogoDeMedicamentosIT extends PruebaClinica {
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamentoId":9999999}]}
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":9999999,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                                 """.formatted(consultaId)))
                 .andExpect(status().isBadRequest());
 
@@ -218,7 +218,7 @@ class CatalogoDeMedicamentosIT extends PruebaClinica {
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                                 """.formatted(consultaId, id)))
                 .andExpect(status().isBadRequest());
         assertEquals(1, recetasDeLaConsulta(consultaId).size());
@@ -276,7 +276,8 @@ class CatalogoDeMedicamentosIT extends PruebaClinica {
         long medicoId = consulta.get("medico").get("personaId").asLong();
 
         // Se inserta a mano porque la API ya no deja crearlas: es el estado en
-        // que quedaron las recetas emitidas antes de V22.
+        // que quedaron las recetas emitidas antes de V22, con los huecos que V31
+        // rellena con 'No especificada'.
         KeyHolder llave = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
@@ -288,7 +289,8 @@ class CatalogoDeMedicamentosIT extends PruebaClinica {
             return ps;
         }, llave);
         long recetaId = ((Number) llave.getKeys().get("prescripcion_id")).longValue();
-        jdbc.update("INSERT INTO prescripcion_medicamentos (prescripcion_id, medicamento, dosis) VALUES (?, ?, ?)",
+        jdbc.update("INSERT INTO prescripcion_medicamentos (prescripcion_id, medicamento, dosis, frecuencia, duracion, via_administracion)"
+                        + " VALUES (?, ?, ?, 'No especificada', 'No especificada', 'No especificada')",
                 recetaId, "amoxicilina 500", "1 cada 8 h");
 
         JsonNode receta = json.readTree(mockMvc.perform(get("/prescripciones/{id}", recetaId)
@@ -428,7 +430,7 @@ class CatalogoDeMedicamentosIT extends PruebaClinica {
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta"}]}
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                                 """.formatted(consultaId, medicamentoId)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));

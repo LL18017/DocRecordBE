@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,6 +15,7 @@ import ues.edu.sv.education.model.dto.consulta.ConsultaRequestDto;
 import ues.edu.sv.education.model.dto.consulta.ConsultaResponseDto;
 import ues.edu.sv.education.service.consulta.ConsultaService;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -46,7 +48,8 @@ public class ConsultaController {
             summary = "Registrar una consulta",
             description = "El medico que atiende es el usuario autenticado, no un dato del cuerpo. "
                     + "403 si quien pide no esta registrado como medico; 404 si el paciente o la clinica no existen. "
-                    + "clinicaId es opcional."
+                    + "clinicaId es opcional; motivo y diagnostico son obligatorios (400 si faltan); "
+                    + "exploracionFisica e indicaciones son opcionales."
     )
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
@@ -58,14 +61,18 @@ public class ConsultaController {
 
     @Operation(
             summary = "Listar consultas",
-            description = "Con pacienteId devuelve su historial, de la mas reciente a la mas antigua. "
-                    + "Sin parametro devuelve todas. 404 si el paciente no existe."
+            description = "De la mas reciente a la mas antigua. pacienteId, medicoId, desde y hasta son "
+                    + "opcionales y combinables (desde/hasta: yyyy-MM-dd; hasta incluye el dia completo). "
+                    + "Sin filtros devuelve todas. 404 si el paciente no existe; 400 si hasta es anterior a desde."
     )
     @GetMapping
     public ResponseEntity<List<ConsultaResponseDto>> listar(
-            @RequestParam(required = false) Long pacienteId
+            @RequestParam(required = false) Long pacienteId,
+            @RequestParam(required = false) Long medicoId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta
     ) {
-        return ResponseEntity.ok(consultaService.listar(pacienteId));
+        return ResponseEntity.ok(consultaService.listar(pacienteId, medicoId, desde, hasta));
     }
 
     @Operation(summary = "Ver una consulta", description = "404 si no existe.")
@@ -78,7 +85,7 @@ public class ConsultaController {
             summary = "Actualizar una consulta",
             description = "Completa sin destruir: un campo null o vacio significa 'no lo estoy tocando'. "
                     + "El diagnostico solo lo puede escribir un medico (403 en caso contrario). "
-                    + "El paciente de una consulta no se puede cambiar."
+                    + "El paciente, el medico, la clinica y la fecha de una consulta no se pueden cambiar."
     )
     @PutMapping("/{consultaId}")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")

@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 
 /**
- * Un renglon de la receta: que medicamento, cuanto, cada cuanto y por cuanto
- * tiempo.
+ * Un renglon de la receta: que medicamento, cuanto, por que via, cada cuanto y
+ * por cuanto tiempo.
  *
  * Es una tabla y no un texto libre dentro de la receta para que se pueda
  * responder "que pacientes toman X", que es de lo poco que un expediente en
@@ -58,17 +58,23 @@ public class PrescripcionMedicamento {
     @Column(name = "medicamento", nullable = false, length = 300)
     private String medicamento;
 
-    // Dosis, frecuencia y duracion pueden faltar: hay indicaciones que
-    // legitimamente no las llevan ("suspender el tratamiento anterior").
+    // HU-22, criterio 2: dosis, via de administracion, frecuencia y duracion
+    // son obligatorias. Una receta sin ellas no dice como tomar el
+    // medicamento, que es para lo que existe. (Las anteriores a V31 que no las
+    // tenian quedaron con "No especificada".)
     @Size(max = 80)
-    @Column(name = "dosis", length = 80)
+    @Column(name = "dosis", nullable = false, length = 80)
     private String dosis;
 
+    @Size(max = 60)
+    @Column(name = "via_administracion", nullable = false, length = 60)
+    private String viaAdministracion;
+
     @Size(max = 80)
-    @Column(name = "frecuencia", length = 80)
+    @Column(name = "frecuencia", nullable = false, length = 80)
     private String frecuencia;
 
     @Size(max = 80)
-    @Column(name = "duracion", length = 80)
+    @Column(name = "duracion", nullable = false, length = 80)
     private String duracion;
 }

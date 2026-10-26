@@ -371,6 +371,9 @@ class AlertaDeAlergiaAlPrescribirIT extends PruebaClinica {
         var renglon = cuerpo.putArray("medicamentos").addObject();
         renglon.put("medicamentoId", medicamentoId);
         renglon.put("dosis", dosis);
+        renglon.put("viaAdministracion", "Oral");
+        renglon.put("frecuencia", "Cada 8 horas");
+        renglon.put("duracion", "7 dias");
         if (justificacion != null) cuerpo.put("justificacionAlergia", justificacion);
         if (confirma != null) cuerpo.put("confirmaAlergiaSevera", confirma);
 

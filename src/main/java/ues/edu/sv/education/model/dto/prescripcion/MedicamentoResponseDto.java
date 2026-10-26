@@ -16,6 +16,7 @@ public record MedicamentoResponseDto(
         Long medicamentoId,
         @Schema(example = "Amoxicilina 500 mg (Amoxil), Capsula") String medicamento,
         @Schema(example = "1 tableta") String dosis,
+        @Schema(example = "Oral") String viaAdministracion,
         @Schema(example = "Cada 8 horas") String frecuencia,
         @Schema(example = "7 dias") String duracion
 ) {

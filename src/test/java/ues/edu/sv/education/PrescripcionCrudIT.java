@@ -107,7 +107,7 @@ class PrescripcionCrudIT extends PruebaClinica {
         JsonNode receta = emitir(medico, """
                 {"consultaId":%d,"medicoId":%d,
                  "medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta",
-                                  "frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                                  "viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, idDelOtroMedico, amoxicilina));
 
         assertNotEquals(idDelOtroMedico, receta.get("medico").get("personaId").asLong(),
@@ -115,24 +115,43 @@ class PrescripcionCrudIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("la receta que firma un medico de guardia queda a su nombre, no al del que atendio")
-    void laFirmaPuedeSerDeUnMedicoDistintoAlQueAtendio() throws Exception {
-        // Es la razon de que prescripciones.medico_id exista aunque la consulta
-        // ya tenga medico: en una clinica con turnos, quien receta no siempre
-        // es quien abrio la consulta, y la firma debe decir la verdad.
+    @DisplayName("HU-22 c1: solo el medico de la consulta puede emitir su receta; otro medico recibe 403")
+    void soloElMedicoDeLaConsultaPuedeEmitirSuReceta() throws Exception {
+        // Antes firmaba "quien estuviera autenticado" y un medico de guardia
+        // podia recetar sobre una consulta ajena. La receta hereda el medico de
+        // la consulta (criterio 1), asi que otro medico no la puede emitir.
         String medicoDeGuardia = tokenDeMedico();
 
-        JsonNode receta = emitir(medicoDeGuardia, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
-                """.formatted(consultaId, amoxicilina));
+        mockMvc.perform(post("/prescripciones")
+                        .header("Authorization", bearer(medicoDeGuardia))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                                """.formatted(consultaId, amoxicilina)))
+                .andExpect(status().isForbidden());
 
-        long medicoQueAtendio = json.readTree(
-                mockMvc.perform(get("/consultas/{id}", consultaId).header("Authorization", bearer(medico)))
-                        .andReturn().getResponse().getContentAsString())
-                .get("medico").get("personaId").asLong();
+        assertEquals(0, recetasDeLaConsulta().size(), "la receta de otro medico se guardo");
+    }
 
-        assertNotEquals(medicoQueAtendio, receta.get("medico").get("personaId").asLong(),
-                "la firma se dedujo de la consulta en vez de guardarse");
+    @Test
+    @DisplayName("HU-22 c1: la receta hereda paciente, medico, clinica y fecha de la consulta")
+    void laRecetaHeredaLosDatosDeLaConsulta() throws Exception {
+        int clinicaId = crearSede(medico);
+        JsonNode consulta = crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Control","diagnostico":"Sano","clinicaId":%d,
+                 "fecha":"2026-02-03T08:15:00"}
+                """.formatted(paciente, clinicaId));
+
+        JsonNode receta = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                """.formatted(consulta.get("consultaId").asLong(), amoxicilina));
+
+        assertEquals(paciente, receta.get("paciente").get("personaId").asLong());
+        assertEquals(consulta.get("medico").get("personaId").asLong(), receta.get("medico").get("personaId").asLong());
+        assertEquals(clinicaId, receta.get("clinica").get("clinicaId").asInt(),
+                "la clinica de la consulta no viaja en la receta");
+        assertEquals("2026-02-03T08:15:00", receta.get("fechaConsulta").asText());
+        assertEquals("EMITIDA", receta.get("estado").asText());
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -140,12 +159,14 @@ class PrescripcionCrudIT extends PruebaClinica {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("la receta guarda cada medicamento con su dosis, frecuencia y duracion")
+    @DisplayName("la receta guarda cada medicamento con su dosis, via, frecuencia y duracion")
     void laRecetaGuardaCadaRenglon() throws Exception {
         JsonNode receta = emitir(medico, """
                 {"consultaId":%d,"medicamentos":[
-                   {"medicamentoId":%d,"dosis":"1 tableta","frecuencia":"Cada 8 horas","duracion":"7 dias"},
-                   {"medicamentoId":%d}
+                   {"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral",
+                    "frecuencia":"Cada 8 horas","duracion":"7 dias"},
+                   {"medicamentoId":%d,"dosis":"5 ml","viaAdministracion":"Intramuscular",
+                    "frecuencia":"Una vez al dia","duracion":"3 dias"}
                 ]}
                 """.formatted(consultaId, amoxicilina, loratadina));
 
@@ -156,14 +177,49 @@ class PrescripcionCrudIT extends PruebaClinica {
         // El nombre lo pone el servidor desde el catalogo, no el cliente.
         assertEquals(amoxicilina, renglones.get(0).get("medicamentoId").asLong());
         assertEquals("Amoxicilina 500 mg (Amoxil), Cápsula", renglones.get(0).get("medicamento").asText());
+        assertEquals("1 tableta", renglones.get(0).get("dosis").asText());
+        assertEquals("Oral", renglones.get(0).get("viaAdministracion").asText());
         assertEquals("Cada 8 horas", renglones.get(0).get("frecuencia").asText());
         assertEquals("7 dias", renglones.get(0).get("duracion").asText());
 
-        // Una indicacion sin dosis es legitima y debe poder guardarse.
         assertEquals(loratadina, renglones.get(1).get("medicamentoId").asLong());
-        assertTrue(renglones.get(1).get("dosis").isNull());
+        assertEquals("Intramuscular", renglones.get(1).get("viaAdministracion").asText());
 
         assertEquals(consultaId, receta.get("consultaId").asLong());
+    }
+
+    @Test
+    @DisplayName("HU-22 c2: sin dosis, via, frecuencia o duracion la receta se rechaza y no se guarda")
+    void cadaMedicamentoExigeSuTratamientoCompleto() throws Exception {
+        String[] campos = {"dosis", "viaAdministracion", "frecuencia", "duracion"};
+        for (String faltante : campos) {
+            var renglon = json.createObjectNode();
+            renglon.put("medicamentoId", amoxicilina);
+            renglon.put("dosis", "1 tableta");
+            renglon.put("viaAdministracion", "Oral");
+            renglon.put("frecuencia", "Cada 8 horas");
+            renglon.put("duracion", "7 dias");
+            renglon.remove(faltante);
+            var cuerpo = json.createObjectNode();
+            cuerpo.put("consultaId", consultaId);
+            cuerpo.putArray("medicamentos").add(renglon);
+
+            mockMvc.perform(post("/prescripciones")
+                            .header("Authorization", bearer(medico))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(cuerpo)))
+                    .andExpect(status().isBadRequest());
+
+            // En blanco cuenta igual que ausente.
+            renglon.put(faltante, "   ");
+            mockMvc.perform(post("/prescripciones")
+                            .header("Authorization", bearer(medico))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(cuerpo)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        assertEquals(0, recetasDeLaConsulta().size(), "una receta incompleta se guardo");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -174,12 +230,12 @@ class PrescripcionCrudIT extends PruebaClinica {
     @DisplayName("no se puede borrar una consulta, y sus recetas siguen ahi")
     void noSePuedeBorrarUnaConsultaNiArrastrarSusRecetas() throws Exception {
         long primera = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d},
-                                                 {"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"},
+                                                 {"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina, paracetamol)).get("prescripcionId").asLong();
 
         long segunda = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, loratadina)).get("prescripcionId").asLong();
 
         assertEquals(3, medicamentosGuardados(primera, segunda), "no se guardaron los renglones");
@@ -219,13 +275,13 @@ class PrescripcionCrudIT extends PruebaClinica {
         long consultaAjena = crearConsultaSimple(medico, otroPaciente).get("consultaId").asLong();
 
         long primera = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long segunda = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(otraConsulta, loratadina)).get("prescripcionId").asLong();
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaAjena, amoxicilina));
 
         JsonNode delPaciente = contenidoDe(mockMvc.perform(get("/prescripciones")
@@ -259,13 +315,13 @@ class PrescripcionCrudIT extends PruebaClinica {
         long suConsulta = consultaDeOtroMedico.get("consultaId").asLong();
 
         long recetaDelOtroMedico = emitir(otroMedico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(suConsulta, amoxicilina)).get("prescripcionId").asLong();
 
         // El medico del setUp receta al MISMO paciente, para probar que el
         // filtro es por medico y no se cuela por compartir paciente.
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina));
 
         JsonNode delMedico = contenidoDe(mockMvc.perform(get("/prescripciones")
@@ -286,10 +342,10 @@ class PrescripcionCrudIT extends PruebaClinica {
         long medicoBId = consultaDeB.get("medico").get("personaId").asLong();
 
         long recetaDeA = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long recetaDeB = emitir(medicoB, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaDeB.get("consultaId").asLong(), amoxicilina)).get("prescripcionId").asLong();
 
         JsonNode combinado = contenidoDe(mockMvc.perform(get("/prescripciones")
@@ -311,7 +367,7 @@ class PrescripcionCrudIT extends PruebaClinica {
         LocalDate dia = LocalDate.of(2024, 3, 10);
 
         long enElLimiteDeHasta = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         // El caso critico: 23:59:59.999 del MISMO dia que "hasta". Un filtro
         // ingenuo (fecha <= hasta interpretado como las 00:00:00 de hasta) se
@@ -320,12 +376,12 @@ class PrescripcionCrudIT extends PruebaClinica {
         fijarFecha(enElLimiteDeHasta, dia.atTime(23, 59, 59, 999_000_000));
 
         long unDiaAntesDeDesde = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(unDiaAntesDeDesde, dia.minusDays(1).atTime(23, 59, 59));
 
         long justoDespuesDeHasta = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(justoDespuesDeHasta, dia.plusDays(1).atStartOfDay().plusNanos(1000));
 
@@ -346,13 +402,13 @@ class PrescripcionCrudIT extends PruebaClinica {
     @DisplayName("el orden es de la receta mas reciente a la mas antigua, no el orden de insercion")
     void elOrdenEsDescendentePorFechaNoPorInsercion() throws Exception {
         long antigua = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long reciente = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long intermedia = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
 
         // Se insertaron en el orden antigua -> reciente -> intermedia: ni el
@@ -388,7 +444,7 @@ class PrescripcionCrudIT extends PruebaClinica {
 
         long suConsulta = crearConsultaSimple(medico, personaIdPaciente).get("consultaId").asLong();
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(suConsulta, amoxicilina));
 
         JsonNode contenido = contenidoDe(mockMvc.perform(get("/prescripciones")
@@ -416,10 +472,10 @@ class PrescripcionCrudIT extends PruebaClinica {
         long otraConsulta = crearConsultaSimple(otroMedico, otroPaciente).get("consultaId").asLong();
 
         long recetaDeA = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         long recetaDeB = emitir(otroMedico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(otraConsulta, amoxicilina)).get("prescripcionId").asLong();
 
         // Pagina grande a proposito: no se puede exigir un totalElementos
@@ -462,13 +518,13 @@ class PrescripcionCrudIT extends PruebaClinica {
         long consulta1 = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
         long consulta2 = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina));
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consulta1, amoxicilina));
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consulta2, amoxicilina));
 
         JsonNode primeraPagina = json.readTree(mockMvc.perform(get("/prescripciones")
@@ -568,7 +624,7 @@ class PrescripcionCrudIT extends PruebaClinica {
         // vacio y el total verdadero, no un 404 ni un 500 por indice fuera de
         // rango.
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina));
 
         JsonNode respuesta = json.readTree(mockMvc.perform(get("/prescripciones")
@@ -604,12 +660,12 @@ class PrescripcionCrudIT extends PruebaClinica {
         LocalDate dia = LocalDate.of(2024, 7, 1);
 
         long enElInicioDeDesde = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(enElInicioDeDesde, dia.atStartOfDay());
 
         long unInstanteAntes = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
         fijarFecha(unInstanteAntes, dia.atStartOfDay().minusNanos(1000));
 
@@ -633,7 +689,7 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":9999999,"medicamentos":[{"medicamentoId":%d}]}
+                                {"consultaId":9999999,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                                 """.formatted(amoxicilina)))
                 .andExpect(status().isNotFound());
     }
@@ -650,7 +706,7 @@ class PrescripcionCrudIT extends PruebaClinica {
         String enfermera = tokenDeEnfermera();
 
         emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina));
 
         mockMvc.perform(get("/prescripciones").param("consultaId", String.valueOf(consultaId))
@@ -661,7 +717,7 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(enfermera))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                                 """.formatted(consultaId, amoxicilina)))
                 .andExpect(status().isForbidden());
 
@@ -677,7 +733,7 @@ class PrescripcionCrudIT extends PruebaClinica {
                         .header("Authorization", bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d}]}
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                                 """.formatted(consultaId, amoxicilina)))
                 .andExpect(status().isForbidden());
 
@@ -685,26 +741,168 @@ class PrescripcionCrudIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("anular una receta la borra con todos sus medicamentos")
-    void anularUnaRecetaLaBorraEntera() throws Exception {
+    @DisplayName("HU-22 c3: anular una receta es logico: queda ANULADA con motivo, autor y fecha, y sigue visible")
+    void anularUnaRecetaNoLaBorra() throws Exception {
         long recetaId = emitir(medico, """
-                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d},
-                                                 {"medicamentoId":%d}]}
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"},
+                                                 {"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
                 """.formatted(consultaId, amoxicilina, paracetamol)).get("prescripcionId").asLong();
 
-        mockMvc.perform(delete("/prescripciones/{id}", recetaId).header("Authorization", bearer(medico)))
-                .andExpect(status().isNoContent());
+        JsonNode anulada = json.readTree(mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Dosis mal capturada, se emite una nueva\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
 
-        mockMvc.perform(get("/prescripciones/{id}", recetaId).header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+        assertEquals("ANULADA", anulada.get("estado").asText());
+        assertEquals("Dosis mal capturada, se emite una nueva", anulada.get("motivoAnulacion").asText());
+        assertTrue(anulada.hasNonNull("anuladaEn"));
+        assertTrue(anulada.get("anuladaPor").asText().contains("Medico"), "falta quien la anulo");
 
-        // Media receta -- unos medicamentos si y otros no -- seria un documento
-        // distinto del que firmo el medico.
-        assertEquals(0, medicamentosGuardados(recetaId, recetaId));
+        // Sigue ahi, marcada, con sus renglones: no se borro nada.
+        JsonNode leida = json.readTree(mockMvc.perform(get("/prescripciones/{id}", recetaId)
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertEquals("ANULADA", leida.get("estado").asText());
+        assertEquals(2, leida.get("medicamentos").size());
+        assertEquals(2, medicamentosGuardados(recetaId, recetaId));
 
-        // La consulta sobrevive: la cascada va en un solo sentido.
+        // Y aparece en el listado de la consulta, tambien marcada.
+        JsonNode lista = recetasDeLaConsulta();
+        assertEquals(1, lista.size());
+        assertEquals("ANULADA", lista.get(0).get("estado").asText());
+
+        // La consulta sobrevive.
         mockMvc.perform(get("/consultas/{id}", consultaId).header("Authorization", bearer(medico)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("HU-22 c3: DELETE ya no existe (405), la anulacion exige motivo y no se repite")
+    void noHayBorradoFisicoYLaAnulacionExigeMotivo() throws Exception {
+        long recetaId = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
+
+        mockMvc.perform(delete("/prescripciones/{id}", recetaId).header("Authorization", bearer(medico)))
+                .andExpect(status().isMethodNotAllowed());
+
+        // Sin motivo, o con uno trivial, no se anula.
+        mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"error\"}"))
+                .andExpect(status().isBadRequest());
+        assertEquals("EMITIDA", json.readTree(mockMvc.perform(get("/prescripciones/{id}", recetaId)
+                        .header("Authorization", bearer(medico)))
+                .andReturn().getResponse().getContentAsString()).get("estado").asText());
+
+        mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Receta emitida por error\"}"))
+                .andExpect(status().isOk());
+
+        // Segunda vez: 409 y el rastro original no se pisa.
+        mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Otro motivo distinto\"}"))
+                .andExpect(status().isConflict());
+        assertEquals("Receta emitida por error", json.readTree(mockMvc.perform(get("/prescripciones/{id}", recetaId)
+                        .header("Authorization", bearer(medico)))
+                .andReturn().getResponse().getContentAsString()).get("motivoAnulacion").asText());
+
+        mockMvc.perform(post("/prescripciones/{id}/anular", 9_999_999)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Receta que no existe\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("HU-22 c3: anula el medico que firmo o un administrador; otro medico y enfermeria, no")
+    void quienPuedeAnular() throws Exception {
+        long recetaId = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
+        String cuerpo = "{\"motivo\":\"Anulacion de prueba\"}";
+
+        for (String intruso : new String[]{tokenDeMedico(), tokenDeEnfermera()}) {
+            mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                            .header("Authorization", bearer(intruso))
+                            .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                    .andExpect(status().isForbidden());
+        }
+
+        mockMvc.perform(post("/prescripciones/{id}/anular", recetaId)
+                        .header("Authorization", bearer(tokenDeAdministrador()))
+                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("HU-22 c3: no existe forma de editar una receta emitida")
+    void unaRecetaEmitidaNoSeEdita() throws Exception {
+        long recetaId = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                """.formatted(consultaId, amoxicilina)).get("prescripcionId").asLong();
+
+        for (var metodo : new org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder[]{
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/prescripciones/{id}", recetaId),
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/prescripciones/{id}", recetaId)}) {
+            mockMvc.perform(metodo.header("Authorization", bearer(medico))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"medicamentos\":[]}"))
+                    .andExpect(status().isMethodNotAllowed());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-22 c4 · imprimir
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("HU-22 c4: el PDF de la receta se descarga con la junta del medico y los datos de la clinica")
+    void elPdfLlevaJuntaYClinica() throws Exception {
+        int clinicaId = crearSede(medico);
+        JsonNode consultaCreada = crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Control","diagnostico":"Sano","clinicaId":%d}
+                """.formatted(paciente, clinicaId));
+        long consultaConClinica = consultaCreada.get("consultaId").asLong();
+        jdbc.update("UPDATE medicos SET registro_junta = 'JVPM-98765' WHERE persona_id = ?",
+                consultaCreada.get("medico").get("personaId").asLong());
+        long recetaId = emitir(medico, """
+                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                """.formatted(consultaConClinica, amoxicilina)).get("prescripcionId").asLong();
+
+        byte[] pdf = mockMvc.perform(get("/prescripciones/{id}/pdf", recetaId)
+                        .header("Authorization", bearer(tokenDeEnfermera())))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .content().contentTypeCompatibleWith(MediaType.APPLICATION_PDF))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        assertEquals("%PDF", new String(pdf, 0, 4, java.nio.charset.StandardCharsets.US_ASCII));
+
+        var lector = new com.lowagie.text.pdf.PdfReader(pdf);
+        String texto = new com.lowagie.text.pdf.parser.PdfTextExtractor(lector).getTextFromPage(1);
+        assertTrue(texto.contains("JVPM-98765"), "falta el numero de junta de vigilancia: " + texto);
+        assertTrue(texto.contains("Sede "), "falta el nombre de la clinica: " + texto);
+        assertTrue(texto.contains("Calle Principal"), "falta la direccion de la clinica");
+        assertTrue(texto.contains("Amoxicilina"), "falta el medicamento");
+        assertTrue(texto.contains("Oral"), "falta la via de administracion");
+
+        mockMvc.perform(get("/prescripciones/{id}/pdf", 9_999_999).header("Authorization", bearer(medico)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/prescripciones/{id}/pdf", recetaId)).andExpect(status().isUnauthorized());
     }
 
     // ══════════════════════════════════════════════════════════════════════

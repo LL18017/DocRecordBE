@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
+import ues.edu.sv.education.model.enums.EstadoPrescripcion;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +39,8 @@ public class Prescripcion {
     @JoinColumn(name = "consulta_id", nullable = false)
     private Consulta consulta;
 
-    // Quien firma la receta. Sale del token, igual que en Consulta.
+    // Quien firma la receta: el medico de la consulta (HU-22, criterio 1),
+    // que ademas tiene que ser quien la emite; ver PrescripcionService.crear.
     @NotNull(message = "El medico es obligatorio")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "medico_id", nullable = false)
@@ -53,6 +56,28 @@ public class Prescripcion {
      */
     @Column(name = "justificacion_alergia", length = 500)
     private String justificacionAlergia;
+
+    /**
+     * EMITIDA o ANULADA (HU-22, criterio 3). Una receta no se borra: se anula
+     * y sigue visible, marcada. Ver V31.
+     */
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado", nullable = false, length = 10)
+    @Builder.Default
+    private EstadoPrescripcion estado = EstadoPrescripcion.EMITIDA;
+
+    // El rastro de la anulacion: por que, quien y cuando. Los tres van juntos
+    // o no va ninguno (lo garantiza un CHECK en V31).
+    @Column(name = "motivo_anulacion", length = 500)
+    private String motivoAnulacion;
+
+    @Column(name = "anulada_en")
+    private LocalDateTime anuladaEn;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "anulada_por")
+    private User anuladaPor;
 
     @Builder.Default
     @OneToMany(mappedBy = "prescripcion",

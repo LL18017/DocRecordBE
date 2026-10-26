@@ -69,6 +69,15 @@ public class MedicoAutenticado {
                 .flatMap(persona -> medicoRepository.findById(persona.getPersonaId()));
     }
 
+    /**
+     * El usuario autenticado (users, no la persona). Lo necesita quien deja
+     * constancia de QUIEN hizo algo, como la anulacion de una receta.
+     */
+    public User usuario() {
+        return usuarioActual().orElseThrow(() ->
+                new GeneralException("El token no identifica a un usuario valido", "401"));
+    }
+
     private Optional<User> usuarioActual() {
 
         Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();

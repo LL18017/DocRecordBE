@@ -6,13 +6,16 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
 import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
 import ues.edu.sv.education.model.dto.prescripcion.DecisionDeAlertaDto;
+import ues.edu.sv.education.model.dto.prescripcion.AnulacionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.service.prescripcion.PrescripcionService;
@@ -34,8 +37,9 @@ import java.util.List;
  * por ahi; uno que no ejerce no tiene nada que firmar. Aunque se colara, el
  * servicio exige fila en `medicos` para poner la firma.
  * <p>
- * ANULAR: ADMIN o MEDICO. Una receta mal capturada hay que poder quitarla, y
- * eso si es correccion de registro.
+ * ANULAR: ADMIN, o el MEDICO que la firmo. Una receta mal capturada hay que
+ * poder invalidarla, pero no borrarla ni editarla: se anula con motivo y se
+ * emite otra (HU-22). El DELETE fisico que habia aqui se retiro.
  */
 @Slf4j
 @RestController
@@ -49,7 +53,9 @@ public class PrescripcionController {
 
     @Operation(
             summary = "Emitir una receta",
-            description = "Firma el medico autenticado, no un medicoId del cuerpo. "
+            description = "La receta hereda de la consulta paciente, medico, clinica y fecha, y solo la emite "
+                    + "el medico de esa consulta (403 en otro caso). Cada renglon exige dosis, "
+                    + "viaAdministracion, frecuencia y duracion (400 si falta alguna). "
                     + "Cada medicamento se elige del catalogo por su medicamentoId (GET /medicamentos). "
                     + "400 si la lista de medicamentos viene vacia o si un medicamento no existe en el "
                     + "catalogo o esta desactivado; 404 si la consulta no existe. 409 si algun medicamento "
@@ -140,11 +146,32 @@ public class PrescripcionController {
         return ResponseEntity.ok(prescripcionService.obtener(prescripcionId));
     }
 
-    @Operation(summary = "Anular una receta", description = "Borra la receta con todos sus medicamentos.")
-    @DeleteMapping("/{prescripcionId}")
+    @Operation(
+            summary = "Imprimir una receta (PDF)",
+            description = "Descarga la receta en PDF con el medico y su numero de junta de vigilancia, los "
+                    + "datos de la clinica, el paciente y los medicamentos. Una receta anulada tambien se "
+                    + "descarga, marcada como anulada. 404 si no existe."
+    )
+    @GetMapping(value = "/{prescripcionId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> pdf(@PathVariable("prescripcionId") Long prescripcionId) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"receta-" + prescripcionId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(prescripcionService.generarPdf(prescripcionId));
+    }
+
+    @Operation(
+            summary = "Anular una receta",
+            description = "Anulacion logica (HU-22): la receta pasa a ANULADA con el motivo, quien y cuando, y "
+                    + "sigue visible, marcada. NO se borra ni se edita; para corregirla se anula y se emite "
+                    + "otra. Solo un ADMIN o el medico que la firmo (403 en otro caso). 409 si ya estaba "
+                    + "anulada; 400 si falta el motivo (10 a 500 caracteres); 404 si no existe."
+    )
+    @PostMapping("/{prescripcionId}/anular")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
-    public ResponseEntity<Void> eliminar(@PathVariable("prescripcionId") Long prescripcionId) {
-        prescripcionService.eliminar(prescripcionId);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<PrescripcionResponseDto> anular(
+            @PathVariable("prescripcionId") Long prescripcionId,
+            @Valid @RequestBody AnulacionRequestDto request) {
+        return ResponseEntity.ok(prescripcionService.anular(prescripcionId, request.motivo()));
     }
 }
