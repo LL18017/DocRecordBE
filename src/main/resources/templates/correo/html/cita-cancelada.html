@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<!--
+  Aviso de cancelación de una cita (HU-32, criterio 4). Lo reciben el paciente
+  y el médico.
+
+  Variables Thymeleaf:
+  - rol: PACIENTE o MEDICO (quien lo recibe).
+  - paciente: nombre del paciente (se muestra solo al médico).
+  - fecha, hora, medico, clinica, direccion: los de la cita cancelada.
+  - motivo: motivo registrado al cancelar.
+-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cita médica cancelada | DocRecord Sv</title>
+</head>
+
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Se canceló la cita médica del [[${fecha}]] a las [[${hora}]].
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       border="0" bgcolor="#EEF2F7"
+       style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0"
+                   cellspacing="0" border="0" bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;
+                          border-radius:10px;overflow:hidden;">
+
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+
+                <tr>
+                    <td bgcolor="#B3261E" height="4"
+                        style="background-color:#B3261E;height:4px;
+                               line-height:4px;font-size:0;">&nbsp;</td>
+                </tr>
+
+                <!-- Título y mensaje -->
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            Se canceló una cita médica
+                        </h1>
+
+                        <p th:if="${rol == 'PACIENTE'}" style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Se canceló tu cita médica en DocRecord Sv. La franja quedó libre; si todavía necesitas atención, solicita una nueva cita.
+                        </p>
+                        <p th:if="${rol == 'MEDICO'}" style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Se canceló una cita de su agenda en DocRecord Sv. La franja quedó libre.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- Datos de la cita -->
+                <tr>
+                    <td style="padding:0 28px 24px 28px;">
+                        <table role="presentation" width="100%"
+                               cellpadding="0" cellspacing="0" border="0"
+                               bgcolor="#F1F5F9"
+                               style="background-color:#F1F5F9;border-radius:6px;">
+
+                            <tr><td height="16" style="height:16px;line-height:16px;font-size:0;">&nbsp;</td></tr>
+                            <tr th:if="${rol == 'MEDICO'}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Paciente
+                                </td>
+                            </tr>
+                            <tr th:if="${rol == 'MEDICO'}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${paciente}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Fecha
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:26px;font-weight:bold;color:#1E3A5F;"
+                                    th:text="${fecha}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Hora
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${hora}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Médico
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${medico}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${clinica != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Clínica
+                                </td>
+                            </tr>
+                            <tr th:if="${clinica != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${clinica}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${direccion != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Dirección
+                                </td>
+                            </tr>
+                            <tr th:if="${direccion != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${direccion}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${motivo != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Motivo de la cancelación
+                                </td>
+                            </tr>
+                            <tr th:if="${motivo != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${motivo}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+
+            </table>
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

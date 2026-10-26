@@ -47,7 +47,16 @@ public record PrescripcionResponseDto(
         LocalDateTime anuladaEn,
 
         @Schema(description = "Nombre de quien la anulo; null si esta EMITIDA")
-        String anuladaPor
+        String anuladaPor,
+
+        @Schema(description = "Ultimo envio de la receta por correo (HU-25): PENDIENTE, ENVIADO, FALLIDO, "
+                + "o SIN_CORREO si el paciente no tiene correo registrado y la receta solo se puede imprimir. "
+                + "Null si la receta es anterior al envio automatico y nunca se mando.",
+                example = "ENVIADO")
+        String envioPorCorreo,
+
+        @Schema(description = "Cuando se encolo el envio (PENDIENTE) o cuando termino (ENVIADO, FALLIDO)")
+        LocalDateTime envioPorCorreoFecha
 
 ) {
 }

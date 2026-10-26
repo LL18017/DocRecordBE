@@ -40,7 +40,25 @@ public enum PlantillaDeCorreo {
     ),
     RECORDATORIO_CITA(
         "recordatorio-cita",
-                "recordatorio de cita"
+                "Recordatorio de tu cita médica en DocRecord Sv"
+    ),
+
+    // HU-30 criterio 4: al agendar se confirma; ya no se reusa el recordatorio,
+    // que habla de "mañana" y no de una cita recien tomada.
+    CONFIRMACION_DE_CITA(
+        "confirmacion-cita",
+                "Tu cita médica quedó agendada en DocRecord Sv"
+    ),
+
+    // HU-32 criterio 4: avisos al paciente y al medico.
+    CITA_CANCELADA(
+        "cita-cancelada",
+                "Se canceló una cita médica en DocRecord Sv"
+    ),
+
+    CITA_REPROGRAMADA(
+        "cita-reprogramada",
+                "Se reprogramó una cita médica en DocRecord Sv"
     );
 
     private final String nombreBase;

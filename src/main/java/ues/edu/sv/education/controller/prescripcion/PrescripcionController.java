@@ -60,7 +60,9 @@ public class PrescripcionController {
                     + "400 si la lista de medicamentos viene vacia o si un medicamento no existe en el "
                     + "catalogo o esta desactivado; 404 si la consulta no existe. 409 si algun medicamento "
                     + "coincide con una alergia vigente del paciente y falta la justificacionAlergia, o "
-                    + "la alergia es SEVERA y confirmaAlergiaSevera no es true (HU-24)."
+                    + "la alergia es SEVERA y confirmaAlergiaSevera no es true (HU-24). Si el paciente tiene "
+                    + "correo, el envio al correo queda encolado solo (envioPorCorreo = PENDIENTE); si no "
+                    + "lo tiene, no se encola nada y envioPorCorreo = SIN_CORREO para que se imprima (HU-25)."
     )
     @PostMapping
     @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
@@ -102,9 +104,11 @@ public class PrescripcionController {
     }
 
     @Operation(
-            summary = "Emitir una receta",
-            description = "Firma el medico autenticado, no un medicoId del cuerpo. "
-                    + "400 si la lista de medicamentos esta vacia; 404 si la consulta no existe."
+            summary = "Enviar o reenviar la receta por correo",
+            description = "Encola el envio de las recetas de la consulta al correo del paciente (HU-25). "
+                    + "Sirve para reenviar cuando el envio automatico fallo; el ultimo estado se lee en "
+                    + "envioPorCorreo de la receta. 404 si la consulta no existe; 422 si la consulta no "
+                    + "tiene recetas o si el paciente no tiene correo registrado."
     )
     @PostMapping("/enviar-receta/{consultaId}")
     @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
