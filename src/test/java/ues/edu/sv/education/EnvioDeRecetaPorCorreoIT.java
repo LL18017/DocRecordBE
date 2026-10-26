@@ -76,7 +76,7 @@ class EnvioDeRecetaPorCorreoIT extends PruebaClinica {
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta"}]}
+                                {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"5 dias"}]}
                                 """.formatted(consultaId, medicamento)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString());
