@@ -251,15 +251,6 @@ public class CitaService {
         return citaMapper.toResponse(guardar(cita));
     }
 
-    public void eliminar(Integer id) {
-
-        if (!citaRepository.existsById(id)) {
-            throw new GeneralException("Cita no encontrada", "404");
-        }
-
-        citaRepository.deleteById(id);
-    }
-
     private Cita guardar(Cita cita) {
         try {
             return citaRepository.saveAndFlush(cita);

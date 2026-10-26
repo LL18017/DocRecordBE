@@ -13,7 +13,8 @@ public enum EventCodeEnums {
     TOKEN_CREATED(7, "confirmacion de cuentas"),
     TOKEN_USED(8, "confirmacion de cuentas"),
     PREESCRIPTION_SEND(9, "ENVIO DE PREESCRIPCION"),
-    ALLERGY_ALERT_OVERRIDE(10, "Receta emitida pese a una alerta de alergia");
+    ALLERGY_ALERT_OVERRIDE(10, "Receta emitida pese a una alerta de alergia"),
+    ALLERGY_ALERT_DECLINED(11, "Receta no emitida tras una alerta de alergia");
     private final int id;
     private final String description;
 

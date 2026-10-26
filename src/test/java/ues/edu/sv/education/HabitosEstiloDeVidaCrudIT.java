@@ -278,6 +278,175 @@ class HabitosEstiloDeVidaCrudIT extends PruebaClinica {
     }
 
     // ================================================================
+    // HU-14 criterio 1: tipo, frecuencia y observaciones, con fecha
+    // ================================================================
+
+    @Test
+    @DisplayName("c1: queda guardado con frecuencia, observaciones, fecha de actualización y quién lo registró")
+    void habitoGuardaFrecuenciaObservacionesYFecha() throws Exception {
+        JsonNode creado = crearHabito(medico, solicitudHabito(
+                "Fuma cigarrillos", "ALTO", "  A diario  ", "Desde hace 10 años",
+                pacienteId, tipoHabitoId));
+
+        assertEquals("A diario", creado.get("frecuencia").asText());
+        assertEquals("Desde hace 10 años",
+                creado.get("observaciones").asText());
+        assertFalse(creado.get("actualizadoEn").isNull());
+        assertFalse(creado.get("actualizadoPor").asText().isBlank());
+
+        // Persistido: se vuelve a leer por GET, no solo en la respuesta.
+        JsonNode leido = json.readTree(
+                mockMvc.perform(get(BASE + "/{id}", creado.get("id").asLong())
+                                .header("Authorization", bearer(medico)))
+                        .andExpect(status().isOk())
+                        .andReturn().getResponse().getContentAsString());
+        assertEquals("A diario", leido.get("frecuencia").asText());
+        assertEquals(creado.get("actualizadoEn"), leido.get("actualizadoEn"));
+        assertEquals(creado.get("actualizadoPor"), leido.get("actualizadoPor"));
+    }
+
+    @Test
+    @DisplayName("c1: las observaciones son opcionales y la frecuencia no")
+    void frecuenciaObligatoriaYObservacionesOpcionales() throws Exception {
+        JsonNode sinObservaciones = crearHabito(medico, solicitudHabito(
+                "Camina", "BAJO", pacienteId, tipoHabitoId));
+        assertTrue(sinObservaciones.get("observaciones").isNull());
+
+        mockMvc.perform(post(BASE)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(solicitudHabito(
+                                "Camina", "BAJO", "   ", null,
+                                pacienteId, tipoHabitoId)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post(BASE)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"descripcion":"Camina","nivel":"BAJO",
+                                 "pacienteId":%d,"tipoHabitoId":%d}
+                                """.formatted(pacienteId, tipoHabitoId)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("c1: editar actualiza la fecha y quién lo editó, que sale del token")
+    void editarActualizaFechaYAutor() throws Exception {
+        JsonNode creado = crearHabito(medico, solicitudHabito(
+                "Bebe alcohol", "MODERADO", pacienteId, tipoHabitoId));
+        long id = creado.get("id").asLong();
+
+        JsonNode editado = actualizarHabito(enfermera, id, solicitudHabito(
+                "Bebe alcohol", "BAJO", "Los fines de semana", "Reduce",
+                pacienteId, tipoHabitoId));
+
+        assertEquals("Los fines de semana",
+                editado.get("frecuencia").asText());
+        assertNotEquals(creado.get("actualizadoPor").asText(),
+                editado.get("actualizadoPor").asText(),
+                "lo editó la enfermera, no el médico que lo creó");
+        assertTrue(editado.get("actualizadoEn").asText()
+                        .compareTo(creado.get("actualizadoEn").asText()) >= 0);
+    }
+
+    // ================================================================
+    // HU-14 criterio 2: el valor anterior se conserva
+    // ================================================================
+
+    @Test
+    @DisplayName("c2: al editar se conserva la versión anterior con quién y cuándo, la más reciente primero")
+    void editarConservaElValorAnterior() throws Exception {
+        JsonNode creado = crearHabito(medico, solicitudHabito(
+                "Fuma", "ALTO", "A diario", "Una cajetilla",
+                pacienteId, tipoHabitoId));
+        long id = creado.get("id").asLong();
+
+        assertEquals(0, historial(medico, id).size(),
+                "un hábito sin ediciones no tiene versiones anteriores");
+
+        JsonNode primera = actualizarHabito(enfermera, id, solicitudHabito(
+                "Fuma", "MODERADO", "3 veces por semana", "Redujo",
+                pacienteId, tipoHabitoId));
+        actualizarHabito(medico, id, solicitudHabito(
+                "Dejó de fumar", "BAJO", "Nunca", null,
+                pacienteId, tipoHabitoId));
+
+        JsonNode versiones = historial(admin, id);
+        assertEquals(2, versiones.size());
+
+        // La más reciente primero: lo que decía tras la primera edición.
+        JsonNode reciente = versiones.get(0);
+        assertEquals("Fuma", reciente.get("descripcion").asText());
+        assertEquals("MODERADO", reciente.get("nivel").asText());
+        assertEquals("3 veces por semana",
+                reciente.get("frecuencia").asText());
+        assertEquals("Redujo", reciente.get("observaciones").asText());
+        assertEquals(primera.get("actualizadoEn"),
+                reciente.get("actualizadoEn"));
+        assertEquals(primera.get("actualizadoPor"),
+                reciente.get("actualizadoPor"));
+        assertFalse(reciente.get("reemplazadoEn").isNull());
+        assertEquals(creado.get("actualizadoPor").asText(),
+                reciente.get("reemplazadoPor").asText(),
+                "la segunda edición la hizo el médico");
+
+        // La original: lo que se registró al crear.
+        JsonNode original = versiones.get(1);
+        assertEquals("ALTO", original.get("nivel").asText());
+        assertEquals("A diario", original.get("frecuencia").asText());
+        assertEquals("Una cajetilla", original.get("observaciones").asText());
+        assertEquals(creado.get("actualizadoEn"),
+                original.get("actualizadoEn"));
+        assertEquals(id, original.get("habitoId").asLong());
+
+        // El hábito vigente es el último.
+        JsonNode vigente = json.readTree(
+                mockMvc.perform(get(BASE + "/{id}", id)
+                                .header("Authorization", bearer(medico)))
+                        .andReturn().getResponse().getContentAsString());
+        assertEquals("Dejó de fumar", vigente.get("descripcion").asText());
+        assertEquals("BAJO", vigente.get("nivel").asText());
+    }
+
+    @Test
+    @DisplayName("c2: guardar sin cambios no genera una versión nueva")
+    void guardarSinCambiosNoCreaVersion() throws Exception {
+        String cuerpo = solicitudHabito(
+                "Ejercicio", "BAJO", "Diario", "Trota",
+                pacienteId, tipoHabitoId);
+        JsonNode creado = crearHabito(medico, cuerpo);
+        long id = creado.get("id").asLong();
+
+        JsonNode igual = actualizarHabito(medico, id, cuerpo);
+
+        assertEquals(0, historial(medico, id).size());
+        assertEquals(creado.get("actualizadoEn"), igual.get("actualizadoEn"));
+    }
+
+    @Test
+    @DisplayName("c2: el historial de un hábito inexistente es 404 y eliminar el hábito se lleva su historial")
+    void historialDeHabitoInexistenteYEliminacion() throws Exception {
+        mockMvc.perform(get(BASE + "/{id}/historial", ID_INEXISTENTE)
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isNotFound());
+
+        JsonNode creado = crearHabito(medico, solicitudHabito(
+                "Dieta", "BAJO", pacienteId, tipoHabitoId));
+        long id = creado.get("id").asLong();
+        actualizarHabito(medico, id, solicitudHabito(
+                "Dieta", "ALTO", pacienteId, tipoHabitoId));
+        assertEquals(1, historial(medico, id).size());
+
+        mockMvc.perform(delete(BASE + "/{id}", id)
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(BASE + "/{id}/historial", id)
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isNotFound());
+    }
+
+    // ================================================================
     // Hábitos: eliminación
     // ================================================================
 
@@ -544,15 +713,53 @@ class HabitosEstiloDeVidaCrudIT extends PruebaClinica {
             long pacienteId,
             int tipoHabitoId) {
 
+        return solicitudHabito(descripcion, nivel, "Diaria", null,
+                pacienteId, tipoHabitoId);
+    }
+
+    private String solicitudHabito(
+            String descripcion,
+            String nivel,
+            String frecuencia,
+            String observaciones,
+            long pacienteId,
+            int tipoHabitoId) {
+
+        String campoObservaciones = observaciones == null
+                ? ""
+                : "\"observaciones\": \"" + observaciones + "\",";
+
         return """
                 {
                   "descripcion": "%s",
                   "nivel": "%s",
+                  "frecuencia": "%s",
+                  %s
                   "pacienteId": %d,
                   "tipoHabitoId": %d
                 }
                 """.formatted(
-                descripcion, nivel, pacienteId, tipoHabitoId);
+                descripcion, nivel, frecuencia, campoObservaciones,
+                pacienteId, tipoHabitoId);
+    }
+
+    private JsonNode actualizarHabito(String token, long id, String cuerpo)
+            throws Exception {
+        return json.readTree(
+                mockMvc.perform(put(BASE + "/{id}", id)
+                                .header("Authorization", bearer(token))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(cuerpo))
+                        .andExpect(status().isOk())
+                        .andReturn().getResponse().getContentAsString());
+    }
+
+    private JsonNode historial(String token, long id) throws Exception {
+        return json.readTree(
+                mockMvc.perform(get(BASE + "/{id}/historial", id)
+                                .header("Authorization", bearer(token)))
+                        .andExpect(status().isOk())
+                        .andReturn().getResponse().getContentAsString());
     }
 
     private boolean contieneId(JsonNode listado, long id) {
