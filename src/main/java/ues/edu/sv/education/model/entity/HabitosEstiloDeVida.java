@@ -46,7 +46,7 @@ public class HabitosEstiloDeVida {
     @Column(name = "actualizado_en", nullable = false)
     private LocalDateTime actualizadoEn;
 
-    // Null solo en los habitos anteriores a V30, que no guardaron autor.
+    // Null solo en los habitos anteriores a V29, que no guardaron autor.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "actualizado_por")
     private Persona actualizadoPor;
