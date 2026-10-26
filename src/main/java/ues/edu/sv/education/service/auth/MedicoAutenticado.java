@@ -54,6 +54,14 @@ public class MedicoAutenticado {
         ));
     }
 
+    /**
+     * El correo con el que inicio sesion quien opera (el de users, no el de
+     * contacto de la persona). Es lo que la bitacora llama userEmail.
+     */
+    public String correoDeSesion() {
+        return usuarioActual().map(User::getEmail).orElse(null);
+    }
+
     /** El medico que esta operando, si lo es. Vacio si no. */
     public Optional<Medico> buscar() {
         return usuarioActual()

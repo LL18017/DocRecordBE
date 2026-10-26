@@ -12,7 +12,8 @@ public enum EventCodeEnums {
     CONFIRM_ACOUNT(6, "confirmacion de cuentas"),
     TOKEN_CREATED(7, "confirmacion de cuentas"),
     TOKEN_USED(8, "confirmacion de cuentas"),
-    PREESCRIPTION_SEND(9, "ENVIO DE PREESCRIPCION");
+    PREESCRIPTION_SEND(9, "ENVIO DE PREESCRIPCION"),
+    ALLERGY_ALERT_OVERRIDE(10, "Receta emitida pese a una alerta de alergia");
     private final int id;
     private final String description;
 
