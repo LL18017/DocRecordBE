@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
 import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
+import ues.edu.sv.education.model.dto.prescripcion.DecisionDeAlertaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.service.prescripcion.PrescripcionService;
@@ -77,6 +78,21 @@ public class PrescripcionController {
             @RequestParam Long pacienteId,
             @RequestParam Long medicamentoId) {
         return ResponseEntity.ok(prescripcionService.alertasDeAlergia(pacienteId, medicamentoId));
+    }
+
+    @Operation(
+            summary = "Registrar la decision ante una alerta de alergia (HU-24, criterio 5)",
+            description = "El medico vio la alerta y desistio de recetar: queda en la bitacora (evento "
+                    + "ALLERGY_ALERT_DECLINED) con la alergia mostrada y la decision. Si en cambio receta "
+                    + "pese a la alerta, el evento lo escribe POST /prescripciones. Quien decide sale del "
+                    + "token. 403 si no es medico; 404 si el paciente o el medicamento no existen; 409 si "
+                    + "no hay alerta vigente para ese par."
+    )
+    @PostMapping("/alertas-de-alergia/decision")
+    @PreAuthorize("hasRole('MEDICO')")
+    public ResponseEntity<Void> decisionDeAlerta(@Valid @RequestBody DecisionDeAlertaDto decision) {
+        prescripcionService.registrarDecisionDeAlerta(decision);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(

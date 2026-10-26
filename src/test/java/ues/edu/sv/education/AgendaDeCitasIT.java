@@ -14,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -234,6 +235,22 @@ class AgendaDeCitasIT extends PruebaClinica {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertEquals(pasadoManana(16, 0) + ":00", json.readTree(cuerpo).get("fechaHora").asText());
+    }
+
+    @Test
+    @DisplayName("HU-32 c5: no existe el borrado de citas; DELETE /citas/{id} es 405 y la cita sigue en la agenda")
+    void unaCitaNoSeBorra() throws Exception {
+        int citaId = agendar(paciente, pasadoManana(15, 0)).get("citaId").asInt();
+
+        mockMvc.perform(delete("/citas/{id}", citaId).header("Authorization", bearer(medico)))
+                .andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(delete("/citas/{id}", citaId).header("Authorization", bearer(tokenDeAdministrador())))
+                .andExpect(status().isMethodNotAllowed());
+
+        // Sigue ahi, agendada; la unica salida es cancelarla (con motivo).
+        assertEquals("AGENDADA", leer("/citas/" + citaId).get("estado").asText());
+        intentarCancelar(citaId, "Se cancela en lugar de borrarse").andExpect(status().isOk());
+        assertEquals("CANCELADA", leer("/citas/" + citaId).get("estado").asText());
     }
 
     @Test

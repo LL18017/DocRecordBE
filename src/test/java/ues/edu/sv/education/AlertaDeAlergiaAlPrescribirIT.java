@@ -248,6 +248,63 @@ class AlertaDeAlergiaAlPrescribirIT extends PruebaClinica {
     }
 
     @Test
+    @DisplayName("c5: si el medico desiste tras ver la alerta queda un evento PROCESSED ALLERGY_ALERT_DECLINED con la alergia y la decision")
+    void elDesistimientoQuedaEnLaBitacora() throws Exception {
+        registrarAlergia("Desistina" + n, "SEVERA", "Anafilaxia");
+        long medicamento = crearMedicamento("Desistina " + n, "Desistina" + n);
+
+        decidir(medico, paciente, medicamento, "DESISTIO").andExpect(status().isNoContent());
+
+        List<Map<String, Object>> eventos = jdbc.queryForList(
+                "SELECT event_status_id, description, user_email FROM events WHERE event_type_id = 11 AND ref = ?",
+                "paciente:" + paciente + ";medicamento:" + medicamento);
+        assertEquals(1, eventos.size());
+        Map<String, Object> evento = eventos.get(0);
+        assertEquals(3, ((Number) evento.get("event_status_id")).intValue(), "debe quedar PROCESSED para que nadie lo tome");
+        String descripcion = (String) evento.get("description");
+        assertTrue(descripcion.contains("Desistina" + n), descripcion);
+        assertTrue(descripcion.contains("SEVERA"), descripcion);
+        assertTrue(descripcion.contains("DESISTIO"), descripcion);
+        Integer usuarios = jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class,
+                (String) evento.get("user_email"));
+        assertEquals(1, usuarios, "user_email debe ser el correo de sesion del medico");
+
+        // Desistir no emite receta.
+        assertEquals(0, recetasDeLaConsulta());
+    }
+
+    @Test
+    @DisplayName("c5: el desistimiento valida la decision, el paciente, el medicamento, que haya alerta y el rol")
+    void elDesistimientoSeValida() throws Exception {
+        long sinAlerta = crearMedicamento("Sin alerta " + n, "Sinalerta" + n);
+        registrarAlergia("Validina" + n, "LEVE", "Picazon");
+        long conAlerta = crearMedicamento("Validina " + n, "Validina" + n);
+
+        // Una decision fuera de la lista cerrada, o ausente, es 400.
+        decidir(medico, paciente, conAlerta, "OTRA").andExpect(status().isBadRequest());
+        mockMvc.perform(post("/prescripciones/alertas-de-alergia/decision")
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":" + paciente + ",\"medicamentoId\":" + conAlerta + "}"))
+                .andExpect(status().isBadRequest());
+
+        decidir(medico, 999999999L, conAlerta, "DESISTIO").andExpect(status().isNotFound());
+        decidir(medico, paciente, 999999999L, "DESISTIO").andExpect(status().isNotFound());
+
+        // Sin alerta no hay decision que registrar.
+        decidir(medico, paciente, sinAlerta, "DESISTIO").andExpect(status().isConflict());
+
+        // Solo el medico decide.
+        decidir(tokenDeEnfermera(), paciente, conAlerta, "DESISTIO").andExpect(status().isForbidden());
+        decidir(tokenDeAdministrador(), paciente, conAlerta, "DESISTIO").andExpect(status().isForbidden());
+
+        Integer total = jdbc.queryForObject(
+                "SELECT count(*) FROM events WHERE event_type_id = 11 AND description LIKE ?", Integer.class,
+                "%Validina" + n + "%");
+        assertEquals(0, total, "ninguna de las rechazadas deja evento");
+    }
+
+    @Test
     @DisplayName("permisos: la enfermera no consulta la alerta (solo medico y admin)")
     void laEnfermeraNoConsultaAlertas() throws Exception {
         long medicamento = crearMedicamento("Permiso " + n, "Permiso" + n);
@@ -321,6 +378,15 @@ class AlertaDeAlergiaAlPrescribirIT extends PruebaClinica {
                 .header("Authorization", bearer(medico))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(cuerpo)));
+    }
+
+    private ResultActions decidir(String token, long pacienteId, long medicamentoId, String decision)
+            throws Exception {
+        return mockMvc.perform(post("/prescripciones/alertas-de-alergia/decision")
+                .header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"pacienteId\":" + pacienteId + ",\"medicamentoId\":" + medicamentoId
+                        + ",\"decision\":\"" + decision + "\"}"));
     }
 
     private int recetasDeLaConsulta() {

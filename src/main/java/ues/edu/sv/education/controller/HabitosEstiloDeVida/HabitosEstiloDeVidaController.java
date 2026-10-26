@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import ues.edu.sv.education.model.dto.habitosestilodevida.HabitoHistorialResponse;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitosEstiloDeVidaRequest;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitosEstiloDeVidaResponse;
 import ues.edu.sv.education.model.dto.tipohabito.TipoHabitoRequest;
@@ -43,7 +44,11 @@ public class HabitosEstiloDeVidaController {
     // HÁBITOS DE ESTILO DE VIDA
     // =========================
 
-    @Operation(summary = "Registrar un hábito")
+    @Operation(
+            summary = "Registrar un hábito",
+            description = "Tipo, nivel, frecuencia (obligatoria) y observaciones (opcionales). Queda con la "
+                    + "fecha de actualización y quién lo registró, que sale del token."
+    )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "201",
@@ -90,6 +95,20 @@ public class HabitosEstiloDeVidaController {
         return ResponseEntity.ok(
                 habitosService.listarPorPaciente(pacienteId)
         );
+    }
+
+    @Operation(
+            summary = "Historial de un hábito",
+            description = "Las versiones anteriores del hábito (HU-14, criterio 2), la más reciente "
+                    + "primero, con quién y cuándo las escribió y quién y cuándo las reemplazó. "
+                    + "Lista vacía si nunca se editó; 404 si el hábito no existe."
+    )
+    @GetMapping("/{id}/historial")
+    public ResponseEntity<List<HabitoHistorialResponse>> historialDeHabito(
+            @Parameter(description = "ID del hábito", example = "1")
+            @PathVariable Long id) {
+
+        return ResponseEntity.ok(habitosService.historial(id));
     }
 
     @Operation(summary = "Actualizar un hábito")

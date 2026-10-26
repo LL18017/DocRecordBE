@@ -12,6 +12,7 @@ import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
 import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
+import ues.edu.sv.education.model.dto.prescripcion.DecisionDeAlertaDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicamentoRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicamentoResponseDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
@@ -194,16 +195,55 @@ public class PrescripcionService {
                 .map(a -> a.sustancia() + " " + a.severidad() + " (" + a.medicamento() + ")")
                 .collect(Collectors.joining("; "));
         String descripcion = "Receta emitida pese a alergia: " + alertasTexto + ". Justificacion: " + justificacion;
+        guardarEventoDeAlerta(EventCodeEnums.ALLERGY_ALERT_OVERRIDE, descripcion,
+                String.valueOf(prescripcion.getPrescripcionId()));
+    }
+
+    /**
+     * Criterio 5, la otra mitad: el medico vio la alerta y NO receto. Sin esto
+     * la bitacora solo sabria de las alertas que terminaron en receta, y la
+     * alerta que hizo cambiar de idea al medico (la que mas vale auditar)
+     * quedaria sin rastro. No hay receta a la que colgarlo, asi que `ref`
+     * identifica al paciente y al medicamento.
+     * <p>
+     * Se exige que la alerta exista: registrar un "desistio" de una alerta
+     * que el sistema no habria mostrado ensuciaria la bitacora (409).
+     */
+    @Transactional
+    public void registrarDecisionDeAlerta(DecisionDeAlertaDto decision) {
+        medicoAutenticado.exigir();
+        if (!pacienteRepository.existsById(decision.pacienteId())) {
+            throw new NoResourceFoundException("Paciente no encontrado", "404");
+        }
+        Medicamento medicamento = medicamentoRepository.findById(decision.medicamentoId())
+                .orElseThrow(() -> new NoResourceFoundException("Medicamento no encontrado", "404"));
+        List<AlertaDeAlergiaDto> alertas = alertasDe(decision.pacienteId(), medicamento);
+        if (alertas.isEmpty()) {
+            throw new GeneralException(
+                    "El paciente no tiene una alergia vigente que coincida con " + medicamento.descripcion()
+                            + ": no hay alerta cuya decisión registrar", "409");
+        }
+        String alertasTexto = alertas.stream()
+                .map(a -> a.sustancia() + " " + a.severidad())
+                .collect(Collectors.joining("; "));
+        guardarEventoDeAlerta(EventCodeEnums.ALLERGY_ALERT_DECLINED,
+                "Alerta de alergia mostrada: " + alertasTexto + " (" + medicamento.descripcion()
+                        + "). Decision del medico: " + decision.decision(),
+                "paciente:" + decision.pacienteId() + ";medicamento:" + decision.medicamentoId());
+    }
+
+    /** Un evento de bitacora ya PROCESSED (es solo registro, nada lo envia). */
+    private void guardarEventoDeAlerta(EventCodeEnums tipo, String descripcion, String ref) {
         if (descripcion.length() > 500) {
             descripcion = descripcion.substring(0, 497) + "...";
         }
         LocalDateTime ahora = LocalDateTime.now();
         eventRepository.save(Event.builder()
-                .eventType(eventTypeRepository.getReferenceById(EventCodeEnums.ALLERGY_ALERT_OVERRIDE.getId()))
+                .eventType(eventTypeRepository.getReferenceById(tipo.getId()))
                 .eventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PROCESSED.getId()))
                 .description(descripcion)
                 .userEmail(medicoAutenticado.correoDeSesion())
-                .ref(String.valueOf(prescripcion.getPrescripcionId()))
+                .ref(ref)
                 .createdAt(ahora)
                 .processedAt(ahora)
                 .build());

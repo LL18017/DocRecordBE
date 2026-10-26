@@ -296,37 +296,4 @@ public class CitaController {
                 citaService.actualizar(id, dto)
         );
     }
-
-    @Operation(
-            summary = "Eliminar una cita",
-            description = "Elimina una cita médica existente."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "204",
-                    description = "Cita eliminada correctamente"
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "No autorizado"
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Cita no encontrada"
-            )
-    })
-    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(
-            @Parameter(
-                    description = "Identificador de la cita",
-                    example = "15",
-                    required = true
-            )
-            @PathVariable Integer id
-    ) {
-        citaService.eliminar(id);
-
-        return ResponseEntity.noContent().build();
-    }
 }
