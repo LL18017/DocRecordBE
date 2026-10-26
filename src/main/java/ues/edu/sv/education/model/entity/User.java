@@ -49,7 +49,7 @@ public class User {
 
     /**
      * Cuantas veces se han cerrado de golpe las sesiones de esta cuenta (ver
-     * V32). Cada token la lleva como claim; si no coincide con la de la base,
+     * V30). Cada token la lleva como claim; si no coincide con la de la base,
      * el token se emitio antes del ultimo cierre y no sirve. Restablecer la
      * contrasena la incrementa (HU-03 criterio 4).
      */

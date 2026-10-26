@@ -88,7 +88,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
             // Sesion cerrada despues de emitir el token (HU-03 criterio 4).
             // Restablecer la contrasena sube la version de sesion de la cuenta
-            // (V32); un token con una version anterior es de una sesion que ya
+            // (V30); un token con una version anterior es de una sesion que ya
             // no existe, aunque su firma y su "exp" sigan siendo validos. Una
             // consulta por peticion, de una sola columna: es el precio de poder
             // cerrar sesiones sin guardar una lista de tokens.

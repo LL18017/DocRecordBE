@@ -318,7 +318,7 @@ public class RecuperacionDeContrasenaService {
      * ── Si se cierran las sesiones abiertas ───────────────────────────────
      * Si la contrasena se recupera porque la cuenta estaba comprometida, el
      * intruso no puede conservar su sesion. Cada token lleva la version de
-     * sesion de la cuenta (users.version_de_sesion, V32) y restablecer la
+     * sesion de la cuenta (users.version_de_sesion, V30) y restablecer la
      * incrementa: el JwtFilter rechaza con 401 los tokens de acceso anteriores
      * y AuthService.refresh los de refresco.
      */

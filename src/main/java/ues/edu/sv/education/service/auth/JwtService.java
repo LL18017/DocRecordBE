@@ -86,7 +86,7 @@ public class JwtService {
 
     /**
      * La version de sesion con la que se emitio el token. Un token anterior a
-     * V32 no trae el claim y se lee como 0, que es el valor con el que
+     * V30 no trae el claim y se lee como 0, que es el valor con el que
      * arrancaron todas las cuentas.
      */
     public int versionDeSesion(Claims claims) {
