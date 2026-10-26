@@ -61,6 +61,28 @@ public class Paciente {
     @Builder.Default
     private String estado = ESTADO_ACTIVO;
 
+    // ── Trazabilidad (HU-07 criterio 4, HU-09 criterio 4, ver V27) ──────────
+    // Nulos en los pacientes anteriores a V27: no se inventa un autor que no
+    // se guardo.
+
+    /** Quien registro al paciente. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "registrado_por_user_id")
+    private User registradoPor;
+
+    /** Sede activa de quien lo registro; null si no la indico. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "registrado_en_clinica_id")
+    private Clinicas registradoEnClinica;
+
+    /** Quien lo modifico por ultima vez (datos o estado). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "modificado_por_user_id")
+    private User modificadoPor;
+
+    @Column(name = "modificado_en")
+    private LocalDateTime modificadoEn;
+
     public static final String ESTADO_ACTIVO = "ACTIVO";
     public static final String ESTADO_INACTIVO = "INACTIVO";
 }

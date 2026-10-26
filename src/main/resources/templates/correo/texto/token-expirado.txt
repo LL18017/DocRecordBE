@@ -1,6 +1,6 @@
 El enlace para confirmar tu cuenta de DocRecord Sv venció.
 
-Dura [(${minutos})] minutos desde que se envía, y ese plazo ya pasó. Tu cuenta
+Dura [(${horas})] horas desde que se envía, y ese plazo ya pasó. Tu cuenta
 sigue creada, pero todavía sin activar.
 
 Conseguir uno nuevo toma un minuto: llena otra vez el formulario de registro

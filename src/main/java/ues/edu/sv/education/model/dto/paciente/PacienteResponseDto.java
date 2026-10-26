@@ -26,7 +26,22 @@ public record PacienteResponseDto(
         String estado,
 
         @Schema(description = "Datos de la persona")
-        PersonaResponseDto persona
+        PersonaResponseDto persona,
+
+        @Schema(description = "Correo de quien registro al paciente. Null en pacientes anteriores a la trazabilidad.")
+        String registradoPor,
+
+        @Schema(description = "ID de la clinica donde se registro, si se indico")
+        Integer clinicaRegistroId,
+
+        @Schema(description = "Nombre de la clinica donde se registro, si se indico")
+        String clinicaRegistro,
+
+        @Schema(description = "Correo de quien lo modifico por ultima vez. Null si nunca se modifico.")
+        String modificadoPor,
+
+        @Schema(description = "Cuando se modifico por ultima vez. Null si nunca se modifico.")
+        LocalDateTime modificadoEn
 
 ) {
 }

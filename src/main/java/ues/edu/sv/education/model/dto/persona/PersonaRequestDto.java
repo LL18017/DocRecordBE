@@ -32,8 +32,9 @@ public record PersonaRequestDto(
         @Pattern(regexp = "[MF]", message = "El sexo debe ser M o F")
         String sexo,
 
-        @Schema(description = "Telefono")
-        @Size(max = 20, message = "El telefono no puede superar los 20 caracteres")
+        @Schema(description = "Telefono salvadoreño de 8 digitos, con o sin guion", example = "2222-2222")
+        @Pattern(regexp = "^(\\d{4}-?\\d{4})?$",
+                message = "El telefono debe tener 8 digitos (2222-2222 o 22222222)")
         String telefono,
 
         @Schema(description = "Direccion")
@@ -46,4 +47,22 @@ public record PersonaRequestDto(
         String email
 
 ) {
+
+    private static final java.time.ZoneId ZONA = java.time.ZoneId.of("America/El_Salvador");
+
+    /**
+     * El telefono en la forma en que se guarda, NNNN-NNNN, o null si no vino.
+     * Los tests y los datos existentes lo usan con guion; "22222222" y
+     * "2222-2222" son el mismo numero y no deben guardarse como dos cosas.
+     */
+    public String telefonoNormalizado() {
+        if (telefono == null || telefono.isBlank()) return null;
+        String digitos = telefono.replace("-", "");
+        return digitos.substring(0, 4) + "-" + digitos.substring(4);
+    }
+
+    /** Nadie nace manana: la fecha de hoy se toma en la zona del pais, no en la del servidor (UTC). */
+    public boolean fechaNacimientoEsFutura() {
+        return fechaNacimiento != null && fechaNacimiento.isAfter(java.time.LocalDate.now(ZONA));
+    }
 }
