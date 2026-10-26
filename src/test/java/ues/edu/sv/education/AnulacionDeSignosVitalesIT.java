@@ -243,7 +243,7 @@ class AnulacionDeSignosVitalesIT extends PruebaClinica {
         String respuesta = mockMvc.perform(post("/consultas")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\"}".formatted(paciente)))
+                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\",\"diagnostico\":\"Sano\"}".formatted(paciente)))
                 .andExpect(status().isConflict())
                 .andReturn().getResponse().getContentAsString();
         assertTrue(respuesta.contains("signos vitales"),
@@ -254,7 +254,7 @@ class AnulacionDeSignosVitalesIT extends PruebaClinica {
         mockMvc.perform(post("/consultas")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\"}".formatted(paciente)))
+                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\",\"diagnostico\":\"Sano\"}".formatted(paciente)))
                 .andExpect(status().isCreated());
     }
 

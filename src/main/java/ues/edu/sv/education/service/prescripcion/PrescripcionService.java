@@ -5,11 +5,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
+import ues.edu.sv.education.model.dto.consulta.ClinicaResumenDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
 import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
 import ues.edu.sv.education.model.dto.prescripcion.DecisionDeAlertaDto;
@@ -19,14 +21,17 @@ import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.model.entity.*;
+import ues.edu.sv.education.model.enums.EstadoPrescripcion;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
 import ues.edu.sv.education.model.enums.SeveridadDeAlergia;
 import ues.edu.sv.education.repository.*;
+import ues.edu.sv.education.service.ReportService;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,22 +59,34 @@ public class PrescripcionService {
     private final EventStatusRepository eventStatusRepository;
     private final AlergiaRepository alergiaRepository;
     private final PacienteRepository pacienteRepository;
+    private final ReportService reportService;
+
+    private static final DateTimeFormatter FECHA_PDF = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     /**
      * Emite una receta a partir de una consulta.
      * <p>
-     * Firma el medico autenticado, que no tiene por que ser el mismo que
-     * atendio la consulta: en una clinica con turnos, el medico de guardia
-     * receta sobre una consulta que abrio otro. Por eso la firma se guarda en
-     * la receta y no se deduce de la consulta (ver el comentario de
-     * prescripciones.medico_id en V6): asi queda registrado quien respondio
-     * por ESTE documento.
+     * HU-22, criterio 1: la receta HEREDA de la consulta el paciente, el
+     * medico, la clinica y la fecha; nada de eso se elige al emitirla.
+     * <p>
+     * Por eso la firma es el medico de la consulta y solo el puede emitirla:
+     * antes firmaba "quien estuviera autenticado" (el medico de guardia
+     * podia recetar sobre una consulta ajena), lo que dejaba una receta con
+     * un medico distinto del que atendio y examino al paciente. La columna
+     * prescripciones.medico_id se conserva (ver V6): es la firma del documento
+     * y no debe cambiar si la consulta se corrige, pero se llena con el medico
+     * de la consulta. Otro medico responde 403.
      */
     @Transactional
     public PrescripcionResponseDto crear(PrescripcionRequestDto request) {
 
         Medico medico = medicoAutenticado.exigir();
         Consulta consulta = buscarConsultaOFallar(request.consultaId());
+
+        if (!consulta.getMedico().getPersonaId().equals(medico.getPersonaId())) {
+            throw new GeneralException(
+                    "Solo el médico que atendió la consulta puede emitir su receta", "403");
+        }
 
         // Una receta sin medicamentos no es una receta, es un papel firmado.
         // El @NotEmpty del DTO ya lo rechaza con 400; esto es la misma regla
@@ -80,6 +97,7 @@ public class PrescripcionService {
             throw new GeneralException("Una receta debe llevar al menos un medicamento", "422");
         }
 
+        exigirTratamientoCompleto(renglones);
         Map<Long, Medicamento> catalogo = medicamentosRecetables(renglones);
 
         // HU-24: la alerta del formulario es una ayuda; la regla vive aqui,
@@ -90,7 +108,7 @@ public class PrescripcionService {
 
         Prescripcion prescripcion = Prescripcion.builder()
                 .consulta(consulta)
-                .medico(medico)
+                .medico(consulta.getMedico())
                 .fecha(LocalDateTime.now())
                 .justificacionAlergia(justificacion)
                 .medicamentos(new ArrayList<>())
@@ -104,9 +122,10 @@ public class PrescripcionService {
                     // lo que dice la receta no depende de lo que diga el
                     // catalogo manana.
                     .medicamento(medicamento.descripcion())
-                    .dosis(textoONull(renglon.dosis()))
-                    .frecuencia(textoONull(renglon.frecuencia()))
-                    .duracion(textoONull(renglon.duracion()))
+                    .dosis(renglon.dosis().trim())
+                    .viaAdministracion(renglon.viaAdministracion().trim())
+                    .frecuencia(renglon.frecuencia().trim())
+                    .duracion(renglon.duracion().trim())
                     .build());
         }
 
@@ -389,15 +408,114 @@ public class PrescripcionService {
     }
 
     /**
-     * Anula una receta.
+     * Anula una receta (HU-22, criterio 3). No la borra.
      * <p>
-     * Se borra entera, con sus renglones (cascade en Java y ON DELETE CASCADE
-     * en la base): media receta -unos medicamentos si y otros no- seria un
-     * documento distinto del que firmo el medico.
+     * Una receta entregada es el documento con el que se despacha el
+     * medicamento: no puede cambiar de contenido ni desaparecer sin dejar
+     * rastro. Antes esta operacion era un DELETE fisico que se llevaba la
+     * receta y sus renglones; ahora la receta pasa a ANULADA con el motivo,
+     * quien y cuando, y sigue en el expediente, marcada. Para corregir una
+     * receta se anula y se emite otra.
+     * <p>
+     * Quien puede: un ADMIN (correccion de registro) o el medico que la firmo.
+     * Que cualquier medico pudiera anular la receta de otro es el mismo hueco
+     * que tenia el borrado de consultas. 409 si ya estaba anulada: el rastro
+     * original (motivo, autor, fecha) no se sobrescribe.
      */
     @Transactional
-    public void eliminar(Long prescripcionId) {
-        prescripcionRepository.delete(buscarPrescripcionOFallar(prescripcionId));
+    public PrescripcionResponseDto anular(Long prescripcionId, String motivo) {
+
+        Prescripcion prescripcion = buscarPrescripcionOFallar(prescripcionId);
+
+        if (!esAdmin()) {
+            Medico medico = medicoAutenticado.exigir();
+            if (!prescripcion.getMedico().getPersonaId().equals(medico.getPersonaId())) {
+                throw new GeneralException("Solo el médico que firmó la receta puede anularla", "403");
+            }
+        }
+
+        if (prescripcion.getEstado() == EstadoPrescripcion.ANULADA) {
+            throw new GeneralException("La receta ya estaba anulada", "409");
+        }
+
+        String motivoLimpio = textoONull(motivo);
+        if (motivoLimpio == null || motivoLimpio.length() < 10) {
+            throw new GeneralException("El motivo de la anulación debe tener al menos 10 caracteres", "400");
+        }
+
+        prescripcion.setEstado(EstadoPrescripcion.ANULADA);
+        prescripcion.setMotivoAnulacion(motivoLimpio);
+        prescripcion.setAnuladaEn(LocalDateTime.now());
+        prescripcion.setAnuladaPor(medicoAutenticado.usuario());
+
+        return toDto(prescripcionRepository.save(prescripcion));
+    }
+
+    /**
+     * El PDF de una receta (HU-22, criterio 4): medico con su numero de junta
+     * de vigilancia, datos de la clinica, paciente, y los medicamentos con
+     * dosis, via, frecuencia y duracion. Una receta anulada tambien se puede
+     * imprimir -el rastro es parte del expediente-, pero el PDF lo dice.
+     */
+    @Transactional(readOnly = true)
+    public byte[] generarPdf(Long prescripcionId) {
+
+        Prescripcion prescripcion = buscarPrescripcionOFallar(prescripcionId);
+        Consulta consulta = prescripcion.getConsulta();
+        Persona paciente = consulta.getPaciente().getPersona();
+        Medico medico = prescripcion.getMedico();
+        Clinicas clinica = consulta.getClinica();
+
+        Map<String, Object> parametros = new HashMap<>();
+        parametros.put("nombrePaciente", paciente.getNombres() + " " + paciente.getApellidos());
+        parametros.put("expediente", consulta.getPaciente().getExpediente());
+        parametros.put("nombreMedico", medico.getPersona().getNombres() + " " + medico.getPersona().getApellidos());
+        parametros.put("registroJunta", medico.getRegistroJunta() == null || medico.getRegistroJunta().isBlank()
+                ? "No registrado" : medico.getRegistroJunta());
+        parametros.put("fecha", FECHA_PDF.format(prescripcion.getFecha()));
+        parametros.put("fechaConsulta", FECHA_PDF.format(consulta.getFecha()));
+        parametros.put("clinicaNombre", clinica == null ? "Sin clínica registrada" : clinica.getName());
+        parametros.put("clinicaDireccion", clinica == null ? null : direccionDe(clinica));
+        parametros.put("clinicaTelefono", clinica == null ? null : clinica.getTelefono());
+        parametros.put("anulada", prescripcion.getEstado() == EstadoPrescripcion.ANULADA
+                ? "RECETA ANULADA: " + prescripcion.getMotivoAnulacion() : null);
+
+        List<PrescripcionMedicamento> renglones = prescripcion.getMedicamentos() == null
+                ? List.of() : prescripcion.getMedicamentos();
+
+        return reportService.generarPreescripcionPdf(parametros, renglones);
+    }
+
+    private static String direccionDe(Clinicas clinica) {
+        return java.util.stream.Stream.of(clinica.getDireccion(), clinica.getMunicipio(), clinica.getDepartamento())
+                .filter(t -> t != null && !t.isBlank())
+                .collect(Collectors.joining(", "));
+    }
+
+    private boolean esAdmin() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+    }
+
+    /**
+     * HU-22, criterio 2: cada medicamento exige dosis, via de administracion,
+     * frecuencia y duracion. Es 400 (el cuerpo esta incompleto) y nombra el
+     * campo que falta. Va aqui y no en el DTO para que el 403 de quien no
+     * puede recetar llegue antes que el 400 (ver MedicamentoRequestDto).
+     */
+    private void exigirTratamientoCompleto(List<MedicamentoRequestDto> renglones) {
+        for (MedicamentoRequestDto r : renglones) {
+            if (r == null) continue; // medicamentosRecetables lo rechaza
+            if (textoONull(r.dosis()) == null) falta("la dosis");
+            if (textoONull(r.viaAdministracion()) == null) falta("la vía de administración");
+            if (textoONull(r.frecuencia()) == null) falta("la frecuencia");
+            if (textoONull(r.duracion()) == null) falta("la duración del tratamiento");
+        }
+    }
+
+    private void falta(String campo) {
+        throw new GeneralException("Cada medicamento debe indicar " + campo, "400");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -470,6 +588,9 @@ public class PrescripcionService {
         Persona personaMedico = prescripcion.getMedico().getPersona();
         Paciente paciente = prescripcion.getConsulta().getPaciente();
         Persona personaPaciente = paciente.getPersona();
+        Consulta consulta = prescripcion.getConsulta();
+        Clinicas clinica = consulta.getClinica();
+        User anuladaPor = prescripcion.getAnuladaPor();
 
         List<MedicamentoResponseDto> medicamentos = prescripcion.getMedicamentos() == null
                 ? List.of()
@@ -481,6 +602,7 @@ public class PrescripcionService {
                         m.getCatalogo() == null ? null : m.getCatalogo().getMedicamentoId(),
                         m.getMedicamento(),
                         m.getDosis(),
+                        m.getViaAdministracion(),
                         m.getFrecuencia(),
                         m.getDuracion()))
                 .toList();
@@ -498,10 +620,18 @@ public class PrescripcionService {
                 new MedicoFirmaDto(
                         prescripcion.getMedico().getPersonaId(),
                         personaMedico.getNombres(),
-                        personaMedico.getApellidos()
+                        personaMedico.getApellidos(),
+                        prescripcion.getMedico().getRegistroJunta()
                 ),
+                clinica == null ? null : new ClinicaResumenDto(clinica.getClinicaId(), clinica.getName()),
+                consulta.getFecha(),
                 medicamentos,
-                prescripcion.getJustificacionAlergia()
+                prescripcion.getJustificacionAlergia(),
+                prescripcion.getEstado(),
+                prescripcion.getMotivoAnulacion(),
+                prescripcion.getAnuladaEn(),
+                anuladaPor == null ? null
+                        : anuladaPor.getPersona().getNombres() + " " + anuladaPor.getPersona().getApellidos()
         );
     }
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import ues.edu.sv.education.model.entity.Enfermera;
@@ -20,6 +21,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,6 +47,7 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
     @Autowired protected RoleRepository roles;
     @Autowired protected EnfermeraRepository enfermeras;
     @Autowired protected PasswordEncoder encoder;
+    @Autowired private JdbcTemplate jdbcClinico;
 
     protected final ObjectMapper json = new ObjectMapper();
 
@@ -238,11 +241,32 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
         return json.readTree(respuesta);
     }
 
-    /** Consulta minima: solo paciente y motivo, sin clinica ni diagnostico. */
+    /**
+     * Consulta minima: paciente, motivo y diagnostico (HU-19 exige los dos),
+     * sin clinica ni lo opcional.
+     */
     protected JsonNode crearConsultaSimple(String token, long pacienteId) throws Exception {
         return crearConsulta(token, """
-                {"pacienteId":%d,"motivo":"Control general"}
+                {"pacienteId":%d,"motivo":"Control general","diagnostico":"Control sin hallazgos"}
                 """.formatted(pacienteId));
+    }
+
+    /**
+     * Una consulta PENDIENTE, sin diagnostico: la que existia antes de que
+     * HU-19 exigiera el diagnostico al registrar. La API ya no puede crearla,
+     * asi que se fabrica como llegaria una fila antigua -- registrandola y
+     * dejandola sin diagnostico directo en la base --, y es la que un medico
+     * completa despues con PUT.
+     */
+    protected JsonNode crearConsultaPendiente(String token, long pacienteId) throws Exception {
+        JsonNode creada = crearConsultaSimple(token, pacienteId);
+        jdbcClinico.update(
+                "UPDATE consultas SET diagnostico = NULL, estado = 'PENDIENTE' WHERE consulta_id = ?",
+                creada.get("consultaId").asLong());
+        return json.readTree(mockMvc.perform(get("/consultas/{id}", creada.get("consultaId").asLong())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
     }
 
     protected String bearer(String token) {

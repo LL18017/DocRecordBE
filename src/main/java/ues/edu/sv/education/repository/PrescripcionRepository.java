@@ -80,6 +80,9 @@ public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long
             JOIN FETCH p.consulta c
             JOIN FETCH c.paciente pac
             JOIN FETCH pac.persona
+            LEFT JOIN FETCH c.clinica
+            LEFT JOIN FETCH p.anuladaPor anu
+            LEFT JOIN FETCH anu.persona
             WHERE pac.personaId = coalesce(:pacienteId, pac.personaId)
               AND med.personaId = coalesce(:medicoId, med.personaId)
               AND c.consultaId = coalesce(:consultaId, c.consultaId)
@@ -123,10 +126,18 @@ public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long
     JOIN FETCH p.consulta c
     JOIN FETCH c.paciente pac
     JOIN FETCH pac.persona
+    LEFT JOIN FETCH c.clinica
+    LEFT JOIN FETCH p.anuladaPor anu
+    LEFT JOIN FETCH anu.persona
     WHERE p.prescripcionId = :prescripcionId
 """)
     Optional<Prescripcion> buscarConDetalle(@Param("prescripcionId") Long prescripcionId);
 
+    /**
+     * Las recetas VIGENTES (EMITIDA) de una consulta, con lo que hace falta
+     * para enviarlas por correo. Las anuladas no se mandan: seria entregar al
+     * paciente un documento que ya no vale.
+     */
     @Query("""
     SELECT p
     FROM Prescripcion p
@@ -136,6 +147,7 @@ public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long
             JOIN FETCH c.paciente pac
             JOIN FETCH pac.persona
     WHERE p.consulta.consultaId = :consultaId
+      AND p.estado = ues.edu.sv.education.model.enums.EstadoPrescripcion.EMITIDA
 """)
     List<Prescripcion> buscarPorConsulta(Long consultaId);
 }
