@@ -35,7 +35,7 @@ public class SignosVitales {
 
     /** Toda toma nace ACTIVA. */
     public static final String ACTIVA = "ACTIVA";
-    /** Anulada: sigue en el expediente, marcada, pero ya no vale (ver V31). */
+    /** Anulada: sigue en el expediente, marcada, pero ya no vale (ver V28). */
     public static final String ANULADA = "ANULADA";
 
     @Id
@@ -97,7 +97,7 @@ public class SignosVitales {
     @Column(name = "observaciones")
     private String observaciones;
 
-    // ── Anulacion (HU-16 criterio 4, migracion V31) ────────────────────────
+    // ── Anulacion (HU-16 criterio 4, migracion V28) ────────────────────────
     // Una toma no se borra: se anula dejando constancia de por que, quien y
     // cuando. El Builder.Default evita que .builder() deje el estado en null.
     @Builder.Default
