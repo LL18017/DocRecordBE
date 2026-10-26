@@ -11,6 +11,7 @@ import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
+import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicamentoRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicamentoResponseDto;
 import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
@@ -19,6 +20,7 @@ import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.model.entity.*;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
+import ues.edu.sv.education.model.enums.SeveridadDeAlergia;
 import ues.edu.sv.education.repository.*;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
@@ -49,6 +51,8 @@ public class PrescripcionService {
     private final EventTypeRepository eventTypeRepository;
     private final EventRepository eventRepository;
     private final EventStatusRepository eventStatusRepository;
+    private final AlergiaRepository alergiaRepository;
+    private final PacienteRepository pacienteRepository;
 
     /**
      * Emite una receta a partir de una consulta.
@@ -77,10 +81,17 @@ public class PrescripcionService {
 
         Map<Long, Medicamento> catalogo = medicamentosRecetables(renglones);
 
+        // HU-24: la alerta del formulario es una ayuda; la regla vive aqui,
+        // porque un cliente puede saltarse la pantalla.
+        List<AlertaDeAlergiaDto> alertas = exigirDecisionSobreAlergias(
+                consulta.getPaciente().getPersonaId(), catalogo, request);
+        String justificacion = alertas.isEmpty() ? null : request.justificacionAlergia().trim();
+
         Prescripcion prescripcion = Prescripcion.builder()
                 .consulta(consulta)
                 .medico(medico)
                 .fecha(LocalDateTime.now())
+                .justificacionAlergia(justificacion)
                 .medicamentos(new ArrayList<>())
                 .build();
 
@@ -99,7 +110,103 @@ public class PrescripcionService {
         }
 
         Prescripcion prescripcionEnt = prescripcionRepository.save(prescripcion);
+        if (!alertas.isEmpty()) {
+            registrarEnBitacora(prescripcionEnt, alertas, justificacion);
+        }
         return toDto(prescripcionEnt);
+    }
+
+    /**
+     * Las alergias vigentes del paciente que coinciden con un medicamento
+     * (HU-24, criterios 1 y 4). Lista vacia si no hay ninguna: no es un error.
+     * Ver AlergiaRepository.buscarCoincidentesConMedicamento para la regla de
+     * coincidencia y su limitacion.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertaDeAlergiaDto> alertasDeAlergia(Long pacienteId, Long medicamentoId) {
+        if (!pacienteRepository.existsById(pacienteId)) {
+            throw new NoResourceFoundException("Paciente no encontrado", "404");
+        }
+        Medicamento medicamento = medicamentoRepository.findById(medicamentoId)
+                .orElseThrow(() -> new NoResourceFoundException("Medicamento no encontrado", "404"));
+        return alertasDe(pacienteId, medicamento);
+    }
+
+    private List<AlertaDeAlergiaDto> alertasDe(Long pacienteId, Medicamento medicamento) {
+        return alergiaRepository
+                .buscarCoincidentesConMedicamento(pacienteId, medicamento.getMedicamentoId())
+                .stream()
+                .map(a -> new AlertaDeAlergiaDto(
+                        a.getAlergiaId(),
+                        a.getSustancia(),
+                        a.getSeveridad(),
+                        a.getReaccion(),
+                        medicamento.getMedicamentoId(),
+                        medicamento.descripcion()))
+                .toList();
+    }
+
+    /**
+     * Criterios 2 y 3: si algun medicamento de la receta coincide con una
+     * alergia vigente, la receta exige justificacion escrita, y si la alergia
+     * es SEVERA, ademas una confirmacion explicita. Devuelve las coincidencias
+     * para registrarlas despues. Es 409 y no 400: el cuerpo esta bien formado,
+     * lo que choca es el estado clinico del paciente.
+     */
+    private List<AlertaDeAlergiaDto> exigirDecisionSobreAlergias(
+            Long pacienteId, Map<Long, Medicamento> catalogo, PrescripcionRequestDto request) {
+
+        List<AlertaDeAlergiaDto> alertas = new ArrayList<>();
+        for (Medicamento medicamento : catalogo.values()) {
+            alertas.addAll(alertasDe(pacienteId, medicamento));
+        }
+        if (alertas.isEmpty()) {
+            return alertas;
+        }
+
+        String detalle = alertas.stream()
+                .map(a -> a.sustancia() + " (" + a.severidad() + ") en " + a.medicamento())
+                .collect(Collectors.joining("; "));
+
+        String justificacion = request.justificacionAlergia();
+        if (justificacion == null || justificacion.isBlank()) {
+            throw new GeneralException("El paciente es alérgico a una sustancia de esta receta: " + detalle
+                    + ". Escriba la justificación para recetarlo de todos modos", "409");
+        }
+        boolean hayAlergiaSevera = alertas.stream().anyMatch(a -> a.severidad() == SeveridadDeAlergia.SEVERA);
+        if (hayAlergiaSevera && !Boolean.TRUE.equals(request.confirmaAlergiaSevera())) {
+            throw new GeneralException("Hay una alergia SEVERA coincidente: " + detalle
+                    + ". Confirme de forma explícita que quiere recetarlo", "409");
+        }
+        return alertas;
+    }
+
+    /**
+     * Criterio 5: la alerta y la decision del medico quedan en la bitacora.
+     * Un evento por receta, ya PROCESSED: es solo un registro y nada debe
+     * tomarlo para enviarlo (EventProcessorService solo procesa PENDING).
+     * La descripcion de la columna mide 500, y la justificacion sola puede
+     * medir 500, asi que se recorta; la receta guarda la justificacion entera.
+     */
+    private void registrarEnBitacora(Prescripcion prescripcion, List<AlertaDeAlergiaDto> alertas,
+                                     String justificacion) {
+        String alertasTexto = alertas.stream()
+                .map(a -> a.sustancia() + " " + a.severidad() + " (" + a.medicamento() + ")")
+                .collect(Collectors.joining("; "));
+        String descripcion = "Receta emitida pese a alergia: " + alertasTexto + ". Justificacion: " + justificacion;
+        if (descripcion.length() > 500) {
+            descripcion = descripcion.substring(0, 497) + "...";
+        }
+        LocalDateTime ahora = LocalDateTime.now();
+        eventRepository.save(Event.builder()
+                .eventType(eventTypeRepository.getReferenceById(EventCodeEnums.ALLERGY_ALERT_OVERRIDE.getId()))
+                .eventStatus(eventStatusRepository.getReferenceById(EventStatusEnums.PROCESSED.getId()))
+                .description(descripcion)
+                .userEmail(medicoAutenticado.correoDeSesion())
+                .ref(String.valueOf(prescripcion.getPrescripcionId()))
+                .createdAt(ahora)
+                .processedAt(ahora)
+                .build());
     }
 
     @Transactional
@@ -353,7 +460,8 @@ public class PrescripcionService {
                         personaMedico.getNombres(),
                         personaMedico.getApellidos()
                 ),
-                medicamentos
+                medicamentos,
+                prescripcion.getJustificacionAlergia()
         );
     }
 

@@ -26,7 +26,10 @@ public record PrescripcionResponseDto(
 
         MedicoFirmaDto medico,
 
-        List<MedicamentoResponseDto> medicamentos
+        List<MedicamentoResponseDto> medicamentos,
+
+        @Schema(description = "Justificacion escrita al recetar pese a una alergia (HU-24). Null si no hubo coincidencias")
+        String justificacionAlergia
 
 ) {
 }

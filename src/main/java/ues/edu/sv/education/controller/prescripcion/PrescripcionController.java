@@ -11,11 +11,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
+import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.service.prescripcion.PrescripcionService;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Prescripciones (epica E7).
@@ -49,7 +51,9 @@ public class PrescripcionController {
             description = "Firma el medico autenticado, no un medicoId del cuerpo. "
                     + "Cada medicamento se elige del catalogo por su medicamentoId (GET /medicamentos). "
                     + "400 si la lista de medicamentos viene vacia o si un medicamento no existe en el "
-                    + "catalogo o esta desactivado; 404 si la consulta no existe."
+                    + "catalogo o esta desactivado; 404 si la consulta no existe. 409 si algun medicamento "
+                    + "coincide con una alergia vigente del paciente y falta la justificacionAlergia, o "
+                    + "la alergia es SEVERA y confirmaAlergiaSevera no es true (HU-24)."
     )
     @PostMapping
     @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
@@ -58,6 +62,21 @@ public class PrescripcionController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(prescripcionService.crear(request));
+    }
+
+    @Operation(
+            summary = "Alertas de alergia de un medicamento (HU-24)",
+            description = "Las alergias vigentes del paciente (pacienteId = persona_id) que coinciden con "
+                    + "el medicamento, por contencion de texto normalizado entre la sustancia y el "
+                    + "principio activo o el nombre generico. Lista vacia si no hay ninguna. "
+                    + "404 si el paciente o el medicamento no existen."
+    )
+    @GetMapping("/alertas-de-alergia")
+    @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
+    public ResponseEntity<List<AlertaDeAlergiaDto>> alertasDeAlergia(
+            @RequestParam Long pacienteId,
+            @RequestParam Long medicamentoId) {
+        return ResponseEntity.ok(prescripcionService.alertasDeAlergia(pacienteId, medicamentoId));
     }
 
     @Operation(

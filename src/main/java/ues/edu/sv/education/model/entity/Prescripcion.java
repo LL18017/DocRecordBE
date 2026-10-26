@@ -46,6 +46,14 @@ public class Prescripcion {
     @Column(name = "fecha", nullable = false)
     private LocalDateTime fecha;
 
+    /**
+     * Por que se receto pese a una alergia registrada del paciente (HU-24).
+     * Vacia si la receta no tuvo coincidencias: es parte del documento, no de
+     * la bitacora, para que quien lea la receta vea la razon junto a ella.
+     */
+    @Column(name = "justificacion_alergia", length = 500)
+    private String justificacionAlergia;
+
     @Builder.Default
     @OneToMany(mappedBy = "prescripcion",
             cascade = CascadeType.ALL,
