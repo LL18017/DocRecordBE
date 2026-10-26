@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
+import ues.edu.sv.education.model.dto.signosvitales.AnularSignosVitalesRequestDto;
 import ues.edu.sv.education.model.dto.signosvitales.SignosVitalesRequestDto;
 import ues.edu.sv.education.model.dto.signosvitales.SignosVitalesResponseDto;
 import ues.edu.sv.education.service.signosvitales.SignosVitalesService;
@@ -31,9 +32,10 @@ import ues.edu.sv.education.service.signosvitales.SignosVitalesService;
  * enfermera no puede leer (ver PrescripcionController).
  *
  * No hay edicion ni borrado. Una constante mal tomada no se corrige
- * reescribiendola: se toma otra vez, y ambas quedan en el historico con su
- * hora. Un expediente clinico es un registro de lo que paso, no el estado
- * actual de un formulario.
+ * reescribiendola: se ANULA dejando el motivo (PATCH .../anulacion, solo la
+ * enfermera que la registro) y se toma otra vez; ambas quedan en el historico
+ * con su hora, la anulada marcada. Un expediente clinico es un registro de lo
+ * que paso, no el estado actual de un formulario.
  */
 @Slf4j
 @RestController
@@ -98,5 +100,20 @@ public class SignosVitalesController {
     public ResponseEntity<SignosVitalesResponseDto> obtener(
             @PathVariable("signosVitalesId") Long signosVitalesId) {
         return ResponseEntity.ok(signosVitalesService.obtener(signosVitalesId));
+    }
+
+    @Operation(
+            summary = "Anular una toma",
+            description = "Anulacion logica (HU-16): la toma queda ANULADA con su motivo, quien la anulo y "
+                    + "cuando; no se borra, sigue en el historico y deja de contar como ultima. "
+                    + "Solo la enfermera que la registro. 400 sin motivo; 403 si la registro otra "
+                    + "enfermera; 404 si no existe; 409 si ya estaba anulada."
+    )
+    @PatchMapping("/{signosVitalesId}/anulacion")
+    @PreAuthorize("hasRole('ENFERMERA')")
+    public ResponseEntity<SignosVitalesResponseDto> anular(
+            @PathVariable("signosVitalesId") Long signosVitalesId,
+            @Valid @RequestBody AnularSignosVitalesRequestDto request) {
+        return ResponseEntity.ok(signosVitalesService.anular(signosVitalesId, request));
     }
 }
