@@ -16,6 +16,12 @@ public record ConsultaResponseDto(
 
         String diagnostico,
 
+        @Schema(description = "Exploracion fisica; null si no se registro")
+        String exploracionFisica,
+
+        @Schema(description = "Indicaciones para el paciente; null si no se registraron")
+        String indicaciones,
+
         @Schema(description = "PENDIENTE mientras no haya diagnostico; FINALIZADA cuando lo hay")
         EstadoConsulta estado,
 

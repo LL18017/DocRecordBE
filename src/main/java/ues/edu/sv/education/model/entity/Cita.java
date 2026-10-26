@@ -19,12 +19,25 @@ public class Cita {
     @Column(name = "cita_id")
     private Integer citaId;
 
+    public static final String AGENDADA = "AGENDADA";
+    public static final String CANCELADA = "CANCELADA";
+    public static final String ATENDIDA = "ATENDIDA";
+
     /**
-     * Paciente que tiene la cita.
+     * Paciente que tiene la cita: el del expediente, no una cuenta. La
+     * mayoria de los pacientes no tiene usuario (ver V24).
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "paciente_user_id", nullable = false)
-    private User paciente;
+    @JoinColumn(name = "paciente_persona_id", nullable = false)
+    private Paciente paciente;
+
+    /**
+     * Sede donde se atiende. Anulable: las citas anteriores a V24 no la
+     * guardaron.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clinica_id")
+    private Clinicas clinica;
 
     /**
      * Fecha y hora programada para la cita.
@@ -47,8 +60,22 @@ public class Cita {
     private User medico;
 
     /**
-     * Estado actual de la cita.
+     * AGENDADA, CANCELADA o ATENDIDA. Lo pone el servicio, no el cliente.
      */
     @Column(name = "estado", nullable = false, length = 30)
     private String estado;
+
+    /**
+     * Por que se cancelo. Una cita cancelada no se borra: conserva su estado
+     * y su motivo (HU-32).
+     */
+    @Column(name = "motivo_cancelacion", length = 255)
+    private String motivoCancelacion;
+
+    /**
+     * Cuando se mando el recordatorio de 24 horas (HU-33). Null si aun no. Es
+     * la marca que impide que el trabajo programado avise dos veces.
+     */
+    @Column(name = "recordatorio_enviado_en")
+    private LocalDateTime recordatorioEnviadoEn;
 }

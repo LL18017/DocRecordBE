@@ -39,6 +39,15 @@ public interface UserRepository extends JpaRepository<User,Integer> {
     Optional<User> findByEmailIgnoreCase(String email);
 
     /**
+     * Solo la version de sesion de una cuenta, para el filtro JWT: corre en
+     * CADA peticion autenticada, y cargar el usuario entero (roles, persona)
+     * solo para leer un entero seria pagar mucho por poco. Vacio si la cuenta
+     * ya no existe.
+     */
+    @Query("SELECT u.versionDeSesion FROM User u WHERE u.UserID = :userId")
+    Optional<Integer> versionDeSesionDe(@Param("userId") Integer userId);
+
+    /**
      * La misma busqueda que la de arriba, pero trayendo ya la Persona.
      *
      * Existe por el hilo de fondo de la recuperacion de contrasena, que corre
@@ -118,4 +127,21 @@ public interface UserRepository extends JpaRepository<User,Integer> {
             GROUP BY u.UserID
             """)
     List<SedesDeUsuario> sedesDe(@Param("userIds") List<Integer> userIds);
+
+    /**
+     * Los medicos activos que atienden en una sede, para agendarles citas.
+     * Cuenta tanto la sede que el medico registro como las que tiene
+     * asignadas: son las mismas dos fuentes que /clinics/mias.
+     */
+    @Query("""
+            SELECT DISTINCT u FROM User u
+            JOIN FETCH u.persona
+            JOIN u.roles r
+            LEFT JOIN u.clinicas propia
+            LEFT JOIN u.clinicasAsignadas asignada
+            WHERE r.name = 'MEDICO'
+              AND u.activo = true
+              AND (propia.clinicaId = :clinicaId OR asignada.clinicaId = :clinicaId)
+            """)
+    List<User> medicosDeClinica(@Param("clinicaId") Integer clinicaId);
 }

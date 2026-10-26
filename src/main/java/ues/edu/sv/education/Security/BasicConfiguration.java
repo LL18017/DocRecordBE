@@ -7,6 +7,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -86,7 +87,11 @@ public class BasicConfiguration {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(
+            HttpSecurity http,
+            // Origenes permitidos para CORS (TT-04). Vienen de app.cors.origenes,
+            // que a su vez lee la variable de entorno CORS_ORIGENES.
+            @Value("${app.cors.origenes}") List<String> origenesPermitidos) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(request -> request
@@ -98,6 +103,11 @@ public class BasicConfiguration {
                         // Es seguro abrirlo: son nombres de especialidades
                         // medicas, sin dato personal alguno.
                         .requestMatchers(HttpMethod.GET, "/especialidades").permitAll()
+                        // El mapa de la red (HU-28) lo abre un paciente o un
+                        // visitante sin cuenta. Solo lectura y solo clinicas
+                        // ACTIVAS, con su direccion publica: nada del dueño ni
+                        // del personal (ver ClinicaPublicaDto).
+                        .requestMatchers(HttpMethod.GET, "/clinics/publicas").permitAll()
                         // Swagger no pasa por aqui: lo atiende su propia cadena,
                         // antes que esta (ver ConfiguracionDeSwagger).
                         .anyRequest().authenticated()
@@ -105,7 +115,13 @@ public class BasicConfiguration {
                 .cors(c -> c.configurationSource(request -> {
                     var corses = new CorsConfiguration();
                     corses.setAllowCredentials(true);
-                    corses.addAllowedOriginPattern("*"); // o tu frontend específico
+                    // Lista cerrada y no "*": con credenciales activas, aceptar
+                    // cualquier origen deja a cualquier pagina web llamar a la
+                    // API en nombre de un usuario con sesion.
+                    origenesPermitidos.stream()
+                            .map(String::trim)
+                            .filter(origen -> !origen.isEmpty())
+                            .forEach(corses::addAllowedOrigin);
                     corses.addAllowedHeader("*");
                     corses.addAllowedMethod("*");
                     corses.setMaxAge(3600L);

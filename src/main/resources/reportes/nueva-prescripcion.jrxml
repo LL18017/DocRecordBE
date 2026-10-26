@@ -13,54 +13,111 @@
     <style name="CabeceraTabla" fontName="SansSerif" fontSize="9" isBold="true" forecolor="#FFFFFF" backcolor="#1E3A5F" mode="Opaque"/>
     <style name="Celda" fontName="SansSerif" fontSize="9" forecolor="#1E293B"/>
 
+    <!-- HU-22: la receta impresa lleva medico con su numero de junta de vigilancia y los datos de la clinica.
+         Todos los parametros son opcionales: el correo de emision solo manda los tres primeros. -->
     <parameter name="nombrePaciente" class="java.lang.String"/>
     <parameter name="nombreMedico" class="java.lang.String"/>
     <parameter name="fecha" class="java.lang.String"/>
+    <parameter name="expediente" class="java.lang.String"/>
+    <parameter name="registroJunta" class="java.lang.String"/>
+    <parameter name="fechaConsulta" class="java.lang.String"/>
+    <parameter name="clinicaNombre" class="java.lang.String"/>
+    <parameter name="clinicaDireccion" class="java.lang.String"/>
+    <parameter name="clinicaTelefono" class="java.lang.String"/>
+    <parameter name="anulada" class="java.lang.String"/>
 
-    <!-- La fuente de datos debe contener objetos con getters: getMedicamento(), getDosis(), getFrecuencia(), getDuracion(). -->
+    <!-- La fuente de datos debe contener objetos con getters: getMedicamento(), getDosis(), getViaAdministracion(), getFrecuencia(), getDuracion(). -->
     <field name="medicamento" class="java.lang.String"/>
     <field name="dosis" class="java.lang.String"/>
+    <field name="viaAdministracion" class="java.lang.String"/>
     <field name="frecuencia" class="java.lang.String"/>
     <field name="duracion" class="java.lang.String"/>
 
     <title>
-        <band height="180" splitType="Stretch">
+        <band height="280" splitType="Stretch">
             <staticText>
-                <reportElement x="0" y="0" width="515" height="28" forecolor="#1E3A5F" uuid="de6d69e8-3a8f-4c91-a36f-a03c6b01ab5a"/>
+                <reportElement x="0" y="0" width="515" height="28" forecolor="#1E3A5F"/>
                 <textElement><font fontName="SansSerif" size="22" isBold="true"/></textElement>
                 <text><![CDATA[DocRecord Sv]]></text>
             </staticText>
             <rectangle>
-                <reportElement x="0" y="35" width="515" height="4" backcolor="#1E3A5F" mode="Opaque" uuid="ce00afc2-3d1c-4f44-a5b7-cfc877ea802a"/>
+                <reportElement x="0" y="35" width="515" height="4" backcolor="#1E3A5F" mode="Opaque"/>
                 <graphicElement><pen lineWidth="0"/></graphicElement>
             </rectangle>
             <staticText>
-                <reportElement style="Titulo" x="0" y="52" width="515" height="30" uuid="15eab18d-8a3d-4f28-9d3c-340b20eb8dd5"/>
+                <reportElement style="Titulo" x="0" y="52" width="515" height="30"/>
                 <text><![CDATA[Prescripción médica]]></text>
             </staticText>
+            <textField isBlankWhenNull="true">
+                <reportElement x="0" y="84" width="515" height="16" forecolor="#B91C1C">
+                    <printWhenExpression><![CDATA[$P{anulada} != null]]></printWhenExpression>
+                </reportElement>
+                <textElement><font fontName="SansSerif" size="10" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{anulada}]]></textFieldExpression>
+            </textField>
+
+            <!-- Clinica -->
             <staticText>
-                <reportElement style="Etiqueta" x="0" y="96" width="120" height="16" uuid="7b89c6b5-1df4-4a25-a119-f0b8f61e194a"/>
+                <reportElement style="Etiqueta" x="0" y="108" width="515" height="16"/>
+                <text><![CDATA[CLÍNICA]]></text>
+            </staticText>
+            <textField isBlankWhenNull="true">
+                <reportElement style="Texto" x="0" y="124" width="515" height="16"/>
+                <textFieldExpression><![CDATA[$P{clinicaNombre}]]></textFieldExpression>
+            </textField>
+            <textField isBlankWhenNull="true">
+                <reportElement style="Texto" x="0" y="140" width="515" height="16"/>
+                <textFieldExpression><![CDATA[$P{clinicaDireccion}]]></textFieldExpression>
+            </textField>
+            <textField isBlankWhenNull="true">
+                <reportElement style="Texto" x="0" y="156" width="515" height="16"/>
+                <textFieldExpression><![CDATA[$P{clinicaTelefono} == null ? "" : "Tel. " + $P{clinicaTelefono}]]></textFieldExpression>
+            </textField>
+
+            <!-- Paciente y medico -->
+            <staticText>
+                <reportElement style="Etiqueta" x="0" y="182" width="250" height="16"/>
                 <text><![CDATA[PACIENTE]]></text>
             </staticText>
             <textField isBlankWhenNull="true">
-                <reportElement style="Texto" x="0" y="113" width="250" height="20" uuid="a31bb535-4dca-4fbb-b8a8-f3401d7e9b60"/>
+                <reportElement style="Texto" x="0" y="198" width="250" height="18"/>
                 <textFieldExpression><![CDATA[$P{nombrePaciente}]]></textFieldExpression>
             </textField>
+            <textField isBlankWhenNull="true">
+                <reportElement style="Texto" x="0" y="216" width="250" height="16"/>
+                <textFieldExpression><![CDATA[$P{expediente} == null ? "" : "Expediente " + $P{expediente}]]></textFieldExpression>
+            </textField>
             <staticText>
-                <reportElement style="Etiqueta" x="270" y="96" width="245" height="16" uuid="cf08ab20-31c0-46a4-aac2-50a792b5b1b8"/>
+                <reportElement style="Etiqueta" x="270" y="182" width="245" height="16"/>
                 <text><![CDATA[MÉDICO RESPONSABLE]]></text>
             </staticText>
             <textField isBlankWhenNull="true">
-                <reportElement style="Texto" x="270" y="113" width="245" height="20" uuid="194e4c8b-b80e-45e9-a9d9-6c01d8f02f6b"/>
+                <reportElement style="Texto" x="270" y="198" width="245" height="18"/>
                 <textFieldExpression><![CDATA[$P{nombreMedico}]]></textFieldExpression>
             </textField>
+            <textField isBlankWhenNull="true">
+                <reportElement style="Texto" x="270" y="216" width="245" height="16"/>
+                <textFieldExpression><![CDATA[$P{registroJunta} == null ? "" : "Junta de vigilancia: " + $P{registroJunta}]]></textFieldExpression>
+            </textField>
+
+            <!-- Fechas -->
             <staticText>
-                <reportElement style="Etiqueta" x="0" y="142" width="120" height="16" uuid="d6bd62a8-8b83-4d3f-a1a9-13b4f8c95c92"/>
+                <reportElement style="Etiqueta" x="0" y="240" width="250" height="16"/>
                 <text><![CDATA[FECHA DE EMISIÓN]]></text>
             </staticText>
             <textField isBlankWhenNull="true">
-                <reportElement style="Texto" x="0" y="158" width="250" height="18" uuid="41e0b0ec-2c08-426f-9e13-97200fdfd8bd"/>
+                <reportElement style="Texto" x="0" y="256" width="250" height="18"/>
                 <textFieldExpression><![CDATA[$P{fecha}]]></textFieldExpression>
+            </textField>
+            <staticText>
+                <reportElement style="Etiqueta" x="270" y="240" width="245" height="16">
+                    <printWhenExpression><![CDATA[$P{fechaConsulta} != null]]></printWhenExpression>
+                </reportElement>
+                <text><![CDATA[FECHA DE LA CONSULTA]]></text>
+            </staticText>
+            <textField isBlankWhenNull="true">
+                <reportElement style="Texto" x="270" y="256" width="245" height="18"/>
+                <textFieldExpression><![CDATA[$P{fechaConsulta}]]></textFieldExpression>
             </textField>
         </band>
     </title>
@@ -68,25 +125,31 @@
     <columnHeader>
         <band height="28" splitType="Stretch">
             <staticText>
-                <reportElement style="CabeceraTabla" x="0" y="0" width="155" height="28" uuid="b32e68fb-8d28-43b6-b7ba-c3b75c7bbcf4"/>
+                <reportElement style="CabeceraTabla" x="0" y="0" width="140" height="28"/>
                 <box leftPadding="7"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <text><![CDATA[Medicamento]]></text>
             </staticText>
             <staticText>
-                <reportElement style="CabeceraTabla" x="155" y="0" width="95" height="28" uuid="b25db4f8-5b7d-4b0c-9c9e-caf1d8c4f43c"/>
+                <reportElement style="CabeceraTabla" x="140" y="0" width="80" height="28"/>
                 <box leftPadding="7"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <text><![CDATA[Dosis]]></text>
             </staticText>
             <staticText>
-                <reportElement style="CabeceraTabla" x="250" y="0" width="145" height="28" uuid="61dc350a-99c6-42d8-9c0c-6a72f46549b2"/>
+                <reportElement style="CabeceraTabla" x="220" y="0" width="80" height="28"/>
+                <box leftPadding="7"><pen lineColor="#D7DEE8"/></box>
+                <textElement verticalAlignment="Middle"/>
+                <text><![CDATA[Vía]]></text>
+            </staticText>
+            <staticText>
+                <reportElement style="CabeceraTabla" x="300" y="0" width="120" height="28"/>
                 <box leftPadding="7"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <text><![CDATA[Frecuencia]]></text>
             </staticText>
             <staticText>
-                <reportElement style="CabeceraTabla" x="395" y="0" width="120" height="28" uuid="13c76d77-3d22-481f-9694-4e3c2a78a9f1"/>
+                <reportElement style="CabeceraTabla" x="420" y="0" width="95" height="28"/>
                 <box leftPadding="7"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <text><![CDATA[Duración]]></text>
@@ -97,31 +160,37 @@
     <detail>
         <band height="34" splitType="Stretch">
             <rectangle>
-                <reportElement x="0" y="0" width="515" height="34" backcolor="#F1F5F9" mode="Opaque" uuid="db11c5d8-2a75-45c7-ae6f-a3cb0e12c41b">
+                <reportElement x="0" y="0" width="515" height="34" backcolor="#F1F5F9" mode="Opaque">
                     <printWhenExpression><![CDATA[$V{REPORT_COUNT} % 2 == 0]]></printWhenExpression>
                 </reportElement>
                 <graphicElement><pen lineWidth="0.3" lineColor="#D7DEE8"/></graphicElement>
             </rectangle>
             <textField isStretchWithOverflow="true" isBlankWhenNull="true">
-                <reportElement style="Celda" x="0" y="0" width="155" height="34" uuid="9b77277c-fbe9-4b2c-8ed1-9a0c9c06b57f"/>
+                <reportElement style="Celda" x="0" y="0" width="140" height="34"/>
                 <box leftPadding="7" rightPadding="5"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <textFieldExpression><![CDATA[$F{medicamento} == null || $F{medicamento}.trim().isEmpty() ? "No especificado" : $F{medicamento}]]></textFieldExpression>
             </textField>
             <textField isStretchWithOverflow="true" isBlankWhenNull="true">
-                <reportElement style="Celda" x="155" y="0" width="95" height="34" uuid="2d1ce39c-4208-4f9a-9d03-a6bb05d3a59a"/>
+                <reportElement style="Celda" x="140" y="0" width="80" height="34"/>
                 <box leftPadding="7" rightPadding="5"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <textFieldExpression><![CDATA[$F{dosis} == null || $F{dosis}.trim().isEmpty() ? "No especificada" : $F{dosis}]]></textFieldExpression>
             </textField>
             <textField isStretchWithOverflow="true" isBlankWhenNull="true">
-                <reportElement style="Celda" x="250" y="0" width="145" height="34" uuid="6b934a9c-cb3c-466b-80ec-49b5e7d1933f"/>
+                <reportElement style="Celda" x="220" y="0" width="80" height="34"/>
+                <box leftPadding="7" rightPadding="5"><pen lineColor="#D7DEE8"/></box>
+                <textElement verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA[$F{viaAdministracion} == null || $F{viaAdministracion}.trim().isEmpty() ? "No especificada" : $F{viaAdministracion}]]></textFieldExpression>
+            </textField>
+            <textField isStretchWithOverflow="true" isBlankWhenNull="true">
+                <reportElement style="Celda" x="300" y="0" width="120" height="34"/>
                 <box leftPadding="7" rightPadding="5"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <textFieldExpression><![CDATA[$F{frecuencia} == null || $F{frecuencia}.trim().isEmpty() ? "No especificada" : $F{frecuencia}]]></textFieldExpression>
             </textField>
             <textField isStretchWithOverflow="true" isBlankWhenNull="true">
-                <reportElement style="Celda" x="395" y="0" width="120" height="34" uuid="86f8d14f-f5f2-4a7c-a6b7-4c1b5b06a7f5"/>
+                <reportElement style="Celda" x="420" y="0" width="95" height="34"/>
                 <box leftPadding="7" rightPadding="5"><pen lineColor="#D7DEE8"/></box>
                 <textElement verticalAlignment="Middle"/>
                 <textFieldExpression><![CDATA[$F{duracion} == null || $F{duracion}.trim().isEmpty() ? "No especificada" : $F{duracion}]]></textFieldExpression>
@@ -132,7 +201,7 @@
     <summary>
         <band height="58" splitType="Stretch">
             <staticText>
-                <reportElement x="0" y="18" width="515" height="36" forecolor="#64748B" uuid="57e8f76e-bef7-4eb8-bc14-6e8d119c21e5"/>
+                <reportElement x="0" y="18" width="515" height="36" forecolor="#64748B"/>
                 <textElement><font fontName="SansSerif" size="9"/></textElement>
                 <text><![CDATA[Este documento contiene información médica confidencial. Consérvalo de forma segura. Para aclaraciones sobre el tratamiento, contacta al médico responsable.]]></text>
             </staticText>

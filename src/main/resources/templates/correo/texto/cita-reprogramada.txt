@@ -1,0 +1,24 @@
+Cita médica reprogramada - DocRecord Sv
+
+[# th:if="${rol == 'PACIENTE'}"]Tu cita médica en DocRecord Sv cambió de fecha u hora, o de médico.
+[/][# th:if="${rol == 'MEDICO'}"]Una cita de su agenda en DocRecord Sv cambió de fecha u hora.
+[/][# th:if="${rol == 'MEDICO_ANTERIOR'}"]Una cita que estaba a su cargo se reasignó a otro médico y ya no figura en su
+agenda.
+[/]
+[# th:if="${rol != 'PACIENTE'}"]Paciente:         [(${paciente})]
+[/][# th:if="${rol != 'MEDICO_ANTERIOR'}"]Nueva fecha:      [(${fecha})]
+Nueva hora:       [(${hora})]
+[/]Médico:          [(${medico})]
+[# th:if="${clinica != null}"]Clínica:         [(${clinica})]
+[/][# th:if="${direccion != null}"]Dirección:       [(${direccion})]
+[/]Antes:           [(${fechaAnterior})], [(${horaAnterior})]
+
+Para cancelar o reprogramar de nuevo, comunícate con el personal de la clínica
+o ingresa a DocRecord Sv:
+
+  [(${enlace})]
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

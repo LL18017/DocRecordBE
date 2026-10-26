@@ -56,8 +56,8 @@ class CorreoDeConfirmacionIT extends PruebaDeIntegracion {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Ana","apellidos":"Melendez",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correo, CLAVE)))
+                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(correo, CLAVE, juntaUnica())))
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<MimeMessage> mensajes = ArgumentCaptor.forClass(MimeMessage.class);
@@ -129,9 +129,9 @@ class CorreoDeConfirmacionIT extends PruebaDeIntegracion {
                 "la parte de texto plano no puede llevar estilos");
 
         // Las dos versiones tienen que decir lo mismo sobre el plazo: si una
-        // dice 5 minutos y la otra otra cosa, alguien va a llegar tarde.
-        assertTrue(texto.contains("5 minutos"), "el texto debe decir en cuanto vence el enlace.\n" + texto);
-        assertTrue(CorreosDePrueba.parteHtml(mensaje).contains("5 minutos"),
+        // dice 24 horas y la otra otra cosa, alguien va a llegar tarde.
+        assertTrue(texto.contains("24 horas"), "el texto debe decir en cuanto vence el enlace.\n" + texto);
+        assertTrue(CorreosDePrueba.parteHtml(mensaje).contains("24 horas"),
                 "el HTML debe decir el mismo plazo que el texto");
     }
 }

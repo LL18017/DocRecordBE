@@ -54,11 +54,28 @@ public class MedicoAutenticado {
         ));
     }
 
+    /**
+     * El correo con el que inicio sesion quien opera (el de users, no el de
+     * contacto de la persona). Es lo que la bitacora llama userEmail.
+     */
+    public String correoDeSesion() {
+        return usuarioActual().map(User::getEmail).orElse(null);
+    }
+
     /** El medico que esta operando, si lo es. Vacio si no. */
     public Optional<Medico> buscar() {
         return usuarioActual()
                 .map(User::getPersona)
                 .flatMap(persona -> medicoRepository.findById(persona.getPersonaId()));
+    }
+
+    /**
+     * El usuario autenticado (users, no la persona). Lo necesita quien deja
+     * constancia de QUIEN hizo algo, como la anulacion de una receta.
+     */
+    public User usuario() {
+        return usuarioActual().orElseThrow(() ->
+                new GeneralException("El token no identifica a un usuario valido", "401"));
     }
 
     private Optional<User> usuarioActual() {

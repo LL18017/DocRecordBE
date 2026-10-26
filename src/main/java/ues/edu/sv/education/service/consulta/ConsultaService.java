@@ -26,6 +26,7 @@ import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.SignosVitalesRepository;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -76,6 +77,31 @@ public class ConsultaService {
     public ConsultaResponseDto crear(ConsultaRequestDto request) {
 
         Medico medico = medicoAutenticado.exigir();
+
+        // HU-19, criterio 1: motivo y diagnostico son obligatorios al
+        // registrar. Se comprueba aqui y no con @NotBlank en el DTO para que
+        // una enfermera con un formulario incompleto reciba 403 y no 400 (la
+        // validacion del cuerpo corre antes que la autorizacion); por eso va
+        // justo despues de saber que quien pide es medico.
+        //
+        // Por que el diagnostico se puede exigir sin chocar con el triage:
+        // enfermeria NO crea consultas (POST /consultas esta cerrado a ADMIN y
+        // MEDICO, y el servicio exige fila en `medicos`), solo toma las
+        // constantes ANTES. Quien registra es siempre quien diagnostica, asi
+        // que no existe un alta "de enfermeria" que deba quedar sin
+        // diagnostico. El estado PENDIENTE sigue existiendo para las
+        // consultas anteriores a esta regla, que un medico completa con PUT
+        // (alli el diagnostico sigue siendo opcional: null significa "no lo
+        // toco"); toda consulta nueva nace FINALIZADA porque trae diagnostico.
+        String motivo = textoONull(request.motivo());
+        String diagnostico = textoONull(request.diagnostico());
+        if (motivo == null) {
+            throw new GeneralException("El motivo de la consulta es obligatorio", "400");
+        }
+        if (diagnostico == null) {
+            throw new GeneralException("El diagnóstico es obligatorio para registrar una consulta", "400");
+        }
+
         Paciente paciente = buscarPacienteOFallar(request.pacienteId());
         Clinicas clinica = buscarClinicaSiVino(request.clinicaId());
 
@@ -107,8 +133,12 @@ public class ConsultaService {
         // la regla dejaria de aplicar despues de la primera visita del
         // paciente para siempre, que es justo lo contrario de lo que busca.
         // La ventana esta en VIGENCIA_DE_LA_TOMA_HORAS.
+        // Solo cuenta una toma ACTIVA: una anulada (HU-16 criterio 4) es una
+        // constante que enfermeria declaro invalida, y no puede habilitar la
+        // consulta.
         SignosVitales toma = signosVitalesRepository
-                .findFirstByPaciente_PersonaIdOrderByTomadoEnDesc(paciente.getPersonaId())
+                .findFirstByPaciente_PersonaIdAndEstadoOrderByTomadoEnDesc(
+                        paciente.getPersonaId(), SignosVitales.ACTIVA)
                 .filter(sv -> sv.getTomadoEn()
                         .isAfter(LocalDateTime.now().minusHours(VIGENCIA_DE_LA_TOMA_HORAS)))
                 .orElseThrow(() -> new GeneralException(
@@ -117,18 +147,15 @@ public class ConsultaService {
                                 + "Enfermeria debe tomarle las constantes antes de la consulta.",
                         "409"));
 
-        // Quien crea la consulta ya se comprobo que es medico, asi que puede
-        // traer diagnostico desde el inicio (la consulta nace cerrada, que es
-        // lo normal cuando se registra despues de atender).
-        String diagnostico = textoONull(request.diagnostico());
-
         Consulta consulta = Consulta.builder()
                 .paciente(paciente)
                 .medico(medico)
                 .clinica(clinica)
                 .fecha(request.fecha() != null ? request.fecha() : LocalDateTime.now())
-                .motivo(textoONull(request.motivo()))
+                .motivo(motivo)
                 .diagnostico(diagnostico)
+                .exploracionFisica(textoONull(request.exploracionFisica()))
+                .indicaciones(textoONull(request.indicaciones()))
                 .estado(estadoSegun(diagnostico))
                 .build();
 
@@ -149,22 +176,37 @@ public class ConsultaService {
     }
 
     /**
-     * El historial de un paciente, o todas las consultas si no se filtra.
+     * El historial de consultas, de la mas reciente a la mas antigua, con
+     * filtros opcionales y combinables: paciente, medico y rango de fechas
+     * (HU-20, criterio 2).
      *
      * Un pacienteId que no existe responde 404 y no una lista vacia: la lista
      * vacia se lee como "este paciente no tiene consultas", que es una
      * afirmacion clinica falsa sobre alguien que ni siquiera esta registrado.
+     * Un medicoId que no existe, en cambio, es solo un filtro que nadie
+     * cumple: lista vacia (misma decision que GET /prescripciones).
+     *
+     * desde/hasta son FECHAS y hasta incluye el dia completo: se compara
+     * exclusivo contra el inicio del dia siguiente, para que una consulta de
+     * las 23:59 de "hasta" no quede fuera (ver PrescripcionService.listar).
      */
     @Transactional(readOnly = true)
-    public List<ConsultaResponseDto> listar(Long pacienteId) {
+    public List<ConsultaResponseDto> listar(Long pacienteId, Long medicoId, LocalDate desde, LocalDate hasta) {
 
-        if (pacienteId == null) {
-            return consultaRepository.buscarTodas().stream().map(this::toDto).toList();
+        if (pacienteId != null) {
+            buscarPacienteOFallar(pacienteId);
         }
 
-        buscarPacienteOFallar(pacienteId);
+        if (desde != null && hasta != null && hasta.isBefore(desde)) {
+            throw new GeneralException("La fecha final no puede ser anterior a la inicial", "400");
+        }
 
-        return consultaRepository.buscarPorPaciente(pacienteId).stream().map(this::toDto).toList();
+        return consultaRepository.buscar(
+                        pacienteId,
+                        medicoId,
+                        desde == null ? null : desde.atStartOfDay(),
+                        hasta == null ? null : hasta.plusDays(1).atStartOfDay())
+                .stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -185,9 +227,13 @@ public class ConsultaService {
 
         Consulta consulta = buscarConsultaOFallar(consultaId);
 
+        // HU-19, criterio 3: medico, clinica y fecha quedan fijados al
+        // registrar y no se tocan aqui (el DTO ni siquiera los trae).
         if (textoONull(request.motivo()) != null) consulta.setMotivo(request.motivo().trim());
-        if (request.fecha() != null) consulta.setFecha(request.fecha());
-        if (request.clinicaId() != null) consulta.setClinica(buscarClinicaSiVino(request.clinicaId()));
+        if (textoONull(request.exploracionFisica()) != null) {
+            consulta.setExploracionFisica(request.exploracionFisica().trim());
+        }
+        if (textoONull(request.indicaciones()) != null) consulta.setIndicaciones(request.indicaciones().trim());
 
         escribirDiagnostico(consulta, request.diagnostico());
 
@@ -312,6 +358,8 @@ public class ConsultaService {
                 consulta.getFecha(),
                 consulta.getMotivo(),
                 diagnosticoVisible(consulta),
+                consulta.getExploracionFisica(),
+                consulta.getIndicaciones(),
                 consulta.getEstado(),
                 new PacienteResumenDto(
                         paciente.getPersonaId(),

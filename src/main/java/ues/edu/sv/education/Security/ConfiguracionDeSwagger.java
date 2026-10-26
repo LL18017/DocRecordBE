@@ -174,13 +174,15 @@ public class ConfiguracionDeSwagger {
         return roles.isEmpty() ? List.of(expresion) : roles;
     }
 
-    // Refleja los permitAll de BasicConfiguration: /auth/** y GET /especialidades.
+    // Refleja los permitAll de BasicConfiguration: /auth/**, GET /especialidades
+    // y GET /clinics/publicas (el mapa de la red, HU-28).
     private static boolean esPublico(HandlerMethod metodo) {
         RequestMapping base = AnnotatedElementUtils.findMergedAnnotation(metodo.getBeanType(), RequestMapping.class);
         String ruta = base == null || base.value().length == 0 ? "" : base.value()[0];
         if (ruta.startsWith("/auth")) {
             return true;
         }
-        return ruta.equals("/especialidades") && metodo.hasMethodAnnotation(GetMapping.class);
+        boolean esLectura = metodo.hasMethodAnnotation(GetMapping.class);
+        return esLectura && (ruta.equals("/especialidades") || ruta.equals("/clinics/publicas"));
     }
 }

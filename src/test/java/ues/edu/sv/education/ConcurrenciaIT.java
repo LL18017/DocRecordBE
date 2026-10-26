@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.repository.MedicamentoRepository;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -40,6 +42,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConcurrenciaIT extends PruebaConServidorReal {
 
     private final ObjectMapper json = new ObjectMapper();
+
+    // Desde HU-23 la receta solo acepta medicamentos del catalogo: con texto
+    // libre responderia 400 antes de llegar a la carrera que se quiere medir.
+    @Autowired private MedicamentoRepository medicamentos;
 
     // Estatico: cada @Test de JUnit 5 crea una INSTANCIA nueva de la clase
     // (lifecycle PER_METHOD, el default), asi que un contador de instancia se
@@ -156,8 +162,8 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("""
                         {"nombres":"Medico","apellidos":"Concurrente","email":"%s",
-                         "password":"%s","especialidadId":1}
-                        """.formatted(correo, CLAVE)))
+                         "password":"%s","especialidadId":1,"registroJunta":"%s"}
+                        """.formatted(correo, CLAVE, juntaUnica())))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
             HttpResponse<String> r = cliente.send(registro, HttpResponse.BodyHandlers.ofString());
@@ -196,8 +202,8 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("""
                         {"nombres":"Enfermera","apellidos":"Concurrente","email":"%s",
-                         "password":"%s","especialidadId":1}
-                        """.formatted(correo, CLAVE)))
+                         "password":"%s","especialidadId":1,"registroJunta":"%s"}
+                        """.formatted(correo, CLAVE, juntaUnica())))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
             HttpResponse<String> r = cliente.send(registro, HttpResponse.BodyHandlers.ofString());
@@ -244,7 +250,7 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + token)
                 .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"pacienteId":%d,"motivo":"Control de la prueba de concurrencia"}
+                        {"pacienteId":%d,"motivo":"Control de la prueba de concurrencia","diagnostico":"Sin hallazgos"}
                         """.formatted(pacienteId)))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
@@ -273,8 +279,8 @@ class ConcurrenciaIT extends PruebaConServidorReal {
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + token)
                 .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"consultaId":%d,"medicamentos":[{"medicamento":"Receta de la carrera"}]}
-                        """.formatted(consultaId)))
+                        {"consultaId":%d,"medicamentos":[{"medicamentoId":%d,"dosis":"1 tableta","viaAdministracion":"Oral","frecuencia":"Cada 8 horas","duracion":"7 dias"}]}
+                        """.formatted(consultaId, medicamentos.buscar("", false).get(0).getMedicamentoId())))
                 .build();
         try (HttpClient cliente = HttpClient.newHttpClient()) {
             return cliente.send(peticion, HttpResponse.BodyHandlers.ofString());

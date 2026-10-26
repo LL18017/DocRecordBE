@@ -11,6 +11,7 @@ import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
+import ues.edu.sv.education.model.dto.signosvitales.AnularSignosVitalesRequestDto;
 import ues.edu.sv.education.model.dto.signosvitales.EnfermeraTomaDto;
 import ues.edu.sv.education.model.dto.signosvitales.SignosVitalesRequestDto;
 import ues.edu.sv.education.model.dto.signosvitales.SignosVitalesResponseDto;
@@ -168,12 +169,16 @@ public class SignosVitalesService {
      * ficha: "este paciente no existe" es un error, "aun no le han tomado
      * nada" es el estado normal de un paciente recien registrado, y la
      * pantalla ya sabe mostrar ese hueco.
+     *
+     * Una toma ANULADA no cuenta (HU-16 criterio 4): si la mas reciente esta
+     * anulada, la "ultima" es la anterior valida.
      */
     @Transactional(readOnly = true)
     public SignosVitalesResponseDto ultimaDelPaciente(Long pacienteId) {
         exigirPacienteExistente(pacienteId);
         return signosVitalesRepository
-                .findFirstByPaciente_PersonaIdOrderByTomadoEnDesc(pacienteId)
+                .findFirstByPaciente_PersonaIdAndEstadoOrderByTomadoEnDesc(
+                        pacienteId, SignosVitales.ACTIVA)
                 .map(this::toDto)
                 .orElse(null);
     }
@@ -183,6 +188,55 @@ public class SignosVitalesService {
         return toDto(signosVitalesRepository.findById(signosVitalesId)
                 .orElseThrow(() -> new NoResourceFoundException(
                         "No se encontro la toma de signos vitales con id: " + signosVitalesId, "404")));
+    }
+
+    /**
+     * Anula una toma, dejando constancia del motivo (HU-16 criterio 4).
+     *
+     * No se borra: una toma es un registro clinico y la huella del error es
+     * parte del expediente. Queda en estado ANULADA con el motivo, la
+     * enfermera que la anulo y el momento -- los tres salen del servidor y del
+     * token, no del cliente --. Sigue apareciendo en el historico, marcada, pero
+     * deja de contar como "ultima" y como triage que habilita una consulta.
+     *
+     * ── Quien puede anular ────────────────────────────────────────────────
+     * Solo la enfermera que la registro. La toma lleva su firma y es ella quien
+     * responde por el dato; que otra companera la invalide sin haberla tomado
+     * seria reescribir un acto ajeno. Si la autora ya no esta, la correccion es
+     * tomar otra vez: la toma erronea queda en el historico con su hora y la
+     * nueva pasa a ser la "ultima". El resto del personal solo lee (el medico
+     * y el administrador reciben 403 desde el controller).
+     *
+     * 404 si la toma no existe; 403 si la registro otra enfermera; 409 si ya
+     * estaba anulada (anular dos veces pisaria el motivo y la autoria de la
+     * primera anulacion).
+     */
+    @Transactional
+    public SignosVitalesResponseDto anular(Long signosVitalesId, AnularSignosVitalesRequestDto request) {
+
+        Enfermera enfermera = enfermeraAutenticado.buscar().orElseThrow(() -> new GeneralException(
+                "El usuario autenticado no esta registrado como personal de enfermeria "
+                        + "y no puede anular signos vitales",
+                "403"));
+
+        SignosVitales toma = signosVitalesRepository.buscarParaAnular(signosVitalesId)
+                .orElseThrow(() -> new NoResourceFoundException(
+                        "No se encontro la toma de signos vitales con id: " + signosVitalesId, "404"));
+
+        if (!toma.getEnfermera().getPersonaId().equals(enfermera.getPersonaId())) {
+            throw new GeneralException(
+                    "Solo la enfermera que registro la toma puede anularla", "403");
+        }
+        if (SignosVitales.ANULADA.equals(toma.getEstado())) {
+            throw new GeneralException("La toma ya estaba anulada", "409");
+        }
+
+        toma.setEstado(SignosVitales.ANULADA);
+        toma.setMotivoAnulacion(request.motivo().trim());
+        toma.setAnuladaEn(LocalDateTime.now());
+        toma.setAnuladaPor(enfermera);
+
+        return toDto(signosVitalesRepository.save(toma));
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -221,6 +275,9 @@ public class SignosVitalesService {
         String clasificacion = IndiceDeMasaCorporal.clasificar(
                 imc, personaPaciente.getFechaNacimiento());
 
+        Persona personaAnuladora = toma.getAnuladaPor() == null
+                ? null : toma.getAnuladaPor().getPersona();
+
         return new SignosVitalesResponseDto(
                 toma.getSignosVitalesId(),
                 toma.getTomadoEn(),
@@ -244,6 +301,13 @@ public class SignosVitalesService {
                 toma.getSaturacionPct(),
                 toma.getObservaciones(),
                 imc,
-                clasificacion);
+                clasificacion,
+                toma.getEstado(),
+                toma.getMotivoAnulacion(),
+                toma.getAnuladaEn(),
+                personaAnuladora == null ? null : new EnfermeraTomaDto(
+                        toma.getAnuladaPor().getPersonaId(),
+                        personaAnuladora.getNombres(),
+                        personaAnuladora.getApellidos()));
     }
 }

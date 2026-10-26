@@ -25,6 +25,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class JwtService {
+    /** Nombre del claim con la version de sesion de la cuenta al emitir el token. */
+    public static final String CLAIM_VERSION_DE_SESION = "sesion";
+
     // Los tres valores vienen de application.properties (app.jwt.*), que a su vez
     // los toma de variables de entorno. Antes estaban escritos aqui, es decir,
     // publicados en el repositorio.
@@ -56,7 +59,10 @@ public class JwtService {
                 .id(user.getUser().getUserID().toString())
                 .claims(Map.of(
                         "name", user.getUser().getPersona().getNombres() + " " + user.getUser().getPersona().getApellidos(),
-                        "authorities", authorities
+                        "authorities", authorities,
+                        // Con esto el filtro sabe si la sesion se cerro despues
+                        // de emitir el token (ver User.versionDeSesion).
+                        CLAIM_VERSION_DE_SESION, user.getUser().getVersionDeSesion()
                 ))
                 .subject(user.getUser().getEmail())
                 .issuedAt(new Date(System.currentTimeMillis()))
@@ -76,6 +82,16 @@ public class JwtService {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    /**
+     * La version de sesion con la que se emitio el token. Un token anterior a
+     * V30 no trae el claim y se lee como 0, que es el valor con el que
+     * arrancaron todas las cuentas.
+     */
+    public int versionDeSesion(Claims claims) {
+        Integer version = claims.get(CLAIM_VERSION_DE_SESION, Integer.class);
+        return version == null ? 0 : version;
     }
 
     public boolean isTokenExpired(String token) {

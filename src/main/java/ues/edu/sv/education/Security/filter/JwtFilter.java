@@ -14,20 +14,23 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ues.edu.sv.education.controller.error.CuerpoDeError;
+import ues.edu.sv.education.repository.UserRepository;
 import ues.edu.sv.education.service.auth.JwtService;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
-    /** Solo serializa los dos campos del cuerpo de error; no necesita configuracion. */
+    /** Solo serializa el cuerpo de error; no necesita configuracion. */
     private static final ObjectMapper JSON = new ObjectMapper();
     @Override
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
@@ -43,6 +46,14 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
+        // GET /clinics/publicas es el mapa de la red (HU-28), que se abre sin
+        // cuenta. Igual que arriba: si el filtro no lo deja pasar, el permitAll
+        // de BasicConfiguration nunca llega a aplicarse.
+        if (path.equals("/clinics/publicas") && "GET".equalsIgnoreCase(req.getMethod())) {
+            chain.doFilter(req, res);
+            return;
+        }
+
         if (path.startsWith("/auth/") || path.startsWith("/swagger-ui")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-resources")
@@ -53,7 +64,7 @@ public class JwtFilter extends OncePerRequestFilter {
         //extraer el token
         String header = req.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
-            noAutenticado(res, "No hay una sesion activa. Inicia sesion para continuar.");
+            noAutenticado(req, res, "No hay una sesion activa. Inicia sesion para continuar.");
             return;
         }
 
@@ -71,7 +82,19 @@ public class JwtFilter extends OncePerRequestFilter {
                     .map(SimpleGrantedAuthority::new)   // String → GrantedAuthority
                     .collect(Collectors.toList());
             if (usuarioId == null) {
-                noAutenticado(res, "Tu sesion no es valida. Inicia sesion de nuevo.");
+                noAutenticado(req, res, "Tu sesion no es valida. Inicia sesion de nuevo.");
+                return;
+            }
+
+            // Sesion cerrada despues de emitir el token (HU-03 criterio 4).
+            // Restablecer la contrasena sube la version de sesion de la cuenta
+            // (V30); un token con una version anterior es de una sesion que ya
+            // no existe, aunque su firma y su "exp" sigan siendo validos. Una
+            // consulta por peticion, de una sola columna: es el precio de poder
+            // cerrar sesiones sin guardar una lista de tokens.
+            Optional<Integer> versionActual = userRepository.versionDeSesionDe(Integer.valueOf(usuarioId));
+            if (versionActual.isPresent() && versionActual.get() != jwtService.versionDeSesion(claims)) {
+                noAutenticado(req, res, "Tu sesion se cerro porque se restablecio la contrasena. Inicia sesion de nuevo.");
                 return;
             }
 
@@ -88,7 +111,7 @@ public class JwtFilter extends OncePerRequestFilter {
             // pero escribirlo en cada peticion llena el registro del servidor
             // publico y no le dice nada a quien lo lee.
             logger.debug("Token rechazado: " + e.getMessage());
-            noAutenticado(res, "Tu sesion expiro o no es valida. Inicia sesion de nuevo.");
+            noAutenticado(req, res, "Tu sesion expiro o no es valida. Inicia sesion de nuevo.");
             return;
         }
 
@@ -117,15 +140,17 @@ public class JwtFilter extends OncePerRequestFilter {
      * describia la cabecera que falta, que es cierto y no le sirve de nada a
      * quien solo ve que lo sacaron del sistema.
      */
-    private void noAutenticado(HttpServletResponse res, String mensaje) throws IOException {
+    private void noAutenticado(HttpServletRequest req, HttpServletResponse res, String mensaje) throws IOException {
         res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         res.setContentType(MediaType.APPLICATION_JSON_VALUE);
         res.setCharacterEncoding(StandardCharsets.UTF_8.name());
         // Serializado, no concatenado: una comilla o un salto de linea en el
         // mensaje romperia el JSON a mano y el cliente recibiria basura
         // justo cuando intenta explicar un error.
-        JSON.writeValue(res.getWriter(), Map.of(
-                "error", "No autenticado",
-                "message", mensaje));
+        // Mismo cuerpo que el manejador global (error, message, codigo,
+        // timestamp y ruta): lo arma la misma fabrica.
+        JSON.writeValue(res.getWriter(), CuerpoDeError.de(
+                HttpServletResponse.SC_UNAUTHORIZED, "No autenticado", mensaje,
+                req.getRequestURI()));
     }
 }

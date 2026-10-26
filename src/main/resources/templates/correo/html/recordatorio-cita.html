@@ -1,11 +1,14 @@
-
 <!DOCTYPE html>
 <!--
-  Recordatorio de cita médica.
+  Recordatorio de cita médica (HU-33). Se envía una sola vez, unas 24 horas antes.
 
   Variables Thymeleaf:
-  - fechaHora: fecha y hora de la cita, formateada.
+  - fecha: día de la cita, formateado.
+  - hora: hora de la cita (HH:mm).
   - medico: nombre del médico.
+  - clinica, direccion: sede de la cita. Pueden ser null en citas anteriores a
+    que la cita guardara su sede; el bloque se omite en ese caso.
+  - enlace: dirección de la aplicación, para cancelar o reprogramar.
 -->
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -17,8 +20,7 @@
 <body style="margin:0;padding:0;background-color:#EEF2F7;">
 
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
-    Te recordamos que tienes una cita médica programada para
-    [[${fechaHora}]] con [[${medico}]].
+    Te recordamos que tienes una cita médica el [[${fecha}]] a las [[${hora}]] con [[${medico}]].
 </div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
@@ -43,20 +45,12 @@
                 <!-- Título y mensaje -->
                 <tr>
                     <td style="padding:32px 28px 8px 28px;">
-                        <h1 style="margin:0 0 16px 0;
-                                   font-family:Arial,Helvetica,sans-serif;
-                                   font-size:22px;line-height:28px;
-                                   color:#1E3A5F;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
                             Recordatorio de tu cita médica
                         </h1>
 
-                        <p style="margin:0 0 20px 0;
-                                  font-family:Arial,Helvetica,sans-serif;
-                                  font-size:16px;line-height:24px;
-                                  color:#1E293B;">
-                            Te recordamos que tienes una cita médica
-                            programada en DocRecord Sv. Revisa los detalles
-                            a continuación y procura presentarte puntualmente.
+                        <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Te recordamos que tienes una cita médica programada para mañana en DocRecord Sv. Revisa los detalles a continuación y procura presentarte puntualmente.
                         </p>
                     </td>
                 </tr>
@@ -69,48 +63,67 @@
                                bgcolor="#F1F5F9"
                                style="background-color:#F1F5F9;border-radius:6px;">
 
+                            <tr><td height="16" style="height:16px;line-height:16px;font-size:0;">&nbsp;</td></tr>
                             <tr>
-                                <td style="padding:16px 16px 4px 16px;
-                                           font-family:Arial,Helvetica,sans-serif;
-                                           font-size:13px;line-height:18px;
-                                           color:#64748B;">
-                                    Fecha y hora de la cita
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Fecha
                                 </td>
                             </tr>
-
                             <tr>
-                                <td style="padding:0 16px 16px 16px;
-                                           font-family:Arial,Helvetica,sans-serif;
-                                           font-size:18px;line-height:26px;
-                                           font-weight:bold;color:#1E3A5F;"
-                                    th:text="${fechaHora}">
-                                    25 de octubre de 2026, 10:30
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:26px;font-weight:bold;color:#1E3A5F;"
+                                    th:text="${fecha}">
+                                    ejemplo
                                 </td>
                             </tr>
-
                             <tr>
-                                <td style="padding:0 16px 4px 16px;
-                                           font-family:Arial,Helvetica,sans-serif;
-                                           font-size:13px;line-height:18px;
-                                           color:#64748B;">
-                                    Médico asignado
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Hora
                                 </td>
                             </tr>
-
                             <tr>
-                                <td style="padding:0 16px 16px 16px;
-                                           font-family:Arial,Helvetica,sans-serif;
-                                           font-size:16px;line-height:22px;
-                                           color:#1E293B;"
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${hora}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Médico
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
                                     th:text="${medico}">
-                                    Dr. Nombre del médico
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${clinica != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Clínica
+                                </td>
+                            </tr>
+                            <tr th:if="${clinica != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${clinica}">
+                                    ejemplo
+                                </td>
+                            </tr>
+                            <tr th:if="${direccion != null}">
+                                <td style="padding:0 16px 4px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#64748B;">
+                                    Dirección
+                                </td>
+                            </tr>
+                            <tr th:if="${direccion != null}">
+                                <td style="padding:0 16px 14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;color:#1E293B;"
+                                    th:text="${direccion}">
+                                    ejemplo
                                 </td>
                             </tr>
                         </table>
                     </td>
                 </tr>
 
-                <!-- Recomendaciones -->
+                <!-- Cancelar o reprogramar -->
                 <tr>
                     <td style="padding:0 28px 28px 28px;">
                         <table role="presentation" width="100%"
@@ -123,14 +136,13 @@
                                            font-size:15px;line-height:22px;
                                            color:#7A5B12;">
                                     <strong style="color:#7A5B12;">
-                                        Recomendaciones para tu cita
+                                        ¿No puedes asistir?
                                     </strong>
                                     <br><br>
-                                    1. Procura llegar con anticipación.<br>
-                                    2. Si tienes estudios o documentos médicos
-                                    relevantes, llévalos contigo.<br>
-                                    3. Si no puedes asistir, contacta a la clínica
-                                    para consultar cómo reprogramar tu cita.
+                                    Para cancelar o reprogramar tu cita, comunícate con el personal de la clínica o ingresa a DocRecord Sv desde este enlace:
+                                    <br><br>
+                                    <a th:href="${enlace}" th:text="${enlace}" href="#"
+                                       style="color:#1E3A5F;text-decoration:underline;">enlace</a>
                                 </td>
                             </tr>
                         </table>

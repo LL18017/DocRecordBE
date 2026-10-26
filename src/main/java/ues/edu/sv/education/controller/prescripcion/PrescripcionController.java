@@ -6,16 +6,22 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
+import ues.edu.sv.education.model.dto.prescripcion.AlertaDeAlergiaDto;
+import ues.edu.sv.education.model.dto.prescripcion.DecisionDeAlertaDto;
+import ues.edu.sv.education.model.dto.prescripcion.AnulacionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.service.prescripcion.PrescripcionService;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Prescripciones (epica E7).
@@ -31,8 +37,9 @@ import java.time.LocalDate;
  * por ahi; uno que no ejerce no tiene nada que firmar. Aunque se colara, el
  * servicio exige fila en `medicos` para poner la firma.
  * <p>
- * ANULAR: ADMIN o MEDICO. Una receta mal capturada hay que poder quitarla, y
- * eso si es correccion de registro.
+ * ANULAR: ADMIN, o el MEDICO que la firmo. Una receta mal capturada hay que
+ * poder invalidarla, pero no borrarla ni editarla: se anula con motivo y se
+ * emite otra (HU-22). El DELETE fisico que habia aqui se retiro.
  */
 @Slf4j
 @RestController
@@ -46,8 +53,16 @@ public class PrescripcionController {
 
     @Operation(
             summary = "Emitir una receta",
-            description = "Firma el medico autenticado, no un medicoId del cuerpo. "
-                    + "400 si la lista de medicamentos viene vacia; 404 si la consulta no existe."
+            description = "La receta hereda de la consulta paciente, medico, clinica y fecha, y solo la emite "
+                    + "el medico de esa consulta (403 en otro caso). Cada renglon exige dosis, "
+                    + "viaAdministracion, frecuencia y duracion (400 si falta alguna). "
+                    + "Cada medicamento se elige del catalogo por su medicamentoId (GET /medicamentos). "
+                    + "400 si la lista de medicamentos viene vacia o si un medicamento no existe en el "
+                    + "catalogo o esta desactivado; 404 si la consulta no existe. 409 si algun medicamento "
+                    + "coincide con una alergia vigente del paciente y falta la justificacionAlergia, o "
+                    + "la alergia es SEVERA y confirmaAlergiaSevera no es true (HU-24). Si el paciente tiene "
+                    + "correo, el envio al correo queda encolado solo (envioPorCorreo = PENDIENTE); si no "
+                    + "lo tiene, no se encola nada y envioPorCorreo = SIN_CORREO para que se imprima (HU-25)."
     )
     @PostMapping
     @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
@@ -59,9 +74,41 @@ public class PrescripcionController {
     }
 
     @Operation(
-            summary = "Emitir una receta",
-            description = "Firma el medico autenticado, no un medicoId del cuerpo. "
-                    + "400 si la lista de medicamentos esta vacia; 404 si la consulta no existe."
+            summary = "Alertas de alergia de un medicamento (HU-24)",
+            description = "Las alergias vigentes del paciente (pacienteId = persona_id) que coinciden con "
+                    + "el medicamento, por contencion de texto normalizado entre la sustancia y el "
+                    + "principio activo o el nombre generico. Lista vacia si no hay ninguna. "
+                    + "404 si el paciente o el medicamento no existen."
+    )
+    @GetMapping("/alertas-de-alergia")
+    @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
+    public ResponseEntity<List<AlertaDeAlergiaDto>> alertasDeAlergia(
+            @RequestParam Long pacienteId,
+            @RequestParam Long medicamentoId) {
+        return ResponseEntity.ok(prescripcionService.alertasDeAlergia(pacienteId, medicamentoId));
+    }
+
+    @Operation(
+            summary = "Registrar la decision ante una alerta de alergia (HU-24, criterio 5)",
+            description = "El medico vio la alerta y desistio de recetar: queda en la bitacora (evento "
+                    + "ALLERGY_ALERT_DECLINED) con la alergia mostrada y la decision. Si en cambio receta "
+                    + "pese a la alerta, el evento lo escribe POST /prescripciones. Quien decide sale del "
+                    + "token. 403 si no es medico; 404 si el paciente o el medicamento no existen; 409 si "
+                    + "no hay alerta vigente para ese par."
+    )
+    @PostMapping("/alertas-de-alergia/decision")
+    @PreAuthorize("hasRole('MEDICO')")
+    public ResponseEntity<Void> decisionDeAlerta(@Valid @RequestBody DecisionDeAlertaDto decision) {
+        prescripcionService.registrarDecisionDeAlerta(decision);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Enviar o reenviar la receta por correo",
+            description = "Encola el envio de las recetas de la consulta al correo del paciente (HU-25). "
+                    + "Sirve para reenviar cuando el envio automatico fallo; el ultimo estado se lee en "
+                    + "envioPorCorreo de la receta. 404 si la consulta no existe; 422 si la consulta no "
+                    + "tiene recetas o si el paciente no tiene correo registrado."
     )
     @PostMapping("/enviar-receta/{consultaId}")
     @PreAuthorize("hasAnyRole('MEDICO','ADMIN')")
@@ -103,11 +150,32 @@ public class PrescripcionController {
         return ResponseEntity.ok(prescripcionService.obtener(prescripcionId));
     }
 
-    @Operation(summary = "Anular una receta", description = "Borra la receta con todos sus medicamentos.")
-    @DeleteMapping("/{prescripcionId}")
+    @Operation(
+            summary = "Imprimir una receta (PDF)",
+            description = "Descarga la receta en PDF con el medico y su numero de junta de vigilancia, los "
+                    + "datos de la clinica, el paciente y los medicamentos. Una receta anulada tambien se "
+                    + "descarga, marcada como anulada. 404 si no existe."
+    )
+    @GetMapping(value = "/{prescripcionId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> pdf(@PathVariable("prescripcionId") Long prescripcionId) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"receta-" + prescripcionId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(prescripcionService.generarPdf(prescripcionId));
+    }
+
+    @Operation(
+            summary = "Anular una receta",
+            description = "Anulacion logica (HU-22): la receta pasa a ANULADA con el motivo, quien y cuando, y "
+                    + "sigue visible, marcada. NO se borra ni se edita; para corregirla se anula y se emite "
+                    + "otra. Solo un ADMIN o el medico que la firmo (403 en otro caso). 409 si ya estaba "
+                    + "anulada; 400 si falta el motivo (10 a 500 caracteres); 404 si no existe."
+    )
+    @PostMapping("/{prescripcionId}/anular")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
-    public ResponseEntity<Void> eliminar(@PathVariable("prescripcionId") Long prescripcionId) {
-        prescripcionService.eliminar(prescripcionId);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<PrescripcionResponseDto> anular(
+            @PathVariable("prescripcionId") Long prescripcionId,
+            @Valid @RequestBody AnulacionRequestDto request) {
+        return ResponseEntity.ok(prescripcionService.anular(prescripcionId, request.motivo()));
     }
 }

@@ -56,7 +56,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authManager;
     private final PasswordEncoder passwordEncoder;
-    private static final long TOKEN_EXPIRATION_MINUTES = 5;
+    private static final long TOKEN_EXPIRATION_HOURS = 24; // HU-02 criterio 3
 
     /**
      * Donde vive el formulario de registro, que es el mecanismo de reenvio del
@@ -132,6 +132,12 @@ public class AuthService {
             throw new IllegalArgumentException("fecha expirada");
         }
         User u = service.getUser(userEmail);
+        // Un refresh token emitido antes de restablecer la contrasena ya no
+        // sirve (HU-03 criterio 4); si no, bastaria con el para abrir una
+        // sesion nueva y el cierre de sesiones no cerraria nada.
+        if (jwtService.versionDeSesion(jwtService.getClaims(authHeader)) != u.getVersionDeSesion()) {
+            throw new GeneralException("Tu sesión se cerró porque se restableció la contraseña. Inicia sesión de nuevo.", "401");
+        }
         CustomUserDetails user = new CustomUserDetails(u);
         Persona persona = u.getPersona();
         return new LoginResponseDto(persona.getNombres() + " " + persona.getApellidos(), jwtService.generateToken(user), jwtService.generateRefreshToken(user),
@@ -155,11 +161,22 @@ public class AuthService {
         User userToSave;
         Persona persona;
 
+        // La junta identifica a UN medico (columna UNIQUE). Se normaliza igual
+        // que se guarda, y solo choca con la de OTRA persona: quien reintenta un
+        // registro sin confirmar vuelve a mandar la suya.
+        String registroJunta = request.registroJunta().trim().toUpperCase();
+        Long personaDeLaCuenta = userOptional.map(u -> u.getPersona().getPersonaId()).orElse(null);
+        medicoRepository.findByRegistroJuntaIgnoreCase(registroJunta)
+                .filter(otro -> !otro.getPersonaId().equals(personaDeLaCuenta))
+                .ifPresent(otro -> {
+                    throw new IllegalStateException("Este número de junta de vigilancia ya está registrado");
+                });
+
         if (userOptional.isPresent()) {
             User existingUser = userOptional.get();
 
             if (existingUser.isEnabled()) {
-                throw new IllegalStateException("El correo ya está registrado y confirmado");
+                throw new IllegalStateException("Este correo ya está registrado");
             }
 
             // Cuenta no confirmada: se sobreescribe con los datos nuevos
@@ -213,6 +230,7 @@ public class AuthService {
                         .activo(true)
                         .build());
         medicoEntity.setEspecialidad(especialidad);
+        medicoEntity.setRegistroJunta(registroJunta);
         medicoRepository.save(medicoEntity);
 
         // Generar y guardar el token de verificación
@@ -221,7 +239,7 @@ public class AuthService {
                 null,
                 token,
                 savedUser,
-                LocalDateTime.now().plusMinutes(TOKEN_EXPIRATION_MINUTES),
+                LocalDateTime.now().plusHours(TOKEN_EXPIRATION_HOURS),
                 false
         );
         verificationTokenRepository.save(verificationToken);
@@ -271,7 +289,7 @@ public class AuthService {
         Map<String, Object> datos = new HashMap<>();
         datos.put("nombre", nombre);
         datos.put("enlace", link);
-        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+        datos.put("horas", TOKEN_EXPIRATION_HOURS);
 
         try {
             emailService.enviarCorreo(toEmail, PlantillaDeCorreo.CONFIRMACION_DE_REGISTRO, datos);
@@ -283,9 +301,9 @@ public class AuthService {
             // justo lo que hace falta para saber si hay que rotar la clave,
             // esperar la cuota o revisar la red.
             log.error("No se pudo enviar el correo de confirmacion a {}. La cuenta quedo creada y "
-                    + "deshabilitada, con token de verificacion valido por {} minutos; el usuario "
+                    + "deshabilitada, con token de verificacion valido por {} horas; el usuario "
                     + "puede reintentar el registro para generar uno nuevo.",
-                    toEmail, TOKEN_EXPIRATION_MINUTES, e);
+                    toEmail, TOKEN_EXPIRATION_HOURS, e);
             return false;
         }
     }
@@ -334,7 +352,7 @@ public class AuthService {
     private void avisarQueElEnlaceVencio(String toEmail) {
         Map<String, Object> datos = new HashMap<>();
         datos.put("enlaceRegistro", urlDelFrontend + "/register");
-        datos.put("minutos", TOKEN_EXPIRATION_MINUTES);
+        datos.put("horas", TOKEN_EXPIRATION_HOURS);
         try {
             emailService.enviarCorreo(toEmail, PlantillaDeCorreo.TOKEN_EXPIRADO, datos);
         } catch (MailException e) {

@@ -50,7 +50,7 @@ class ConsultaCrudIT extends PruebaClinica {
                 .get("medico").get("personaId").asLong();
 
         JsonNode creada = crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Control","medicoId":%d,
+                {"pacienteId":%d,"motivo":"Control","diagnostico":"Control sin hallazgos","medicoId":%d,
                  "medico":{"personaId":%d}}
                 """.formatted(paciente, idDelOtroMedico, idDelOtroMedico));
 
@@ -89,7 +89,7 @@ class ConsultaCrudIT extends PruebaClinica {
     @DisplayName("una enfermera no puede escribir el diagnostico de una consulta")
     void unaEnfermeraNoPuedeEscribirDiagnostico() throws Exception {
         String enfermera = tokenDeEnfermera();
-        long consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
+        long consultaId = crearConsultaPendiente(medico, paciente).get("consultaId").asLong();
 
         mockMvc.perform(post("/consultas")
                         .header("Authorization", bearer(enfermera))
@@ -121,7 +121,7 @@ class ConsultaCrudIT extends PruebaClinica {
         // atraviesa, asi que si el 403 llega es porque el servicio -- no la
         // anotacion -- distingue administrar de diagnosticar.
         String admin = tokenDeAdminQueNoEjerce();
-        long consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
+        long consultaId = crearConsultaPendiente(medico, paciente).get("consultaId").asLong();
 
         // Puede lo administrativo.
         mockMvc.perform(put("/consultas/{id}", consultaId)
@@ -149,8 +149,9 @@ class ConsultaCrudIT extends PruebaClinica {
     @DisplayName("el medico si puede diagnosticar, y eso cierra la consulta")
     void elMedicoSiPuedeDiagnosticar() throws Exception {
         // Contrapeso: sin esta prueba, negar el diagnostico a todo el mundo
-        // pasaria las dos anteriores.
-        long consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
+        // pasaria las dos anteriores. Se parte de una consulta PENDIENTE (las
+        // anteriores a HU-19, que nacian sin diagnostico).
+        long consultaId = crearConsultaPendiente(medico, paciente).get("consultaId").asLong();
 
         String cuerpo = mockMvc.perform(put("/consultas/{id}", consultaId)
                         .header("Authorization", bearer(medico))
@@ -170,11 +171,15 @@ class ConsultaCrudIT extends PruebaClinica {
     void elEstadoLoDerivaElDiagnostico() throws Exception {
         // Un cliente que se declara FINALIZADA sin diagnostico dejaria un
         // expediente que dice "atendido" sin una sola linea de lo que se
-        // encontro.
-        JsonNode sinDiagnostico = crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Control","estado":"FINALIZADA"}
-                """.formatted(paciente));
-        assertEquals("PENDIENTE", sinDiagnostico.get("estado").asText());
+        // encontro. Desde HU-19 ni siquiera hay alta sin diagnostico (400);
+        // el estado declarado se ignora y lo manda el diagnostico.
+        tomarSignosVitales(paciente);
+        mockMvc.perform(post("/consultas")
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\",\"estado\":\"FINALIZADA\"}"
+                                .formatted(paciente)))
+                .andExpect(status().isBadRequest());
 
         JsonNode conDiagnostico = crearConsulta(medico, """
                 {"pacienteId":%d,"motivo":"Control","diagnostico":"Sano","estado":"PENDIENTE"}
@@ -249,14 +254,15 @@ class ConsultaCrudIT extends PruebaClinica {
                         .content("""
                                 {"name":"Sucursal Santa Ana","departamento":"Santa Ana",
                                  "municipio":"Santa Ana","direccion":"Calle Principal",
-                                 "telefono":"2440-0000","horario":"Lunes a viernes, 8:00 a 16:00"}
+                                 "telefono":"2440-0000","horario":"Lunes a viernes, 8:00 a 16:00",
+                                 "latitud":13.9942,"longitud":-89.5597}
                                 """))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         int clinicaId = json.readTree(clinica).get("clinicaId").asInt();
 
         JsonNode conClinica = crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Control","clinicaId":%d}
+                {"pacienteId":%d,"motivo":"Control","diagnostico":"Control sin hallazgos","clinicaId":%d}
                 """.formatted(paciente, clinicaId));
 
         assertEquals(clinicaId, conClinica.get("clinica").get("clinicaId").asInt());
@@ -275,16 +281,16 @@ class ConsultaCrudIT extends PruebaClinica {
         // Se crean desordenadas a proposito, con fechas explicitas: si el
         // servicio devolviera el orden de insercion, esta prueba lo delata.
         crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Segunda visita","fecha":"2026-03-10T09:00:00"}
+                {"pacienteId":%d,"motivo":"Segunda visita","diagnostico":"Control sin hallazgos","fecha":"2026-03-10T09:00:00"}
                 """.formatted(paciente));
         crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Primera visita","fecha":"2026-01-05T09:00:00"}
+                {"pacienteId":%d,"motivo":"Primera visita","diagnostico":"Control sin hallazgos","fecha":"2026-01-05T09:00:00"}
                 """.formatted(paciente));
         crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Tercera visita","fecha":"2026-06-20T09:00:00"}
+                {"pacienteId":%d,"motivo":"Tercera visita","diagnostico":"Control sin hallazgos","fecha":"2026-06-20T09:00:00"}
                 """.formatted(paciente));
         crearConsulta(medico, """
-                {"pacienteId":%d,"motivo":"Consulta de otro paciente","fecha":"2026-07-01T09:00:00"}
+                {"pacienteId":%d,"motivo":"Consulta de otro paciente","diagnostico":"Control sin hallazgos","fecha":"2026-07-01T09:00:00"}
                 """.formatted(otroPaciente));
 
         JsonNode historial = json.readTree(
@@ -327,7 +333,7 @@ class ConsultaCrudIT extends PruebaClinica {
         mockMvc.perform(post("/consultas")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\"}".formatted(inexistente)))
+                        .content("{\"pacienteId\":%d,\"motivo\":\"Control\",\"diagnostico\":\"Sano\"}".formatted(inexistente)))
                 .andExpect(status().isNotFound());
 
         // Y su historial tampoco es una lista vacia: eso se leeria como "este
@@ -344,7 +350,7 @@ class ConsultaCrudIT extends PruebaClinica {
         mockMvc.perform(post("/consultas")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"pacienteId\":%d,\"clinicaId\":987654,\"motivo\":\"Control\"}"
+                        .content("{\"pacienteId\":%d,\"clinicaId\":987654,\"motivo\":\"Control\",\"diagnostico\":\"Sano\"}"
                                 .formatted(paciente)))
                 .andExpect(status().isNotFound());
 
@@ -437,10 +443,10 @@ class ConsultaCrudIT extends PruebaClinica {
         // El recorte va en el servidor y no en la pantalla: esconderlo en la
         // interfaz deja el dato viajando en la respuesta, donde se lee con las
         // herramientas del navegador o llamando al endpoint directamente.
-        long consultaId = crearConsultaSimple(medico, paciente).get("consultaId").asLong();
+        long consultaId = crearConsultaPendiente(medico, paciente).get("consultaId").asLong();
 
-        // `crearConsultaSimple` deja la consulta PENDIENTE, sin diagnostico: hay
-        // que escribirlo para que haya algo que ocultar.
+        // La consulta nace PENDIENTE (como las anteriores a HU-19) y se le
+        // escribe el diagnostico: asi hay algo que ocultar.
         mockMvc.perform(put("/consultas/{id}", consultaId)
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -482,7 +488,7 @@ class ConsultaCrudIT extends PruebaClinica {
         mockMvc.perform(post("/consultas")
                         .header("Authorization", bearer(medico))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"pacienteId\":%d,\"motivo\":\"Intento sobre paciente de baja\"}"
+                        .content("{\"pacienteId\":%d,\"motivo\":\"Intento sobre paciente de baja\",\"diagnostico\":\"Sano\"}"
                                 .formatted(paciente)))
                 .andExpect(status().isConflict());
 
@@ -510,6 +516,245 @@ class ConsultaCrudIT extends PruebaClinica {
                 .andExpect(status().isOk());
 
         assertTrue(crearConsultaSimple(medico, paciente).hasNonNull("consultaId"));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-19 criterio 1 · motivo y diagnostico obligatorios; exploracion e
+    // indicaciones opcionales
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("HU-19 c1: sin motivo o sin diagnostico la consulta se rechaza y no se guarda")
+    void sinMotivoOSinDiagnosticoSeRechaza() throws Exception {
+        tomarSignosVitales(paciente);
+
+        for (String cuerpo : new String[]{
+                "{\"pacienteId\":%d,\"diagnostico\":\"Faringitis\"}",
+                "{\"pacienteId\":%d,\"motivo\":\"   \",\"diagnostico\":\"Faringitis\"}",
+                "{\"pacienteId\":%d,\"motivo\":\"Dolor de garganta\"}",
+                "{\"pacienteId\":%d,\"motivo\":\"Dolor de garganta\",\"diagnostico\":\"\"}",
+                "{\"pacienteId\":%d,\"exploracionFisica\":\"Normal\",\"indicaciones\":\"Reposo\"}"}) {
+            mockMvc.perform(post("/consultas")
+                            .header("Authorization", bearer(medico))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(cuerpo.formatted(paciente)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        JsonNode historial = json.readTree(
+                mockMvc.perform(get("/consultas").param("pacienteId", String.valueOf(paciente))
+                                .header("Authorization", bearer(medico)))
+                        .andReturn().getResponse().getContentAsString());
+        assertEquals(0, historial.size(), "una consulta rechazada quedo guardada");
+    }
+
+    @Test
+    @DisplayName("HU-19 c1: la exploracion fisica y las indicaciones son opcionales, y se guardan cuando vienen")
+    void exploracionEIndicacionesSonOpcionales() throws Exception {
+        JsonNode sin = crearConsultaSimple(medico, paciente);
+        assertTrue(sin.get("exploracionFisica").isNull());
+        assertTrue(sin.get("indicaciones").isNull());
+
+        JsonNode con = crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Dolor de garganta","diagnostico":"Faringitis aguda",
+                 "exploracionFisica":"Faringe eritematosa","indicaciones":"Reposo e hidratacion"}
+                """.formatted(paciente));
+        assertEquals("Faringe eritematosa", con.get("exploracionFisica").asText());
+        assertEquals("Reposo e hidratacion", con.get("indicaciones").asText());
+        assertEquals("FINALIZADA", con.get("estado").asText());
+
+        // Y se pueden completar despues.
+        JsonNode editada = json.readTree(mockMvc.perform(put("/consultas/{id}", sin.get("consultaId").asLong())
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exploracionFisica\":\"Sin hallazgos\",\"indicaciones\":\"Control en un mes\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertEquals("Sin hallazgos", editada.get("exploracionFisica").asText());
+        assertEquals("Control en un mes", editada.get("indicaciones").asText());
+    }
+
+    @Test
+    @DisplayName("HU-19 c2: una enfermera con un formulario incompleto recibe 403, no 400")
+    void laEnfermeraRecibe403AunqueElFormularioEsteIncompleto() throws Exception {
+        mockMvc.perform(post("/consultas")
+                        .header("Authorization", bearer(tokenDeEnfermera()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d}".formatted(paciente)))
+                .andExpect(status().isForbidden());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-19 criterio 3 · medico, clinica y fecha no son editables
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("HU-19 c3: PUT no cambia el medico, la clinica ni la fecha de la consulta")
+    void medicoClinicaYFechaSonInmutables() throws Exception {
+        int clinicaOriginal = crearSede(medico);
+        int otraClinica = crearSede(medico);
+        JsonNode creada = crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Control","diagnostico":"Sano","clinicaId":%d,
+                 "fecha":"2026-03-10T09:00:00"}
+                """.formatted(paciente, clinicaOriginal));
+        long consultaId = creada.get("consultaId").asLong();
+        long medicoOriginal = creada.get("medico").get("personaId").asLong();
+
+        String otroMedico = tokenDeMedico();
+        long idOtroMedico = crearConsultaSimple(otroMedico, crearPaciente(otroMedico))
+                .get("medico").get("personaId").asLong();
+
+        // El motivo si se corrige, y aun asi
+        // estos tres campos no se mueven aunque los mande.
+        JsonNode editada = json.readTree(mockMvc.perform(put("/consultas/{id}", consultaId)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"motivo":"Motivo corregido","clinicaId":%d,"fecha":"2030-01-01T00:00:00",
+                                 "medicoId":%d,"medico":{"personaId":%d}}
+                                """.formatted(otraClinica, idOtroMedico, idOtroMedico)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+
+        assertEquals("Motivo corregido", editada.get("motivo").asText(), "lo editable si debe cambiar");
+        assertEquals(clinicaOriginal, editada.get("clinica").get("clinicaId").asInt(), "la clinica cambio");
+        assertEquals("2026-03-10T09:00:00", editada.get("fecha").asText(), "la fecha cambio");
+        assertEquals(medicoOriginal, editada.get("medico").get("personaId").asLong(), "el medico cambio");
+
+        // Otro medico tampoco se la queda: sigue firmada por quien la registro.
+        JsonNode porOtro = json.readTree(mockMvc.perform(put("/consultas/{id}", consultaId)
+                        .header("Authorization", bearer(otroMedico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"indicaciones\":\"Agregado por otro\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertEquals(medicoOriginal, porOtro.get("medico").get("personaId").asLong());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HU-20 · historial con medico y clinica; filtros por fechas y medico
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("HU-20 c1: cada consulta del historial trae fecha, medico, clinica y motivo")
+    void elHistorialTraeMedicoYClinica() throws Exception {
+        int clinicaId = crearSede(medico);
+        crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Control","diagnostico":"Sano","clinicaId":%d}
+                """.formatted(paciente, clinicaId));
+
+        JsonNode fila = listar(medico, "pacienteId", String.valueOf(paciente)).get(0);
+
+        assertTrue(fila.hasNonNull("fecha"));
+        assertEquals("Control", fila.get("motivo").asText());
+        assertTrue(fila.get("medico").hasNonNull("nombres"));
+        assertTrue(fila.get("medico").hasNonNull("apellidos"));
+        assertEquals(clinicaId, fila.get("clinica").get("clinicaId").asInt());
+        assertTrue(fila.get("clinica").hasNonNull("name"));
+    }
+
+    @Test
+    @DisplayName("HU-20 c2: filtrar por rango de fechas incluye el dia completo de 'hasta'")
+    void filtrarPorRangoDeFechas() throws Exception {
+        crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Enero","diagnostico":"Sano","fecha":"2026-01-05T09:00:00"}
+                """.formatted(paciente));
+        crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Marzo temprano","diagnostico":"Sano","fecha":"2026-03-10T00:00:00"}
+                """.formatted(paciente));
+        crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Marzo tarde","diagnostico":"Sano","fecha":"2026-03-20T23:59:30"}
+                """.formatted(paciente));
+        crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Junio","diagnostico":"Sano","fecha":"2026-06-20T09:00:00"}
+                """.formatted(paciente));
+
+        // Los dos extremos del rango caen en el borde del dia y deben entrar.
+        JsonNode marzo = listar(medico, "pacienteId", String.valueOf(paciente),
+                "desde", "2026-03-10", "hasta", "2026-03-20");
+        assertEquals(2, marzo.size());
+        assertEquals("Marzo tarde", marzo.get(0).get("motivo").asText());
+        assertEquals("Marzo temprano", marzo.get(1).get("motivo").asText());
+
+        // Solo desde / solo hasta.
+        assertEquals(3, listar(medico, "pacienteId", String.valueOf(paciente), "desde", "2026-03-10").size());
+        assertEquals(1, listar(medico, "pacienteId", String.valueOf(paciente), "hasta", "2026-01-05").size());
+
+        // Un rango sin consultas es una lista vacia, no un error.
+        assertEquals(0, listar(medico, "pacienteId", String.valueOf(paciente),
+                "desde", "2027-01-01", "hasta", "2027-12-31").size());
+
+        // Rango al reves: 400.
+        mockMvc.perform(get("/consultas").param("desde", "2026-06-01").param("hasta", "2026-01-01")
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("HU-20 c2: filtrar por medico trae solo sus consultas, y se combina con paciente y fechas")
+    void filtrarPorMedico() throws Exception {
+        String otroMedico = tokenDeMedico();
+        long idMio = crearConsultaSimple(medico, paciente).get("medico").get("personaId").asLong();
+        crearConsultaSimple(medico, paciente);
+        JsonNode deOtro = crearConsultaSimple(otroMedico, paciente);
+        long idOtro = deOtro.get("medico").get("personaId").asLong();
+        assertNotEquals(idMio, idOtro);
+
+        JsonNode mias = listar(medico, "pacienteId", String.valueOf(paciente), "medicoId", String.valueOf(idMio));
+        assertEquals(2, mias.size());
+        mias.forEach(c -> assertEquals(idMio, c.get("medico").get("personaId").asLong()));
+
+        JsonNode delOtro = listar(medico, "pacienteId", String.valueOf(paciente), "medicoId", String.valueOf(idOtro));
+        assertEquals(1, delOtro.size());
+        assertEquals(deOtro.get("consultaId").asLong(), delOtro.get(0).get("consultaId").asLong());
+
+        // Sin filtro de medico, las tres.
+        assertEquals(3, listar(medico, "pacienteId", String.valueOf(paciente)).size());
+
+        // Combinado con un rango que no incluye hoy: ninguna.
+        assertEquals(0, listar(medico, "pacienteId", String.valueOf(paciente),
+                "medicoId", String.valueOf(idMio), "hasta", "2020-01-01").size());
+
+        // Un medico que no existe es un filtro que nadie cumple.
+        assertEquals(0, listar(medico, "pacienteId", String.valueOf(paciente), "medicoId", "9999999").size());
+    }
+
+    @Test
+    @DisplayName("HU-20 c3: la consulta se abre con todos sus datos")
+    void laConsultaSeAbreConTodosSusDatos() throws Exception {
+        JsonNode creada = crearConsulta(medico, """
+                {"pacienteId":%d,"motivo":"Tos","diagnostico":"Bronquitis","exploracionFisica":"Sibilancias",
+                 "indicaciones":"Inhalador"}
+                """.formatted(paciente));
+
+        JsonNode abierta = leerConsulta(medico, creada.get("consultaId").asLong());
+        assertEquals("Tos", abierta.get("motivo").asText());
+        assertEquals("Bronquitis", abierta.get("diagnostico").asText());
+        assertEquals("Sibilancias", abierta.get("exploracionFisica").asText());
+        assertEquals("Inhalador", abierta.get("indicaciones").asText());
+        assertEquals(paciente, abierta.get("paciente").get("personaId").asLong());
+    }
+
+    @Test
+    @DisplayName("HU-20 c4: el listado filtrado tampoco entrega el diagnostico a enfermeria")
+    void elListadoFiltradoNoEntregaElDiagnosticoAEnfermeria() throws Exception {
+        crearConsultaSimple(medico, paciente);
+
+        JsonNode fila = listar(tokenDeEnfermera(), "pacienteId", String.valueOf(paciente),
+                "desde", "2020-01-01").get(0);
+
+        assertTrue(fila.get("diagnostico").isNull());
+        assertTrue(fila.hasNonNull("motivo"));
+    }
+
+    private JsonNode listar(String token, String... parametros) throws Exception {
+        var peticion = get("/consultas").header("Authorization", bearer(token));
+        for (int i = 0; i < parametros.length; i += 2) {
+            peticion.param(parametros[i], parametros[i + 1]);
+        }
+        return json.readTree(mockMvc.perform(peticion)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
     }
 
     private JsonNode leerConsulta(String token, long consultaId) throws Exception {

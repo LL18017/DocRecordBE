@@ -14,11 +14,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.cita.CancelarCitaRequestDto;
 import ues.edu.sv.education.model.dto.cita.CitaRequestDto;
 import ues.edu.sv.education.model.dto.cita.CitaResponseDto;
 import ues.edu.sv.education.model.dto.cita.CitaUpdateRequestDto;
+import ues.edu.sv.education.model.dto.cita.MedicoDeAgendaDto;
 import ues.edu.sv.education.service.Cita.CitaService;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -71,6 +74,79 @@ public class CitaController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(citaService.crear(dto));
+    }
+
+    @Operation(
+            summary = "Agenda de una clínica o de un médico",
+            description = "Las citas entre dos días, ambos incluidos, ordenadas por hora. " +
+                    "Hace falta clinicaId, medicoId o los dos. Las canceladas se incluyen " +
+                    "con su motivo: la agenda conserva el historial (HU-32)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Agenda obtenida"),
+            @ApiResponse(responseCode = "400", description = "Falta el filtro o el rango no es válido")
+    })
+    @GetMapping
+    public ResponseEntity<List<CitaResponseDto>> agenda(
+            @RequestParam(required = false) Integer clinicaId,
+            @RequestParam(required = false) Integer medicoId,
+            @Parameter(description = "Primer día, AAAA-MM-DD", example = "2026-10-26", required = true)
+            @RequestParam LocalDate desde,
+            @Parameter(description = "Último día, AAAA-MM-DD; por defecto el mismo día de inicio")
+            @RequestParam(required = false) LocalDate hasta
+    ) {
+        return ResponseEntity.ok(
+                citaService.agenda(clinicaId, medicoId, desde, hasta != null ? hasta : desde)
+        );
+    }
+
+    @Operation(
+            summary = "Horas libres de un médico en una sede",
+            description = "Las franjas de 30 minutos dentro del horario del médico en la sede (HU-29), " +
+                    "sin las ocupadas por citas vivas ni las que ya pasaron. Si el médico no tiene " +
+                    "horarios cargados en la sede, se usa la jornada de 7:00 a 17:00."
+    )
+    @GetMapping("/franjas")
+    public ResponseEntity<List<String>> franjasLibres(
+            @RequestParam Integer clinicaId,
+            @RequestParam Integer medicoId,
+            @RequestParam LocalDate fecha
+    ) {
+        return ResponseEntity.ok(citaService.franjasLibres(clinicaId, medicoId, fecha));
+    }
+
+    @Operation(
+            summary = "Médicos de una clínica",
+            description = "Los médicos activos que atienden en la sede, para elegir con quién agendar."
+    )
+    @GetMapping("/medicos")
+    public ResponseEntity<List<MedicoDeAgendaDto>> medicosDeClinica(
+            @RequestParam Integer clinicaId
+    ) {
+        return ResponseEntity.ok(citaService.medicosDeClinica(clinicaId));
+    }
+
+    @Operation(
+            summary = "Cancelar una cita",
+            description = "Marca la cita CANCELADA con su motivo y libera la franja. No la borra. " +
+                    "Se rechaza con menos de 4 horas de anticipación (HU-32)."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Cita cancelada",
+                    content = @Content(schema = @Schema(implementation = CitaResponseDto.class))
+            ),
+            @ApiResponse(responseCode = "400", description = "Falta el motivo"),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Ya cancelada, ya atendida o con menos de 4 horas")
+    })
+    @PatchMapping("/{id}/cancelacion")
+    public ResponseEntity<CitaResponseDto> cancelar(
+            @PathVariable Integer id,
+            @Valid @RequestBody CancelarCitaRequestDto dto
+    ) {
+        return ResponseEntity.ok(citaService.cancelar(id, dto.motivo()));
     }
 
     @Operation(
@@ -134,7 +210,7 @@ public class CitaController {
                     example = "10",
                     required = true
             )
-            @PathVariable Integer pacienteId
+            @PathVariable Long pacienteId
     ) {
         return ResponseEntity.ok(
                 citaService.obtenerPorPaciente(pacienteId)
@@ -219,38 +295,5 @@ public class CitaController {
         return ResponseEntity.ok(
                 citaService.actualizar(id, dto)
         );
-    }
-
-    @Operation(
-            summary = "Eliminar una cita",
-            description = "Elimina una cita médica existente."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "204",
-                    description = "Cita eliminada correctamente"
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "No autorizado"
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Cita no encontrada"
-            )
-    })
-    @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(
-            @Parameter(
-                    description = "Identificador de la cita",
-                    example = "15",
-                    required = true
-            )
-            @PathVariable Integer id
-    ) {
-        citaService.eliminar(id);
-
-        return ResponseEntity.noContent().build();
     }
 }

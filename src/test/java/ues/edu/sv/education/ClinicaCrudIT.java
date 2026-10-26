@@ -81,8 +81,8 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Medico","apellidos":"De Clinicas",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correo, CLAVE)))
+                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(correo, CLAVE, juntaUnica())))
                 .andExpect(status().is2xxSuccessful());
 
         User usuario = usuarios.findByEmailIgnoreCase(correo)
@@ -127,11 +127,37 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         return cuerpoJson.trim().replaceFirst("\\}\\s*$", extra + "}");
     }
 
+    /**
+     * Desde HU-26 criterio 1 el alta exige latitud y longitud. Casi todas estas
+     * pruebas miden otra cosa, asi que se les da un punto valido si no traen el
+     * suyo. Solo para el ALTA: en la edicion las coordenadas siguen siendo
+     * opcionales y inyectarlas ahi falsearia lo que se prueba.
+     */
+    private String conCoordenadas(String cuerpoJson) {
+        if (cuerpoJson.contains("\"latitud\"")) return cuerpoJson;
+        return cuerpoJson.trim().replaceFirst("\\}\\s*$", ",\"latitud\":13.7,\"longitud\":-89.2}");
+    }
+
+    /**
+     * Una clinica como las que existian antes de HU-26: sin coordenadas. La API
+     * ya no deja crearla asi, de modo que se le quitan en la base, que es como
+     * llegaron las reales.
+     */
+    private JsonNode crearClinicaSinUbicacion(String tokenDelDuenio, String nombre) throws Exception {
+        JsonNode creada = crearClinica(tokenDelDuenio, "{\"name\":\"" + nombre + "\"}");
+        ues.edu.sv.education.model.entity.Clinicas fila =
+                clinicas.findById(creada.get("clinicaId").asInt()).orElseThrow();
+        fila.setLatitud(null);
+        fila.setLongitud(null);
+        clinicas.saveAndFlush(fila);
+        return creada;
+    }
+
     private JsonNode crearClinica(String tokenDelDuenio, String cuerpoJson) throws Exception {
         String respuesta = mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + tokenDelDuenio)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(completar(cuerpoJson)))
+                        .content(conCoordenadas(completar(cuerpoJson))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(respuesta);
@@ -151,21 +177,41 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Coordenadas opcionales
+    // Coordenadas: obligatorias al crear (HU-26 criterio 1), opcionales al editar
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("crear una clinica sin coordenadas responde 201 y las devuelve null")
-    void crearSinCoordenadasDevuelveNull() throws Exception {
-        // El caso que estaba roto: la columna admite NULL, el DTO lo prohibia.
-        JsonNode creada = crearClinica(token, "{\"name\":\"Clinica Sin GPS\"}");
+    @DisplayName("crear una clinica sin coordenadas se rechaza con 400 y dice cual falta")
+    void crearSinCoordenadasSeRechaza() throws Exception {
+        String sinNada = mockMvc.perform(post("/clinics")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(completar("{\"name\":\"Clinica Sin GPS\"}")))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(sinNada.contains("La latitud es obligatoria"), sinNada);
+        assertTrue(sinNada.contains("La longitud es obligatoria"), sinNada);
 
-        assertTrue(creada.get("latitud").isNull(), "la latitud debio quedar nula");
-        assertTrue(creada.get("longitud").isNull(), "la longitud debio quedar nula");
+        // Con una sola no alcanza: el punto necesita las dos.
+        String soloLatitud = mockMvc.perform(post("/clinics")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(completar("{\"name\":\"Clinica Media\",\"latitud\":13.7}")))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(soloLatitud.contains("La longitud es obligatoria"), soloLatitud);
+    }
 
-        // Y no solo en la respuesta: tambien al releerla ya guardada. La forma de
-        // la respuesta no cambia (el frontend la tipa como number | null), asi
-        // que las claves deben venir presentes con valor null, no ausentes.
+    @Test
+    @DisplayName("una clinica anterior, sin coordenadas, sigue siendo valida y se lee con null")
+    void unaClinicaAnteriorSinCoordenadasSigueSiendoValida() throws Exception {
+        // La columna sigue admitiendo NULL: lo que ya estaba guardado no se
+        // invalida por un criterio que llego despues.
+        JsonNode creada = crearClinicaSinUbicacion(token, "Clinica Sin GPS");
+
+        // Se lee ya guardada. La forma de la respuesta no cambia (el frontend la
+        // tipa como number | null), asi que las claves deben venir presentes con
+        // valor null, no ausentes.
         JsonNode guardada = leerDeMisClinicas(token, creada.get("clinicaId").asInt());
         assertTrue(guardada.has("latitud") && guardada.get("latitud").isNull());
         assertTrue(guardada.has("longitud") && guardada.get("longitud").isNull());
@@ -248,7 +294,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
     void unaClinicaSinUbicacionPuedeCompletarseDespues() throws Exception {
         // Es el flujo que motiva todo el cambio: se registra la clinica hoy y
         // alguien va a tomarle el GPS la semana que viene.
-        JsonNode creada = crearClinica(token, "{\"name\":\"Clinica Por Ubicar\"}");
+        JsonNode creada = crearClinicaSinUbicacion(token, "Clinica Por Ubicar");
         int clinicaId = creada.get("clinicaId").asInt();
 
         String cuerpo = mockMvc.perform(put("/clinics/{id}", clinicaId)
@@ -437,7 +483,7 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
         String cuerpoCreado = mockMvc.perform(post("/clinics")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(completar("{\"name\":\"Sede Que Cierra\"}")))
+                        .content(conCoordenadas(completar("{\"name\":\"Sede Que Cierra\"}"))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         int clinicaId = new ObjectMapper().readTree(cuerpoCreado).get("clinicaId").asInt();

@@ -77,8 +77,8 @@ class EstadoDeUsuarioIT extends PruebaClinica {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nombres":"Medico","apellidos":"Con Especialidad",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correo, CLAVE)))
+                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
+                                """.formatted(correo, CLAVE, juntaUnica())))
                 .andExpect(status().is2xxSuccessful());
 
         User usuario = usuarios.findByEmailIgnoreCase(correo)

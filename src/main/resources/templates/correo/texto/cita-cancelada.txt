@@ -1,0 +1,18 @@
+Cita médica cancelada - DocRecord Sv
+
+[# th:if="${rol == 'PACIENTE'}"]Se canceló tu cita médica en DocRecord Sv. La franja quedó libre; si todavía
+necesitas atención, solicita una nueva cita.
+[/][# th:if="${rol == 'MEDICO'}"]Se canceló una cita de su agenda en DocRecord Sv. La franja quedó libre.
+[/]
+[# th:if="${rol == 'MEDICO'}"]Paciente:  [(${paciente})]
+[/]Fecha:     [(${fecha})]
+Hora:      [(${hora})]
+Médico:    [(${medico})]
+[# th:if="${clinica != null}"]Clínica:   [(${clinica})]
+[/][# th:if="${direccion != null}"]Dirección: [(${direccion})]
+[/][# th:if="${motivo != null}"]Motivo:    [(${motivo})]
+[/]
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

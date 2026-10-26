@@ -8,11 +8,29 @@ public record CitaResponseDto(
 
         LocalDateTime fechaHora,
 
+        Integer tipoCitaId,
+
         String tipoCita,
 
+        /** persona_id del paciente. */
+        Long pacienteId,
+
+        String paciente,
+
+        String expediente,
+
+        /** user_id del medico. */
+        Integer medicoId,
 
         String medico,
 
-        String estado
+        /** Anulable en citas anteriores a V24. */
+        Integer clinicaId,
+
+        String clinica,
+
+        String estado,
+
+        String motivoCancelacion
 ) {
 }

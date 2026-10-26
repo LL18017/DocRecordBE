@@ -45,11 +45,11 @@ class DocumentacionDeLaApiIT extends PruebaClinica {
     void elPermisoDelMetodoApareceEnLaDescripcion() throws Exception {
         JsonNode doc = documentacion();
 
-        String registrar = descripcion(doc, "/api/alergias", "post");
+        String registrar = descripcion(doc, "/alergias", "post");
         assertTrue(registrar.contains("**Acceso:** MEDICO, ENFERMERA."), registrar);
 
-        // GET /api/alergias/{id} no tiene permiso propio: hereda el de la clase.
-        String leer = descripcion(doc, "/api/alergias/{id}", "get");
+        // GET /alergias/{id} no tiene permiso propio: hereda el de la clase.
+        String leer = descripcion(doc, "/alergias/{id}", "get");
         assertTrue(leer.contains("**Acceso:** ADMIN, MEDICO, ENFERMERA."), leer);
     }
 

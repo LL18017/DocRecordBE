@@ -66,6 +66,14 @@ public class Consulta {
     @Column(name = "diagnostico")
     private String diagnostico;
 
+    // HU-19: lo que el medico encontro al examinar y lo que indica al
+    // paciente. Opcionales: completan la consulta, no la hacen valida.
+    @Column(name = "exploracion_fisica")
+    private String exploracionFisica;
+
+    @Column(name = "indicaciones")
+    private String indicaciones;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false, length = 20)
