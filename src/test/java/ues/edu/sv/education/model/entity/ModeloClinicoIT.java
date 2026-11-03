@@ -169,10 +169,10 @@ class ModeloClinicoIT extends PruebaDeIntegracion {
     @Test
     @DisplayName("una persona con solo nombre y apellido es valida")
     void unaPersonaSoloConNombreEsValida() {
-        // Es el estado en que queda un medico recien registrado por
-        // /auth/register: el formulario no pide DUI, fecha de nacimiento ni
-        // sexo. Si alguien pone NOT NULL en esas columnas, el registro publico
-        // deja de funcionar y esta prueba lo detecta.
+        // Es el estado en que queda una cuenta de personal recien dada de alta
+        // por el administrador (POST /user): el alta no pide DUI, fecha de
+        // nacimiento ni sexo. Si alguien pone NOT NULL en esas columnas, el
+        // alta deja de funcionar y esta prueba lo detecta.
         Persona minima = personas.saveAndFlush(Persona.builder()
                 .nombres("Juan Armando")
                 .apellidos("Guerra Guevara")

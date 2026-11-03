@@ -23,9 +23,10 @@ import java.util.Set;
  * Flyway ni por data.sql.
  *
  * El problema que resuelve: /user exige ROLE_ADMIN a nivel de clase, ninguna
- * migracion ni data.sql siembra un usuario o una fila de user_roles, y la
- * unica alta publica (/auth/register) solo crea cuentas MEDICO. Un despliegue
- * nuevo arranca sin nadie que pueda administrar el sistema.
+ * migracion ni data.sql siembra un usuario o una fila de user_roles, y no
+ * hay alta publica de cuentas (el registro de medicos por /auth/register se
+ * retiro, HU-02). Un despliegue nuevo arranca sin nadie que pueda administrar
+ * el sistema.
  *
  * Por que variable de entorno y no una migracion SQL: una migracion dejaria
  * el hash de la contrasena escrito en un archivo versionado, que vive para
@@ -96,8 +97,8 @@ public class AdminBootstrap implements CommandLineRunner {
         // alguien que se autoregistro como medico con ese correo antes de que
         // se configurara la variable).
         //
-        // Se decide NO promoverla nunca automaticamente. El riesgo concreto es
-        // que /auth/register es publico: si la respuesta fuera "se le agrega
+        // Se decide NO promoverla nunca automaticamente. El riesgo concreto era
+        // que /auth/register fue publico: si la respuesta fuera "se le agrega
         // el rol ADMIN", cualquiera que adivine o conozca de antemano cual
         // sera el ADMIN_EMAIL del despliegue podria autoregistrarse con ese
         // correo POR ADELANTADO, y quedar promovido a administrador con solo
@@ -129,7 +130,7 @@ public class AdminBootstrap implements CommandLineRunner {
         // (c) No existe ningun ADMIN todavia: se crea la persona, el usuario
         // -habilitado, es la unica forma de que sirva de algo- y se le asigna
         // el rol ADMIN. La contrasena se cifra con el MISMO bean
-        // PasswordEncoder (Argon2) que usa /auth/register; no se reimplementa
+        // PasswordEncoder (Argon2) que usa POST /user; no se reimplementa
         // nada.
         Persona persona = personaRepository.save(
                 Persona.builder()

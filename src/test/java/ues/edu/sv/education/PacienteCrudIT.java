@@ -60,18 +60,7 @@ class PacienteCrudIT extends PruebaDeIntegracion {
     void autenticarUnMedico() throws Exception {
         String correo = "crud.medico." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
 
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Medico","apellidos":"Del Crud",
-                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
-                                """.formatted(correo, CLAVE, juntaUnica())))
-                .andExpect(status().is2xxSuccessful());
-
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
+        crearMedicoHabilitado(correo, CLAVE, "Medico", "Del Crud");
 
         String cuerpo = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -469,8 +458,8 @@ class PacienteCrudIT extends PruebaDeIntegracion {
     @Test
     @DisplayName("una persona incompleta necesita fecha y sexo para volverse paciente")
     void unaPersonaIncompletaNecesitaFechaYSexo() throws Exception {
-        // Es el caso que se detecto usando la pantalla: un medico registrado por
-        // /auth/register tiene persona con solo nombres y apellidos. Al llegar
+        // Es el caso que se detecto usando la pantalla: un medico dado de alta
+        // sin datos de paciente tiene persona con solo nombres y apellidos. Al llegar
         // como paciente debe poder completarse en la MISMA llamada, no quedar
         // bloqueado.
         var persona = personas.saveAndFlush(

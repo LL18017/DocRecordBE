@@ -39,25 +39,7 @@ class EnlaceDeConfirmacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("registro publico: el enlace apunta a la API bajo /api, no a una ruta del frontend")
-    void elRegistroPublicoUsaLaDireccionPublicaDeLaApi() throws Exception {
-        clearInvocations(correoDePruebas);
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Ana","apellidos":"Melendez",
-                                 "email":"enlace.publico.%d@ues.edu.sv","password":"%s","especialidadId":1,"registroJunta":"%s"}
-                                """.formatted(CONTADOR.incrementAndGet(), CLAVE, juntaUnica())))
-                .andExpect(status().isCreated());
-
-        String texto = enlaceDelUltimoCorreo();
-        assertTrue(texto.contains(ESPERADO), "el enlace debe ir sobre app.api.url.\n" + texto);
-        assertTrue(!texto.contains("http://localhost/auth/confirm"),
-                "no debe quedar el enlace armado con la direccion de la peticion.\n" + texto);
-    }
-
-    @Test
-    @DisplayName("alta hecha por un administrador: el mismo enlace, sobre la direccion publica de la API")
+    @DisplayName("alta hecha por un administrador: el enlace apunta a la API bajo /api, no a una ruta del frontend")
     void elAltaDelAdministradorUsaLaDireccionPublicaDeLaApi() throws Exception {
         String admin = tokenDeAdministrador();
         clearInvocations(correoDePruebas);
@@ -71,5 +53,7 @@ class EnlaceDeConfirmacionIT extends PruebaClinica {
 
         String texto = enlaceDelUltimoCorreo();
         assertTrue(texto.contains(ESPERADO), "el enlace debe ir sobre app.api.url.\n" + texto);
+        assertTrue(!texto.contains("http://localhost/auth/confirm"),
+                "no debe quedar el enlace armado con la direccion de la peticion.\n" + texto);
     }
 }

@@ -18,15 +18,13 @@ respondan 201: lo que la tutora va a hacer es entrar, y eso es lo que se
 comprueba. Devuelve 0 si las cuatro entran, 1 si alguna no.
 
 ── Por qué cada cuenta se crea distinto ────────────────────────────────────
-MEDICO no se puede crear con POST /user + POST /user/{id}/role/2. El rol se
-asignaría, pero `medicos.especialidad_id` es NOT NULL y addRole no puede
-inventar una especialidad, así que la cuenta quedaría sin fila en `medicos`:
-pasa el hasRole('MEDICO') del controlador y el servicio la rechaza con 403
-después (ver el comentario en UserService.addRole). La única alta que crea esa
-fila es POST /auth/register, que sí pide la especialidad.
+MEDICO se crea como las demás, con POST /user, y al darle el rol 2 se mandan
+la especialidad, la sede y el número de junta: con eso addRole crea su fila en
+`medicos`. Antes salía de POST /auth/register, que se retiró (HU-02).
 
-ENFERMERA sí puede: asignar el rol 3 crea su ficha en `enfermeras` sola, que es
-justo lo que UserService.addRole hace a propósito.
+ENFERMERA también: asignar el rol 3 crea su ficha en `enfermeras` sola. Las
+dos necesitan la sede en el mismo paso, porque una cuenta clínica sin ninguna
+sede no puede entrar a trabajar (addRole responde 400 sin clinicaId).
 
 ADMIN tiene un orden obligatorio -- contraseña ANTES de asignar el rol. Al
 revés no se puede: UserService.asignarContrasena prohíbe que un administrador
@@ -53,6 +51,7 @@ import getpass
 import json
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 BASE = ""
@@ -96,6 +95,8 @@ CUENTAS = [
         "apellidos": "Demo",
         "rol_id": ROL_MEDICO,
         "rol": "MEDICO",
+        # HU-02 c1: sin número de junta no se da el rol de médico.
+        "registroJunta": "JVPM-DEMO-0001",
     },
     {
         "email": "enfermera.demo@docrecordsv.sv",
@@ -236,23 +237,13 @@ def crear_cuenta(token, cuenta, especialidad_id):
         print(f"  {cuenta['email']}: ya existe (id {existente['userId']})")
         return existente["userId"], existente
 
-    if cuenta["rol"] == "MEDICO":
-        # La única alta que crea la fila en `medicos`. Ver la cabecera.
-        cod, cuerpo = pedir("/auth/register", {
-            "nombres": cuenta["nombres"],
-            "apellidos": cuenta["apellidos"],
-            "email": cuenta["email"],
-            "password": cuenta["password"],
-            "especialidadId": especialidad_id,
-        })
-    else:
-        # `userName` se parte por el primer espacio en nombres/apellidos
-        # (UserService.dividirNombreCompleto), así que va el nombre completo.
-        cod, cuerpo = pedir("/user", {
-            "email": cuenta["email"],
-            "userName": f"{cuenta['nombres']} {cuenta['apellidos']}",
-            "password": cuenta["password"],
-        }, token=token)
+    # `userName` se parte por el primer espacio en nombres/apellidos
+    # (UserService.dividirNombreCompleto), así que va el nombre completo.
+    cod, cuerpo = pedir("/user", {
+        "email": cuenta["email"],
+        "userName": f"{cuenta['nombres']} {cuenta['apellidos']}",
+        "password": cuenta["password"],
+    }, token=token)
 
     if cod not in (200, 201):
         raise SystemExit(f"No se pudo crear {cuenta['email']} (HTTP {cod}): {detalle(cuerpo)}")
@@ -281,14 +272,23 @@ def habilitar(token, user_id, cuenta, existente):
     return True
 
 
-def asignar_rol(token, user_id, cuenta):
-    """El rol. Un 409 significa que ya lo tiene, que es el estado buscado."""
+def asignar_rol(token, user_id, cuenta, clinica_id, especialidad_id):
+    """El rol. Un 409 significa que ya lo tiene, que es el estado buscado.
+
+    MEDICO y ENFERMERA llevan la sede; MEDICO además la especialidad y la
+    junta, con las que se crea su ficha. Ver la cabecera.
+    """
+    parametros = {}
+    if cuenta["rol"] in ("MEDICO", "ENFERMERA"):
+        parametros["clinicaId"] = clinica_id
     if cuenta["rol"] == "MEDICO":
-        # /auth/register ya lo asignó junto con la fila en `medicos`.
-        return
-    cod, cuerpo = pedir(f"/user/{user_id}/role/{cuenta['rol_id']}", token=token, metodo="POST")
+        parametros["especialidadId"] = especialidad_id
+        parametros["registroJunta"] = cuenta["registroJunta"]
+    query = ("?" + urllib.parse.urlencode(parametros)) if parametros else ""
+    cod, cuerpo = pedir(f"/user/{user_id}/role/{cuenta['rol_id']}{query}", token=token, metodo="POST")
     if cod in (200, 201):
-        extra = " (y su ficha en enfermería)" if cuenta["rol"] == "ENFERMERA" else ""
+        extra = {"ENFERMERA": " (y su ficha en enfermería)",
+                 "MEDICO": " (y su ficha de médico)"}.get(cuenta["rol"], "")
         print(f"  {cuenta['email']}: rol {cuenta['rol']} asignado{extra}")
     elif cod == 409:
         print(f"  {cuenta['email']}: ya tenía el rol {cuenta['rol']}")
@@ -343,7 +343,7 @@ def main():
     for cuenta in CUENTAS:
         user_id, existente = crear_cuenta(token, cuenta, especialidad_id)
         habilitar(token, user_id, cuenta, existente)
-        asignar_rol(token, user_id, cuenta)
+        asignar_rol(token, user_id, cuenta, clinica_id, especialidad_id)
         asignar_clinica(token, user_id, cuenta, clinica_id)
 
     # Lo único que demuestra que quedó utilizable. Las altas pueden responder

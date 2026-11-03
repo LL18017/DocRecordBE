@@ -95,7 +95,7 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
                 "el usuario creado debe tener el rol ADMIN");
 
         // La unica forma real de comprobar que la contrasena quedo cifrada
-        // con el encoder correcto (Argon2, el mismo que usa /auth/register):
+        // con el encoder correcto (Argon2, el mismo que usa POST /user):
         // iniciar sesion de verdad por HTTP con la contrasena EN TEXTO PLANO
         // y que el AuthenticationProvider real la valide contra el hash
         // guardado. Comprobar solo que la columna `password` no esta vacia no

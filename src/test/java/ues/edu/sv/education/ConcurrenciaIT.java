@@ -49,7 +49,7 @@ class ConcurrenciaIT extends PruebaConServidorReal {
 
     // Estatico: cada @Test de JUnit 5 crea una INSTANCIA nueva de la clase
     // (lifecycle PER_METHOD, el default), asi que un contador de instancia se
-    // reiniciaria a 0 en cada prueba. Como el registro por /auth/register
+    // reiniciaria a 0 en cada prueba. Como el alta de cada cuenta
     // COMITEA de verdad (no hay rollback entre pruebas de esta clase), dos
     // pruebas que reinician su contador generarian el mismo correo y la
     // segunda chocaria con 409 "correo ya registrado".
@@ -157,31 +157,13 @@ class ConcurrenciaIT extends PruebaConServidorReal {
 
     private String registrarMedicoYObtenerToken() throws Exception {
         String correo = "conc.medico." + contador.incrementAndGet() + "@ues.edu.sv";
-        HttpRequest registro = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:" + puerto + "/auth/register"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"nombres":"Medico","apellidos":"Concurrente","email":"%s",
-                         "password":"%s","especialidadId":1,"registroJunta":"%s"}
-                        """.formatted(correo, CLAVE, juntaUnica())))
-                .build();
-        try (HttpClient cliente = HttpClient.newHttpClient()) {
-            HttpResponse<String> r = cliente.send(registro, HttpResponse.BodyHandlers.ofString());
-            if (r.statusCode() / 100 != 2) {
-                throw new AssertionError("el registro del medico fallo: " + r.body());
-            }
-        }
-
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
+        crearMedicoHabilitado(correo, CLAVE, "Medico", "Concurrente");
 
         HttpResponse<String> login = iniciarSesion(correo);
         return json.readTree(login.body()).get("token").asText();
     }
 
-    /** Igual que registrarMedicoYObtenerToken: /auth/register ya crea la fila en `medicos`. */
+    /** Igual que registrarMedicoYObtenerToken: el alta ya crea la fila en `medicos`. */
     private String registrarMedicoConFilaYObtenerToken() throws Exception {
         return registrarMedicoYObtenerToken();
     }
@@ -190,32 +172,14 @@ class ConcurrenciaIT extends PruebaConServidorReal {
      * Da de alta una enfermera y devuelve su token.
      *
      * Hace falta porque el triage es ahora REQUISITO de la consulta (ver
-     * ConsultaService.crear) y solo enfermeria puede registrar constantes. El
-     * rol se cambia a mano despues de /auth/register -que solo crea MEDICOS-
-     * y la fila de `enfermeras` se inserta por JDBC: es montaje de la prueba,
-     * no lo que se esta midiendo.
+     * ConsultaService.crear) y solo enfermeria puede registrar constantes. Se
+     * parte de un medico y se le cambia el rol a mano, y la fila de
+     * `enfermeras` se inserta por JDBC: es montaje de la prueba, no lo que se
+     * esta midiendo.
      */
     private String crearEnfermeraYObtenerToken() throws Exception {
         String correo = "conc.enfermera." + contador.incrementAndGet() + "@ues.edu.sv";
-        HttpRequest registro = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:" + puerto + "/auth/register"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"nombres":"Enfermera","apellidos":"Concurrente","email":"%s",
-                         "password":"%s","especialidadId":1,"registroJunta":"%s"}
-                        """.formatted(correo, CLAVE, juntaUnica())))
-                .build();
-        try (HttpClient cliente = HttpClient.newHttpClient()) {
-            HttpResponse<String> r = cliente.send(registro, HttpResponse.BodyHandlers.ofString());
-            if (r.statusCode() / 100 != 2) {
-                throw new AssertionError("el registro de la enfermera fallo: " + r.body());
-            }
-        }
-
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
+        User usuario = crearMedicoHabilitado(correo, CLAVE, "Enfermera", "Concurrente");
 
         Long personaId = usuario.getPersona().getPersonaId();
         jdbc.update("delete from user_roles where user_id = ?", usuario.getUserID());

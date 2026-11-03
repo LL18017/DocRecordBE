@@ -70,21 +70,10 @@ class EstadoDeUsuarioIT extends PruebaClinica {
                 .andReturn().getResponse().getStatus();
     }
 
-    /** Registra un medico por la API publica, lo habilita y devuelve su correo. */
-    private String crearMedicoHabilitado() throws Exception {
+    /** Crea un medico habilitado y devuelve su correo. */
+    private String crearMedicoHabilitado() {
         String correo = correoUnico("estado.medico");
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Medico","apellidos":"Con Especialidad",
-                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
-                                """.formatted(correo, CLAVE, juntaUnica())))
-                .andExpect(status().is2xxSuccessful());
-
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
+        crearMedicoHabilitado(correo, CLAVE, "Medico", "Con Especialidad");
         return correo;
     }
 

@@ -21,8 +21,6 @@ import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
 import ues.edu.sv.education.model.dto.auth.RecuperacionRequestDto;
 import ues.edu.sv.education.model.dto.auth.RecuperacionResponseDto;
 import ues.edu.sv.education.model.dto.auth.RestablecerContrasenaRequestDto;
-import ues.edu.sv.education.model.dto.auth.RegistroMedicoRequestDto;
-import ues.edu.sv.education.model.dto.auth.RegistroMedicoResponseDto;
 import ues.edu.sv.education.model.dto.auth.UserLoginDto;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
@@ -107,25 +105,11 @@ public class AuthController {
         return ResponseEntity.ok(authService.refresh(token));
     }
 
-    @Operation(
-            summary = "Registrar médico",
-            description = "Autogestion publica: crea persona + usuario + medico con rol MEDICO. El rol no es configurable por el cliente."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Cuenta creada exitosamente. Revisar "
-                    + "correoDeVerificacionEnviado: si viene en false la cuenta existe pero el correo "
-                    + "de confirmacion no se pudo enviar, y hay que decirselo al usuario en vez de "
-                    + "mandarlo a revisar una bandeja donde no va a llegar nada"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos (nombres, apellidos, email, contraseña, especialidad o número de junta faltantes/incorrectos)"),
-            @ApiResponse(responseCode = "404", description = "La especialidad indicada no existe"),
-            @ApiResponse(responseCode = "409", description = "\"Este correo ya está registrado\" (cuenta confirmada), o el número de junta ya pertenece a otro médico")
-    })
-    @PostMapping("/register")
-    public ResponseEntity<RegistroMedicoResponseDto> registrarMedico(@Valid @RequestBody RegistroMedicoRequestDto request) {
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(authService.registrarMedico(request));
-    }
+    // Aqui vivia POST /auth/register, el alta publica de medicos. Se retiro
+    // (HU-02): darse de alta solo, sin que nadie verificara la junta, abria
+    // todos los expedientes a cualquiera. Al medico lo da de alta el
+    // administrador, con su especialidad, su sede y su numero de junta (ver
+    // UserControler: POST /user y POST /user/{id}/role/{roleId}).
 
     /**
      * HU-04, paso 1: pedir el enlace para restablecer la contraseña.
@@ -140,7 +124,7 @@ public class AuthController {
      * Ese diseño tiene una consecuencia visible para el cliente y conviene que
      * esté escrita: esta respuesta NO significa que el correo se haya enviado,
      * y nunca va a significarlo. Un campo tipo correoDeVerificacionEnviado
-     * -como el que sí devuelve /auth/register- sería justo la filtración que
+     * -como el que devolvía el registro público, ya retirado- sería justo la filtración que
      * la historia prohíbe.
      */
     @Operation(

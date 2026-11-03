@@ -5,10 +5,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,23 +40,30 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *     lleva los argumentos en un orden que es facil invertir, y al hacerlo el
  *     usuario ve el codigo HTML crudo. Compila y "manda el correo" igual.
  */
-@AutoConfigureMockMvc
-class CorreoDeConfirmacionIT extends PruebaDeIntegracion {
+class CorreoDeConfirmacionIT extends PruebaClinica {
 
-    @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
 
     private static final AtomicInteger CONTADOR = new AtomicInteger();
-    private static final String CLAVE = "Docrecord2026!";
+    private static final String NOMBRE = "Ana Melendez";
 
-    /** Registra una cuenta nueva y devuelve el correo que se le mando. */
+    /**
+     * Da de alta una cuenta nueva -como administrador, que es la unica alta
+     * desde que se retiro el registro publico (HU-02)- y devuelve el correo
+     * que se le mando.
+     */
     private MimeMessage registrarYCapturarElCorreo(String correo) throws Exception {
-        mockMvc.perform(post("/auth/register")
+        String admin = tokenDeAdministrador();
+        // El inicio de sesion del administrador no manda correo (el procesador
+        // de eventos no corre en pruebas), pero se limpia por si acaso: aqui
+        // solo interesa el de la cuenta nueva.
+        clearInvocations(correoDePruebas);
+        mockMvc.perform(post("/user")
+                        .header("Authorization", bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"nombres":"Ana","apellidos":"Melendez",
-                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
-                                """.formatted(correo, CLAVE, juntaUnica())))
+                                {"email":"%s","userName":"%s","password":"%s"}
+                                """.formatted(correo, NOMBRE, CLAVE)))
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<MimeMessage> mensajes = ArgumentCaptor.forClass(MimeMessage.class);

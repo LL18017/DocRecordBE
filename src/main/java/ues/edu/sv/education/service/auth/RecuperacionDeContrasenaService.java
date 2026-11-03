@@ -63,7 +63,7 @@ public class RecuperacionDeContrasenaService {
     private final UserRepository userRepository;
     private final TokenDeRestablecimientoRepository tokenRepository;
     private final EmailService emailService;
-    // El mismo Argon2PasswordEncoder que /auth/register y POST /user/{id}/password
+    // El mismo Argon2PasswordEncoder que POST /user y POST /user/{id}/password
     // (Security/BasicConfiguration.passwordEncoder).
     private final PasswordEncoder passwordEncoder;
 
@@ -309,9 +309,9 @@ public class RecuperacionDeContrasenaService {
      *
      * Se acepta el precio: quien nunca recibio su correo de confirmacion puede
      * cambiar la contrasena aqui y aun asi recibir "Usuario no ha confirmado
-     * su cuenta aun" al entrar. No queda atrapado -- volver a registrarse con
-     * el mismo correo regenera el enlace de confirmacion mientras la cuenta
-     * siga sin confirmar (ver AuthService.registrarMedico) -- pero es un
+     * su cuenta aun" al entrar. No queda atrapado -- el administrador puede
+     * reenviarle el enlace de confirmacion (UserService.reenviarConfirmacion)
+     * -- pero es un
      * rodeo. La solucion de verdad es separar las dos ideas en dos columnas,
      * y eso le toca a HU-05, no a esta historia.
      *

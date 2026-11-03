@@ -4,17 +4,30 @@ import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import ues.edu.sv.education.model.entity.Medico;
+import ues.edu.sv.education.model.entity.Persona;
+import ues.edu.sv.education.model.entity.User;
+import ues.edu.sv.education.model.enums.RolesEnum;
+import ues.edu.sv.education.repository.EspecialidadRepository;
+import ues.edu.sv.education.repository.MedicoRepository;
+import ues.edu.sv.education.repository.PersonaRepository;
+import ues.edu.sv.education.repository.RoleRepository;
+import ues.edu.sv.education.repository.UserRepository;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * Base de las pruebas de integracion: levanta el contexto de Spring contra una
@@ -55,9 +68,9 @@ import java.util.Properties;
 public abstract class PruebaDeIntegracion {
 
     /**
-     * Numero de junta de vigilancia distinto en cada llamada, para registrar
-     * medicos por /auth/register (HU-02 criterio 1): la columna es UNIQUE. Se
-     * parte de la hora para que dos corridas sobre la misma base no repitan.
+     * Numero de junta de vigilancia distinto en cada llamada (HU-02 criterio
+     * 1): la columna es UNIQUE. Se parte de la hora para que dos corridas sobre
+     * la misma base no repitan.
      */
     private static final java.util.concurrent.atomic.AtomicLong JUNTAS =
             new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis() % 100_000_000L);
@@ -89,6 +102,47 @@ public abstract class PruebaDeIntegracion {
      */
     @MockitoBean
     protected JavaMailSender correoDePruebas;
+
+    // Para crearMedicoHabilitado. Nombres propios para no chocar con los
+    // campos que ya declaran las subclases.
+    @Autowired private PersonaRepository personasDeMontaje;
+    @Autowired private UserRepository usuariosDeMontaje;
+    @Autowired private RoleRepository rolesDeMontaje;
+    @Autowired private MedicoRepository medicosDeMontaje;
+    @Autowired private EspecialidadRepository especialidadesDeMontaje;
+    @Autowired private PasswordEncoder encoderDeMontaje;
+
+    /**
+     * Crea un medico listo para iniciar sesion: cuenta habilitada con rol
+     * MEDICO y ficha con especialidad (la 1) y numero de junta.
+     *
+     * Antes las pruebas se hacian su medico por /auth/register, que se retiro
+     * (HU-02): al medico lo da de alta el administrador, y ese camino tiene sus
+     * pruebas propias en AltaDeMedicoIT. Aqui es montaje, asi que va por
+     * repositorio. No le da sede: iniciar sesion no la exige.
+     */
+    protected User crearMedicoHabilitado(String correo, String clave, String nombres, String apellidos) {
+        Persona persona = personasDeMontaje.saveAndFlush(Persona.builder()
+                .nombres(nombres).apellidos(apellidos)
+                .build());
+
+        User usuario = usuariosDeMontaje.saveAndFlush(User.builder()
+                .persona(persona)
+                .email(correo)
+                .password(encoderDeMontaje.encode(clave))
+                .enabled(true)
+                .roles(new HashSet<>(Set.of(rolesDeMontaje.getReferenceById(RolesEnum.MEDICO.getId()))))
+                .build());
+
+        // Ojo: no fijar personaId a mano; con @MapsId lo deriva de la persona.
+        medicosDeMontaje.saveAndFlush(Medico.builder()
+                .persona(persona)
+                .especialidad(especialidadesDeMontaje.getReferenceById(1L))
+                .registroJunta(juntaUnica())
+                .activo(true)
+                .build());
+        return usuario;
+    }
 
     /**
      * Le ensena al emisor simulado a fabricar mensajes.

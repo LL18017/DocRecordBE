@@ -29,9 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Apoyo comun de las pruebas del dominio clinico (consultas y recetas).
  *
  * Existe porque estas pruebas necesitan algo que las anteriores no: usuarios de
- * roles DISTINTOS del de medico. Hasta ahora toda la suite se autenticaba con
- * un medico registrado por /auth/register, que es el unico alta que el sistema
- * expone; una enfermera o un administrador hay que fabricarlos a mano.
+ * roles DISTINTOS del de medico. Ninguna cuenta se crea por un endpoint
+ * publico (el registro de medicos se retiro, HU-02), asi que medicos,
+ * enfermeras y administradores se fabrican a mano.
  *
  * Se fabrican por repositorio y despues se inicia sesion por HTTP, de modo que
  * el token es real y pasa por el JwtFilter igual que en produccion. Autenticar
@@ -76,23 +76,18 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
     // Usuarios
     // ══════════════════════════════════════════════════════════════════════
 
-    /** Registra un medico por la API publica, lo habilita y devuelve su token. */
+    /**
+     * Crea un medico habilitado -cuenta, rol MEDICO y ficha con especialidad y
+     * numero de junta- y devuelve su token.
+     *
+     * Antes salia de /auth/register, que se retiro (HU-02): al medico lo da de
+     * alta el administrador. Como el alta por administrador ya tiene sus
+     * pruebas propias (AltaDeMedicoIT), aqui se fabrica por repositorio, que es
+     * montaje y no lo que se prueba.
+     */
     protected String tokenDeMedico() throws Exception {
         String correo = correoUnico("clinico.medico");
-
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Medico","apellidos":"Del Turno",
-                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
-                                """.formatted(correo, CLAVE, juntaUnica())))
-                .andExpect(status().is2xxSuccessful());
-
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
-
+        crearMedicoHabilitado(correo, CLAVE, "Medico", "Del Turno");
         return iniciarSesion(correo);
     }
 
@@ -154,8 +149,8 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
         return tokenDeAdminQueNoEjerce();
     }
 
-    private void crearUsuario(Persona persona, String correo, RolesEnum rol) {
-        usuarios.saveAndFlush(User.builder()
+    private User crearUsuario(Persona persona, String correo, RolesEnum rol) {
+        return usuarios.saveAndFlush(User.builder()
                 .persona(persona)
                 .email(correo)
                 .password(encoder.encode(CLAVE))
@@ -164,7 +159,7 @@ abstract class PruebaClinica extends PruebaDeIntegracion {
                 .build());
     }
 
-    private String iniciarSesion(String correo) throws Exception {
+    protected String iniciarSesion(String correo) throws Exception {
         String cuerpo = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

@@ -7,17 +7,12 @@ import org.springframework.mail.MailException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.auth.CustomUserDetails;
 import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
-import ues.edu.sv.education.model.dto.auth.RegistroMedicoRequestDto;
-import ues.edu.sv.education.model.dto.auth.RegistroMedicoResponseDto;
 import ues.edu.sv.education.model.dto.auth.UserLoginDto;
-import ues.edu.sv.education.model.dto.especialidad.EspecialidadResponseDto;
 import ues.edu.sv.education.model.entity.*;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
@@ -30,23 +25,15 @@ import ues.edu.sv.education.service.PlantillaDeCorreo;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
     private final UserRepository userRepository;
-    private final EnlaceDeConfirmacion enlaceDeConfirmacion;
-    private final PersonaRepository personaRepository;
-    private final EspecialidadRepository especialidadRepository;
-    private final MedicoRepository medicoRepository;
-    private final RoleRepository roleRepository;
     private final EventRepository eventRepository;
     private final EventTypeRepository eventTypeRepository;
     private final EventStatusRepository eventStatusRepository;
@@ -55,17 +42,7 @@ public class AuthService {
     private final UserAuthService service;
     private final JwtService jwtService;
     private final AuthenticationManager authManager;
-    private final PasswordEncoder passwordEncoder;
     private static final long TOKEN_EXPIRATION_HOURS = 24; // HU-02 criterio 3
-
-    /**
-     * Donde vive el formulario de registro, que es el mecanismo de reenvio del
-     * enlace de confirmacion: registrarse otra vez con el mismo correo
-     * sobreescribe la cuenta no confirmada y genera un token nuevo. El correo de
-     * "enlace vencido" manda ahi.
-     */
-    @Value("${app.frontend.url:http://localhost:3000}")
-    private String urlDelFrontend;
 
     /**
      * Autentica y deja registrado el evento que disparara el aviso por correo.
@@ -145,169 +122,12 @@ public class AuthService {
         );
     }
 
-    // /auth/register: autogestion publica de una cuenta de medico. Crea
-    // Persona + User + Medico en una sola transaccion; el rol MEDICO y la
-    // especialidad los decide el servidor y la especialidad recibida,
-    // nunca un rol elegido por el cliente (ver el commit de seguridad que
-    // le quito `roles` a este flujo).
-    @Transactional
-    public RegistroMedicoResponseDto registrarMedico(RegistroMedicoRequestDto request) {
-
-        Especialidad especialidad = especialidadRepository.findById(request.especialidadId())
-                .orElseThrow(() -> new NoResourceFoundException("Especialidad no encontrada", "404"));
-
-        Optional<User> userOptional = userRepository.findByEmailIgnoreCase(request.email());
-
-        User userToSave;
-        Persona persona;
-
-        // La junta identifica a UN medico (columna UNIQUE). Se normaliza igual
-        // que se guarda, y solo choca con la de OTRA persona: quien reintenta un
-        // registro sin confirmar vuelve a mandar la suya.
-        String registroJunta = request.registroJunta().trim().toUpperCase();
-        Long personaDeLaCuenta = userOptional.map(u -> u.getPersona().getPersonaId()).orElse(null);
-        medicoRepository.findByRegistroJuntaIgnoreCase(registroJunta)
-                .filter(otro -> !otro.getPersonaId().equals(personaDeLaCuenta))
-                .ifPresent(otro -> {
-                    throw new IllegalStateException("Este número de junta de vigilancia ya está registrado");
-                });
-
-        if (userOptional.isPresent()) {
-            User existingUser = userOptional.get();
-
-            if (existingUser.isEnabled()) {
-                throw new IllegalStateException("Este correo ya está registrado");
-            }
-
-            // Cuenta no confirmada: se sobreescribe con los datos nuevos
-            userToSave = existingUser;
-            persona = existingUser.getPersona();
-            persona.setNombres(request.nombres());
-            persona.setApellidos(request.apellidos());
-            personaRepository.save(persona);
-            userToSave.setPassword(passwordEncoder.encode(request.password()));
-
-            // Invalida cualquier token anterior de esta cuenta
-            verificationTokenRepository.deleteAllByUser(existingUser);
-
-        } else {
-            persona = personaRepository.save(
-                    Persona.builder()
-                            .nombres(request.nombres())
-                            .apellidos(request.apellidos())
-                            .build()
-            );
-            userToSave = User.builder()
-                    .persona(persona)
-                    .email(request.email())
-                    .password(passwordEncoder.encode(request.password()))
-                    .roles(new HashSet<>())
-                    .build();
-        }
-
-        Role medico = roleRepository.getReferenceById(RolesEnum.MEDICO.getId());
-        // HashSet, no Set.of(): al reintentar un registro no confirmado
-        // userToSave es una entidad ya persistida, y Hibernate reemplaza la
-        // coleccion de roles vaciandola primero. Set.of(...) es inmutable y
-        // esa limpieza revienta con UnsupportedOperationException.
-        userToSave.setRoles(new HashSet<>(Set.of(medico)));
-
-        // El usuario queda deshabilitado hasta que confirme el correo
-        userToSave.setEnabled(false);
-
-        User savedUser = userRepository.save(userToSave);
-
-        // Reintento de un registro no confirmado: reutiliza la fila de
-        // medicos que ya existia para esa persona en vez de duplicarla.
-        // OJO: no fijar personaId a mano en el builder de abajo. Con @MapsId
-        // el id se deriva de `persona` al persistir; si el campo @Id ya trae
-        // valor, Spring Data asume que la fila existe y hace merge() en vez
-        // de persist(), y Hibernate revienta con "null identifier" porque
-        // esta fila nunca se guardo antes.
-        Medico medicoEntity = medicoRepository.findById(persona.getPersonaId())
-                .orElseGet(() -> Medico.builder()
-                        .persona(persona)
-                        .activo(true)
-                        .build());
-        medicoEntity.setEspecialidad(especialidad);
-        medicoEntity.setRegistroJunta(registroJunta);
-        medicoRepository.save(medicoEntity);
-
-        // Generar y guardar el token de verificación
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = new VerificationToken(
-                null,
-                token,
-                savedUser,
-                LocalDateTime.now().plusHours(TOKEN_EXPIRATION_HOURS),
-                false
-        );
-        verificationTokenRepository.save(verificationToken);
-
-        // Enviar correo de confirmacion. Si falla NO se propaga: la cuenta ya
-        // esta creada y el token guardado, y eso vale mas que la notificacion.
-        boolean correoEnviado = enviarCorreoDeVerificacion(savedUser.getEmail(), persona.getNombres(), token);
-
-        return new RegistroMedicoResponseDto(
-                savedUser.getUserID(),
-                savedUser.getEmail(),
-                persona.getNombres(),
-                persona.getApellidos(),
-                List.of(medico.getName()),
-                new EspecialidadResponseDto(
-                        especialidad.getEspecialidadId(),
-                        especialidad.getNombre(),
-                        especialidad.isActiva()
-                ),
-                correoEnviado
-        );
-    }
-
-    /**
-     * Envia el correo de confirmacion y responde si salio o no.
-     *
-     * Crear la cuenta y avisar por correo NO valen lo mismo: la cuenta es el
-     * dato, el correo es una notificacion. Antes el envio iba dentro de la
-     * transaccion de alta y sin proteccion, asi que cualquier tropiezo de
-     * Gmail (credenciales rotadas, cuota agotada, SMTP caido) subia hasta el
-     * GlobalExceptionHandler y devolvia 500: nadie podia registrarse mientras
-     * un servicio EXTERNO estuviera mal. Aqui el fallo se absorbe y la cuenta
-     * sobrevive, deshabilitada y con su token valido, igual que siempre.
-     *
-     * Se captura MailException -la jerarquia de Spring para el envio, que
-     * envuelve las jakarta.mail.*Exception- y nada mas. Un catch de Exception
-     * o de RuntimeException se tragaria tambien los fallos de base de datos o
-     * los de programacion, que SI deben tumbar el registro y verse.
-     *
-     * @return true si el correo salio; false si el envio fallo.
-     */
-    private boolean enviarCorreoDeVerificacion(String toEmail, String nombre, String token) {
-        String link = enlaceDeConfirmacion.para(token);
-
-        // HashMap y no Map.of porque el nombre puede venir vacio y Map.of no
-        // acepta valores nulos; la plantilla ya sabe saludar sin nombre.
-        Map<String, Object> datos = new HashMap<>();
-        datos.put("nombre", nombre);
-        datos.put("enlace", link);
-        datos.put("horas", TOKEN_EXPIRATION_HOURS);
-
-        try {
-            emailService.enviarCorreo(toEmail, PlantillaDeCorreo.CONFIRMACION_DE_REGISTRO, datos);
-            return true;
-        } catch (MailException e) {
-            // Nivel error y con la excepcion completa: el stack trace lleva la
-            // respuesta del servidor SMTP (el "535-5.7.8 Username and Password
-            // not accepted" o el "454-4.7.0 Too many login attempts"), que es
-            // justo lo que hace falta para saber si hay que rotar la clave,
-            // esperar la cuota o revisar la red.
-            log.error("No se pudo enviar el correo de confirmacion a {}. La cuenta quedo creada y "
-                    + "deshabilitada, con token de verificacion valido por {} horas; el usuario "
-                    + "puede reintentar el registro para generar uno nuevo.",
-                    toEmail, TOKEN_EXPIRATION_HOURS, e);
-            return false;
-        }
-    }
-
+    // Aqui vivia registrarMedico, el alta publica de una cuenta de medico por
+    // /auth/register. Se retiro (HU-02, decision del PO): cualquiera podia
+    // darse de alta como medico y, con la cuenta confirmada, leer todos los
+    // expedientes. Ahora al medico lo da de alta el administrador: POST /user
+    // crea la cuenta y manda la confirmacion, y POST /user/{id}/role/{MEDICO}
+    // crea la ficha con especialidad y numero de junta (UserService.addRole).
 
     @Transactional
     public void confirmToken(String token) {
@@ -340,24 +160,22 @@ public class AuthService {
     /**
      * Avisa que el enlace de confirmacion ya no sirve y como conseguir otro.
      *
-     * El "como" no es obvio y por eso hace falta decirlo: no hay endpoint de
-     * reenvio, el mecanismo es volver a llenar el formulario de registro con el
-     * mismo correo. Mientras la cuenta siga sin confirmar eso no da error de
-     * duplicado; la sobreescribe y emite un token nuevo (ver registrarMedico,
-     * mas arriba).
+     * El "como": desde que no hay registro publico, las cuentas las crea el
+     * administrador, y es el quien manda un enlace nuevo (POST
+     * /user/{id}/confirmacion, UserService.reenviarConfirmacion). El correo le
+     * dice a la persona que se lo pida.
      *
      * Igual que en el registro, un fallo de correo se registra y se sigue: la
      * respuesta al usuario no depende de que el SMTP este de buenas.
      */
     private void avisarQueElEnlaceVencio(String toEmail) {
         Map<String, Object> datos = new HashMap<>();
-        datos.put("enlaceRegistro", urlDelFrontend + "/register");
         datos.put("horas", TOKEN_EXPIRATION_HOURS);
         try {
             emailService.enviarCorreo(toEmail, PlantillaDeCorreo.TOKEN_EXPIRADO, datos);
         } catch (MailException e) {
             log.error("No se pudo avisar a {} de que su enlace de confirmacion vencio. "
-                    + "Puede conseguir uno nuevo registrandose otra vez con el mismo correo.", toEmail, e);
+                    + "El administrador puede reenviarle la confirmacion.", toEmail, e);
         }
     }
 }

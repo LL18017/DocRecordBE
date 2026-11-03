@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * El rol pasaba el @PreAuthorize, pero consultas, recetas y antecedentes exigen
  * ademas la fila en `medicos` (MedicoAutenticado), y esa fila solo la creaba el
- * registro publico. La cuenta veia los botones y recibia 403 al guardar.
+ * registro publico (hoy retirado, HU-02). La cuenta veia los botones y recibia 403 al guardar.
  */
 class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
 
@@ -69,17 +69,6 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
         return new Cuenta(user, correo);
     }
 
-    private String iniciarSesion(String correo) throws Exception {
-        String cuerpo = mockMvc.perform(post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"%s"}
-                                """.formatted(correo, CLAVE)))
-                .andExpect(status().is2xxSuccessful())
-                .andReturn().getResponse().getContentAsString();
-        return json.readTree(cuerpo).get("token").asText();
-    }
-
     private String rutaDeRol(User user, RolesEnum rol) {
         return "/user/" + user.getUserID() + "/role/" + rol.getId();
     }
@@ -92,6 +81,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
         String cuerpo = mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .param("especialidadId", String.valueOf(especialidadId))
                         .param("clinicaId", String.valueOf(sede))
+                        .param("registroJunta", juntaUnica())
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -136,6 +126,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
         mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .param("especialidadId", String.valueOf(especialidadId))
                         .param("clinicaId", String.valueOf(sede))
+                        .param("registroJunta", juntaUnica())
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
         assertTrue(medicos.findById(cuenta.user().getPersona().getPersonaId()).isPresent());
@@ -150,6 +141,7 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
         mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .param("especialidadId", String.valueOf(especialidadId))
                         .param("clinicaId", String.valueOf(sede))
+                        .param("registroJunta", juntaUnica())
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
 

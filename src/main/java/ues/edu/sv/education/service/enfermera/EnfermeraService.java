@@ -71,7 +71,7 @@ public class EnfermeraService {
 
         Role rolEnfermera = roleRepository.getReferenceById(RolesEnum.ENFERMERA.getId());
 
-        // enabled = true, a diferencia de /auth/register, que deja la cuenta
+        // enabled = true, a diferencia de POST /user, que deja la cuenta
         // apagada hasta que llega el correo de confirmacion. Aqui el alta la
         // hace un administrador que ya respondio por esta persona: exigirle
         // ademas confirmar un correo no comprueba nada nuevo y deja a la

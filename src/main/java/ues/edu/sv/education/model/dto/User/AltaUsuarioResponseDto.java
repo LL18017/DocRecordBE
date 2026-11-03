@@ -20,8 +20,8 @@ public record AltaUsuarioResponseDto(
         @Schema(description = "Roles ya asignados. Nace vacio: se asigna con POST /user/{id}/role/{id}")
         List<RoleDto> roles,
 
-        // La cuenta se crea aunque el correo de confirmacion no salga -mismo
-        // criterio que RegistroMedicoResponseDto.correoDeVerificacionEnviado-.
+        // La cuenta se crea aunque el correo de confirmacion no salga: es el
+        // dato; el correo es una notificacion.
         // Este campo es lo unico que distingue los dos casos desde el cliente.
         @Schema(description = "true si el correo de confirmacion salio. Si es false la cuenta existe "
                 + "pero deshabilitada y sin aviso enviado: un administrador puede asignarle una "

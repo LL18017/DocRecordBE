@@ -22,9 +22,9 @@ public record UserRequestDto(
         @Pattern(regexp = ReglaDeContrasena.PATRON, message = ReglaDeContrasena.MENSAJE)
         String password
 
-        // Sin `roles` ni `userType`: el rol de un registro publico
-        // (/auth/register) lo asigna el servidor, nunca el cliente -ver
-        // AuthService.registrarMedico-, y user_type ya no existe: el perfil
-        // se sabe por el rol y por la fila en medicos/enfermeras/pacientes.
+        // Sin `roles` ni `userType`: el rol se da despues, con
+        // POST /user/{id}/role/{roleId}, que es donde se piden la sede, la
+        // especialidad y la junta; y user_type ya no existe: el perfil se sabe
+        // por el rol y por la fila en medicos/enfermeras/pacientes.
 ) {
 }

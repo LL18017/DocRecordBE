@@ -26,8 +26,8 @@ import java.util.List;
  *
  * ── Quien puede que ────────────────────────────────────────────────────────
  * DAR DE ALTA y DAR DE BAJA: solo ADMIN. Quien registra en el expediente
- * clinico tiene que haber sido admitido por alguien que responde por ello; por
- * eso esto no cuelga de /auth/register, que es publico.
+ * clinico tiene que haber sido admitido por alguien que responde por ello. Es
+ * la misma regla que ahora siguen los medicos: no hay alta publica (HU-02).
  *
  * LEER: ADMIN y MEDICO. El medico lee las constantes firmadas por una
  * enfermera y necesita poder saber quien es; negarle el listado lo dejaria con

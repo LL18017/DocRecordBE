@@ -71,7 +71,7 @@ public class UserService {
     // HU-05 criterio 5: quien hizo que sobre las cuentas.
     private final BitacoraDeUsuarios bitacora;
     private final EnlaceDeConfirmacion enlaceDeConfirmacion;
-    // El mismo bean que usa /auth/register: Argon2PasswordEncoder, definido en
+    // El mismo bean que usa toda alta de contrasena: Argon2PasswordEncoder, definido en
     // Security/BasicConfiguration.passwordEncoder().
     private final PasswordEncoder passwordEncoder;
     // HU-02 criterio 3: el enlace de confirmacion vale 24 horas. Eran 5 minutos
@@ -176,7 +176,8 @@ public class UserService {
     // justo el estado que deja a alguien pasando el hasRole y recibiendo 403
     // del servicio, sin forma de entender por que.
     @Transactional
-    public UserResponseDto addRole(int userID, int roleID, Long especialidadId, Integer clinicaId) {
+    public UserResponseDto addRole(int userID, int roleID, Long especialidadId, Integer clinicaId,
+                                   String registroJunta) {
         User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
@@ -199,14 +200,28 @@ public class UserService {
         Optional<Medico> ficha = esMedico
                 ? medicoRepository.findById(user.getPersona().getPersonaId())
                 : Optional.empty();
+        // HU-02 c1: el numero de junta, si vino, se valida antes de tocar nada
+        // (formato y que no sea de otro medico). Cuando es obligatorio se
+        // decide abajo, segun haya o no ficha.
+        String junta = esMedico ? juntaNormalizada(registroJunta, user) : null;
+        boolean fichaSinJunta = ficha.map(Medico::getRegistroJunta)
+                .map(String::isBlank)
+                .orElse(true);
 
         if (user.getRoles().contains(role)) {
             // Cuentas a las que se les dio MEDICO antes de que esto creara la
             // ficha: volver a darlo con la especialidad las repara.
             if (esMedico && ficha.isEmpty() && especialidadId != null) {
-                Medico creada = asegurarFichaDeMedico(user, ficha, especialidadId);
+                exigirJunta(junta);
+                Medico creada = asegurarFichaDeMedico(user, ficha, especialidadId, junta);
                 asignarSedeSiFalta(user, sede);
                 return UserMapper.toDto(user, creada.getEspecialidad().getNombre(), sedesDe(user));
+            }
+            // Medicos dados de alta antes de exigir la junta: volver a darles el
+            // rol con su numero se lo completa.
+            if (esMedico && ficha.isPresent() && junta != null) {
+                Medico completada = asegurarFichaDeMedico(user, ficha, especialidadId, junta);
+                return UserMapper.toDto(user, completada.getEspecialidad().getNombre(), sedesDe(user));
             }
             throw new GeneralException("El usuario ya cuenta con este rol", "409");
         }
@@ -216,6 +231,11 @@ public class UserService {
         if (esMedico && ficha.isEmpty() && especialidadId == null) {
             throw new GeneralException(
                     "Para dar el rol de médico hay que indicar su especialidad", "400");
+        }
+        // Lo mismo con la junta (HU-02 c1): es lo que distingue a un medico
+        // habilitado de cualquier cuenta. Una ficha que ya la tiene no la pide.
+        if (esMedico && fichaSinJunta) {
+            exigirJunta(junta);
         }
         // Un medico o una enfermera trabaja en una sede: sin ninguna, la cuenta
         // se queda en la pantalla de seleccion de clinica sin poder entrar. Por
@@ -243,13 +263,14 @@ public class UserService {
         // que le falta.
         //
         // La ficha de medico lleva la especialidad (`especialidad_id` es NOT
-        // NULL), por eso con MEDICO se pide `especialidadId`. Antes esa alta
-        // solo pasaba por /auth/register.
+        // NULL) y el numero de junta, por eso con MEDICO se piden
+        // `especialidadId` y `registroJunta`. Desde que no hay registro
+        // publico, esta es la unica alta de medicos (HU-02).
         if (RolesEnum.ENFERMERA.getId() == roleID) {
             asegurarFichaDeEnfermeria(user);
         }
         if (esMedico) {
-            Medico medico = asegurarFichaDeMedico(user, ficha, especialidadId);
+            Medico medico = asegurarFichaDeMedico(user, ficha, especialidadId, junta);
             return UserMapper.toDto(user, medico.getEspecialidad().getNombre(), sedesDe(user));
         }
 
@@ -289,7 +310,8 @@ public class UserService {
      * `persona`; con el id puesto, Spring Data haria merge en vez de persist
      * (ver el mismo comentario en AuthService).
      */
-    private Medico asegurarFichaDeMedico(User user, Optional<Medico> ficha, Long especialidadId) {
+    private Medico asegurarFichaDeMedico(User user, Optional<Medico> ficha, Long especialidadId,
+                                         String registroJunta) {
         Especialidad especialidad = especialidadId == null
                 ? null
                 : especialidadRepository.findById(especialidadId)
@@ -303,7 +325,44 @@ public class UserService {
         if (especialidad != null) {
             medico.setEspecialidad(especialidad);
         }
+        if (registroJunta != null) {
+            medico.setRegistroJunta(registroJunta);
+        }
         return medicoRepository.save(medico);
+    }
+
+    /**
+     * El numero de junta que vino al dar el rol de medico, ya normalizado, o
+     * null si no vino.
+     *
+     * El formato es basico a proposito -3 a 20 letras, numeros o guiones, con
+     * al menos un numero-: la Junta no publica un patron unico (JVPM-1234,
+     * 12345, JVPM-ENF-4471 conviven) y rechazar uno legitimo es peor que dejar
+     * pasar uno raro. Se guarda en mayusculas. La columna es UNIQUE: la junta
+     * de otro medico es 409.
+     */
+    private String juntaNormalizada(String registroJunta, User user) {
+        if (registroJunta == null || registroJunta.isBlank()) return null;
+        String junta = registroJunta.trim().toUpperCase();
+        if (!junta.matches("^(?=.*\\d)[A-Z0-9-]{3,20}$")) {
+            throw new GeneralException("El número de junta de vigilancia no tiene un formato válido: use de 3 a 20 "
+                    + "letras, números o guiones, con al menos un número", "400");
+        }
+        Long persona = user.getPersona().getPersonaId();
+        medicoRepository.findByRegistroJuntaIgnoreCase(junta)
+                .filter(otro -> !otro.getPersonaId().equals(persona))
+                .ifPresent(otro -> {
+                    throw new GeneralException("Este número de junta de vigilancia ya está registrado", "409");
+                });
+        return junta;
+    }
+
+    /** HU-02 c1: sin numero de junta no hay medico. */
+    private static void exigirJunta(String junta) {
+        if (junta == null) {
+            throw new GeneralException(
+                    "Para dar el rol de médico hay que indicar su número de junta de vigilancia", "400");
+        }
     }
 
     /**
@@ -520,13 +579,13 @@ public class UserService {
      * copia de seguridad mal guardada- se llevaba las credenciales de todo el
      * personal de un expediente clinico; y como la gente reusa contrasenas, el
      * dano no se habria quedado en este sistema. Ahora pasa por el mismo
-     * PasswordEncoder (argon2) que /auth/register, que es el unico flujo que
-     * lo hacia bien.
+     * PasswordEncoder (argon2) que usaba el registro publico (ya retirado),
+     * que era el unico flujo que lo hacia bien.
      *
-     * ── Confirmacion por correo, igual que /auth/register ─────────────────
+     * ── Confirmacion por correo ───────────────────────────────────────────
      * Nace con enabled = false -lo fija UserMapper.toEntity- y ahora si se le
      * emite un VerificationToken y se manda el correo de confirmacion, mismo
-     * patron que AuthService.registrarMedico. Si el correo falla (MailException),
+     * patron que tenia el registro publico. Si el correo falla (MailException),
      * la cuenta se crea de todos modos -no depender de un SMTP externo para dar
      * de alta personal- y correoDeVerificacionEnviado sale en false para que el
      * cliente lo sepa. En ese caso el administrador tiene una salida aparte:

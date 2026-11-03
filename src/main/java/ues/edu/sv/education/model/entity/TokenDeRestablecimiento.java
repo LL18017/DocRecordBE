@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
  * consultas se acuerden de filtrar por el tipo -- y hoy hay tres que no
  * filtran nada, porque se escribieron cuando el tipo no existia:
  * findByToken (AuthService.confirmToken) y los dos deleteAllByUser
- * (UserService.asignarContrasena y AuthService.registrarMedico). La primera
+ * (UserService.asignarContrasena y el registro publico, ya retirado). La primera
  * convertiria cualquier correo de "confirma tu cuenta" en una forma de
  * cambiarle la contrasena a esa cuenta; las otras dos borrarian sin querer los
  * enlaces de recuperacion pendientes.
