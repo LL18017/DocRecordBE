@@ -2,7 +2,9 @@ package ues.edu.sv.education.repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ues.edu.sv.education.model.entity.Prescripcion;
@@ -150,4 +152,16 @@ public interface PrescripcionRepository extends JpaRepository<Prescripcion, Long
       AND p.estado = ues.edu.sv.education.model.enums.EstadoPrescripcion.EMITIDA
 """)
     List<Prescripcion> buscarPorConsulta(Long consultaId);
+
+    /**
+     * La receta con bloqueo de escritura, para anularla (V35).
+     *
+     * Sin el bloqueo, dos anulaciones simultaneas -o una anulacion directa y
+     * la ultima aprobacion de una solicitud- leerian ambas el documento vigente
+     * y la segunda pisaria el motivo y la autoria de la primera. Mismo caso que
+     * SignosVitalesRepository.buscarParaAnular.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Prescripcion p where p.prescripcionId = :id")
+    Optional<Prescripcion> buscarParaAnular(@Param("id") Long id);
 }

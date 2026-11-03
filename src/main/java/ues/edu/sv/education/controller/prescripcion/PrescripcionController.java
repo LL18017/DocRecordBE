@@ -18,6 +18,7 @@ import ues.edu.sv.education.model.dto.prescripcion.DecisionDeAlertaDto;
 import ues.edu.sv.education.model.dto.prescripcion.AnulacionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
+import ues.edu.sv.education.service.anulacion.AnulacionService;
 import ues.edu.sv.education.service.prescripcion.PrescripcionService;
 
 import java.time.LocalDate;
@@ -39,7 +40,9 @@ import java.util.List;
  * <p>
  * ANULAR: ADMIN, o el MEDICO que la firmo. Una receta mal capturada hay que
  * poder invalidarla, pero no borrarla ni editarla: se anula con motivo y se
- * emite otra (HU-22). El DELETE fisico que habia aqui se retiro.
+ * emite otra (HU-22). El DELETE fisico que habia aqui se retiro. Pasada la
+ * ventana de anulacion directa la anulacion necesita aprobacion (ver
+ * AnulacionService).
  */
 @Slf4j
 @RestController
@@ -50,6 +53,7 @@ import java.util.List;
 public class PrescripcionController {
 
     private final PrescripcionService prescripcionService;
+    private final AnulacionService anulacionService;
 
     @Operation(
             summary = "Emitir una receta",
@@ -168,14 +172,22 @@ public class PrescripcionController {
             summary = "Anular una receta",
             description = "Anulacion logica (HU-22): la receta pasa a ANULADA con el motivo, quien y cuando, y "
                     + "sigue visible, marcada. NO se borra ni se edita; para corregirla se anula y se emite "
-                    + "otra. Solo un ADMIN o el medico que la firmo (403 en otro caso). 409 si ya estaba "
-                    + "anulada; 400 si falta el motivo (10 a 500 caracteres); 404 si no existe."
+                    + "otra. Solo un ADMIN o el medico que la firmo (403 en otro caso). "
+                    + "Dentro de la ventana de anulacion directa (GET /anulaciones/parametros) responde 200 con "
+                    + "la receta ya ANULADA. Pasada la ventana responde 202 con una solicitud de anulacion que "
+                    + "deben aprobar otros administradores; mientras tanto la receta sigue EMITIDA. "
+                    + "409 si ya estaba anulada, si ya hay una solicitud en curso o si paso el tope de dias; "
+                    + "400 si falta el motivo (10 a 500 caracteres); 404 si no existe."
     )
     @PostMapping("/{prescripcionId}/anular")
     @PreAuthorize("hasAnyRole('ADMIN','MEDICO')")
-    public ResponseEntity<PrescripcionResponseDto> anular(
+    public ResponseEntity<?> anular(
             @PathVariable("prescripcionId") Long prescripcionId,
             @Valid @RequestBody AnulacionRequestDto request) {
-        return ResponseEntity.ok(prescripcionService.anular(prescripcionId, request.motivo()));
+        AnulacionService.Resultado resultado = anulacionService.anularReceta(prescripcionId, request.motivo());
+        if (resultado.anulado()) {
+            return ResponseEntity.ok(prescripcionService.obtener(prescripcionId));
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resultado.solicitud());
     }
 }

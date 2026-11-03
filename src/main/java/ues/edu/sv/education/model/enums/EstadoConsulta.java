@@ -13,8 +13,13 @@ package ues.edu.sv.education.model.enums;
  * Como consecuencia, y esto es deliberado, solo un medico puede cerrar una
  * consulta: cerrarla es escribir el diagnostico, y el diagnostico es
  * exclusivo del medico (ver ConsultaService).
+ *
+ * ANULADA es la excepcion: no sale del diagnostico sino de un acto explicito
+ * (HU-21, ver AnulacionService). Una consulta anulada sigue en el expediente,
+ * marcada, y ya no se edita ni recibe recetas. No vuelve a ningun otro estado.
  */
 public enum EstadoConsulta {
     PENDIENTE,
-    FINALIZADA
+    FINALIZADA,
+    ANULADA
 }

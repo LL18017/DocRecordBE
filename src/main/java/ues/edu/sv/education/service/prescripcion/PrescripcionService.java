@@ -5,7 +5,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
@@ -21,6 +20,7 @@ import ues.edu.sv.education.model.dto.prescripcion.MedicoFirmaDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionRequestDto;
 import ues.edu.sv.education.model.dto.prescripcion.PrescripcionResponseDto;
 import ues.edu.sv.education.model.entity.*;
+import ues.edu.sv.education.model.enums.EstadoConsulta;
 import ues.edu.sv.education.model.enums.EstadoPrescripcion;
 import ues.edu.sv.education.model.enums.EventCodeEnums;
 import ues.edu.sv.education.model.enums.EventStatusEnums;
@@ -87,6 +87,12 @@ public class PrescripcionService {
         if (!consulta.getMedico().getPersonaId().equals(medico.getPersonaId())) {
             throw new GeneralException(
                     "Solo el médico que atendió la consulta puede emitir su receta", "403");
+        }
+
+        // HU-21: una consulta anulada no debio existir; una receta nueva sobre
+        // ella seria un documento vigente colgado de una atencion invalida.
+        if (consulta.getEstado() == EstadoConsulta.ANULADA) {
+            throw new GeneralException("La consulta está anulada: no se le pueden emitir recetas", "409");
         }
 
         // Una receta sin medicamentos no es una receta, es un papel firmado.
@@ -451,50 +457,9 @@ public class PrescripcionService {
         return toDto(receta, enviosDe(List.of(receta)));
     }
 
-    /**
-     * Anula una receta (HU-22, criterio 3). No la borra.
-     * <p>
-     * Una receta entregada es el documento con el que se despacha el
-     * medicamento: no puede cambiar de contenido ni desaparecer sin dejar
-     * rastro. Antes esta operacion era un DELETE fisico que se llevaba la
-     * receta y sus renglones; ahora la receta pasa a ANULADA con el motivo,
-     * quien y cuando, y sigue en el expediente, marcada. Para corregir una
-     * receta se anula y se emite otra.
-     * <p>
-     * Quien puede: un ADMIN (correccion de registro) o el medico que la firmo.
-     * Que cualquier medico pudiera anular la receta de otro es el mismo hueco
-     * que tenia el borrado de consultas. 409 si ya estaba anulada: el rastro
-     * original (motivo, autor, fecha) no se sobrescribe.
-     */
-    @Transactional
-    public PrescripcionResponseDto anular(Long prescripcionId, String motivo) {
-
-        Prescripcion prescripcion = buscarPrescripcionOFallar(prescripcionId);
-
-        if (!esAdmin()) {
-            Medico medico = medicoAutenticado.exigir();
-            if (!prescripcion.getMedico().getPersonaId().equals(medico.getPersonaId())) {
-                throw new GeneralException("Solo el médico que firmó la receta puede anularla", "403");
-            }
-        }
-
-        if (prescripcion.getEstado() == EstadoPrescripcion.ANULADA) {
-            throw new GeneralException("La receta ya estaba anulada", "409");
-        }
-
-        String motivoLimpio = textoONull(motivo);
-        if (motivoLimpio == null || motivoLimpio.length() < 10) {
-            throw new GeneralException("El motivo de la anulación debe tener al menos 10 caracteres", "400");
-        }
-
-        prescripcion.setEstado(EstadoPrescripcion.ANULADA);
-        prescripcion.setMotivoAnulacion(motivoLimpio);
-        prescripcion.setAnuladaEn(LocalDateTime.now());
-        prescripcion.setAnuladaPor(medicoAutenticado.usuario());
-
-        Prescripcion anulada = prescripcionRepository.save(prescripcion);
-        return toDto(anulada, enviosDe(List.of(anulada)));
-    }
+    // La anulacion de recetas vive en AnulacionService desde V35: es la misma
+    // regla de ventana y aprobacion que la de consultas, y anular una consulta
+    // anula sus recetas, asi que las dos tenian que estar en un solo lugar.
 
     /**
      * El PDF de una receta (HU-22, criterio 4): medico con su numero de junta
@@ -535,12 +500,6 @@ public class PrescripcionService {
         return java.util.stream.Stream.of(clinica.getDireccion(), clinica.getMunicipio(), clinica.getDepartamento())
                 .filter(t -> t != null && !t.isBlank())
                 .collect(Collectors.joining(", "));
-    }
-
-    private boolean esAdmin() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
     /**
