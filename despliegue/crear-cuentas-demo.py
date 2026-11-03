@@ -18,9 +18,10 @@ respondan 201: lo que la tutora va a hacer es entrar, y eso es lo que se
 comprueba. Devuelve 0 si las cuatro entran, 1 si alguna no.
 
 ── Por qué cada cuenta se crea distinto ────────────────────────────────────
-MEDICO se crea como las demás, con POST /user, y al darle el rol 2 se mandan
-la especialidad, la sede y el número de junta: con eso addRole crea su fila en
-`medicos`. Antes salía de POST /auth/register, que se retiró (HU-02).
+MEDICO va por su ficha (HU-02): primero POST /medicos, con la especialidad y
+el número de junta, y después POST /medicos/{id}/acceso con el correo y la
+sede, que crea la cuenta con el rol MEDICO. Usuarios y Roles ya no crea fichas
+de médico, y POST /auth/register se retiró.
 
 ENFERMERA también: asignar el rol 3 crea su ficha en `enfermeras` sola. Las
 dos necesitan la sede en el mismo paso, porque una cuenta clínica sin ninguna
@@ -230,7 +231,7 @@ def especialidad_por_defecto(token):
     return cuerpo[0]["especialidadId"]
 
 
-def crear_cuenta(token, cuenta, especialidad_id):
+def crear_cuenta(token, cuenta):
     """Da de alta la cuenta y devuelve su userId. Si ya existía, la reutiliza."""
     existente = buscar_usuario(token, cuenta["email"])
     if existente:
@@ -272,23 +273,63 @@ def habilitar(token, user_id, cuenta, existente):
     return True
 
 
-def asignar_rol(token, user_id, cuenta, clinica_id, especialidad_id):
+def medico_con_acceso(token, cuenta, especialidad_id, clinica_id):
+    """La ficha del médico de demostración y su acceso. Devuelve (userId, existente).
+
+    Idempotente como el resto: busca la ficha por su número de junta antes de
+    crearla, y darle acceso dos veces no duplica la cuenta.
+    """
+    cod, fichas = pedir("/medicos", token=token)
+    if cod != 200 or not isinstance(fichas, list):
+        raise SystemExit(f"No se pudo listar las fichas de médico (HTTP {cod}): {detalle(fichas)}")
+    ficha = next((f for f in fichas
+                  if (f.get("registroJunta") or "").upper() == cuenta["registroJunta"].upper()), None)
+
+    existente = buscar_usuario(token, cuenta["email"])
+    if ficha is None and existente:
+        # La cuenta ya estaba (de antes de las fichas): la ficha se cuelga de ella.
+        ficha = next((f for f in fichas
+                      if (f.get("cuenta") or {}).get("userId") == existente["userId"]), None)
+
+    if ficha is None:
+        cuerpo_ficha = {
+            "nombres": cuenta["nombres"],
+            "apellidos": cuenta["apellidos"],
+            "especialidadId": especialidad_id,
+            "registroJunta": cuenta["registroJunta"],
+        }
+        if existente:
+            cuerpo_ficha["userId"] = existente["userId"]
+        cod, ficha = pedir("/medicos", cuerpo_ficha, token=token)
+        if cod not in (200, 201):
+            raise SystemExit(f"No se pudo registrar la ficha de {cuenta['email']} (HTTP {cod}): {detalle(ficha)}")
+        print(f"  {cuenta['email']}: ficha de médico registrada")
+    else:
+        print(f"  {cuenta['email']}: ya tiene ficha de médico")
+
+    acceso = {"clinicaId": clinica_id}
+    if not ficha.get("cuenta"):
+        acceso["email"] = cuenta["email"]
+    cod, cuerpo = pedir(f"/medicos/{ficha['personaId']}/acceso", acceso, token=token)
+    if cod != 200:
+        raise SystemExit(f"No se pudo dar acceso a {cuenta['email']} (HTTP {cod}): {detalle(cuerpo)}")
+    print(f"  {cuenta['email']}: acceso con rol MEDICO y sede")
+    return cuerpo["medico"]["cuenta"]["userId"], existente
+
+
+def asignar_rol(token, user_id, cuenta, clinica_id):
     """El rol. Un 409 significa que ya lo tiene, que es el estado buscado.
 
-    MEDICO y ENFERMERA llevan la sede; MEDICO además la especialidad y la
-    junta, con las que se crea su ficha. Ver la cabecera.
+    ENFERMERA lleva la sede en el mismo paso. MEDICO no pasa por aquí: su rol
+    lo da el acceso desde la ficha (medico_con_acceso).
     """
     parametros = {}
-    if cuenta["rol"] in ("MEDICO", "ENFERMERA"):
+    if cuenta["rol"] == "ENFERMERA":
         parametros["clinicaId"] = clinica_id
-    if cuenta["rol"] == "MEDICO":
-        parametros["especialidadId"] = especialidad_id
-        parametros["registroJunta"] = cuenta["registroJunta"]
     query = ("?" + urllib.parse.urlencode(parametros)) if parametros else ""
     cod, cuerpo = pedir(f"/user/{user_id}/role/{cuenta['rol_id']}{query}", token=token, metodo="POST")
     if cod in (200, 201):
-        extra = {"ENFERMERA": " (y su ficha en enfermería)",
-                 "MEDICO": " (y su ficha de médico)"}.get(cuenta["rol"], "")
+        extra = " (y su ficha en enfermería)" if cuenta["rol"] == "ENFERMERA" else ""
         print(f"  {cuenta['email']}: rol {cuenta['rol']} asignado{extra}")
     elif cod == 409:
         print(f"  {cuenta['email']}: ya tenía el rol {cuenta['rol']}")
@@ -341,9 +382,13 @@ def main():
 
     print("\n== Cuentas")
     for cuenta in CUENTAS:
-        user_id, existente = crear_cuenta(token, cuenta, especialidad_id)
+        if cuenta["rol"] == "MEDICO":
+            user_id, existente = medico_con_acceso(token, cuenta, especialidad_id, clinica_id)
+            habilitar(token, user_id, cuenta, existente)
+            continue
+        user_id, existente = crear_cuenta(token, cuenta)
         habilitar(token, user_id, cuenta, existente)
-        asignar_rol(token, user_id, cuenta, clinica_id, especialidad_id)
+        asignar_rol(token, user_id, cuenta, clinica_id)
         asignar_clinica(token, user_id, cuenta, clinica_id)
 
     # Lo único que demuestra que quedó utilizable. Las altas pueden responder

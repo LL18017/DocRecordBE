@@ -64,7 +64,6 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final ClinicaRepository clinicaRepository;
     private final EnfermeraRepository enfermeraRepository;
-    private final EspecialidadRepository especialidadRepository;
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
@@ -171,13 +170,12 @@ public class UserService {
         return UserMapper.toDto(guardado);
     }
 
-    // @Transactional porque ahora hace DOS escrituras que tienen que ir juntas:
-    // el rol y, para ENFERMERA, su ficha. Media asignacion -rol sin ficha- es
-    // justo el estado que deja a alguien pasando el hasRole y recibiendo 403
-    // del servicio, sin forma de entender por que.
+    // @Transactional porque puede hacer DOS escrituras que tienen que ir
+    // juntas: el rol y, para ENFERMERA, su ficha. Media asignacion -rol sin
+    // ficha- es justo el estado que deja a alguien pasando el hasRole y
+    // recibiendo 403 del servicio, sin forma de entender por que.
     @Transactional
-    public UserResponseDto addRole(int userID, int roleID, Long especialidadId, Integer clinicaId,
-                                   String registroJunta) {
+    public UserResponseDto addRole(int userID, int roleID, Integer clinicaId) {
         User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
@@ -197,46 +195,25 @@ public class UserService {
                 : clinicaRepository.findById(clinicaId)
                         .orElseThrow(() -> new NoResourceFoundException(
                                 "No se encontro la clinica con id: " + clinicaId, "404"));
+
+        if (user.getRoles().contains(role)) {
+            throw new GeneralException("El usuario ya cuenta con este rol", "409");
+        }
+
+        // HU-02: el rol MEDICO ya no crea la ficha. La ficha -especialidad y
+        // numero de junta- se registra en Medicos (MedicoService), que es
+        // donde se da de alta a un medico; aqui solo se le da acceso a quien
+        // ya la tiene. Sin ficha seria un rol que pasa el hasRole y recibe 403
+        // al guardar una consulta, que es justo el estado roto que se evita.
         Optional<Medico> ficha = esMedico
                 ? medicoRepository.findById(user.getPersona().getPersonaId())
                 : Optional.empty();
-        // HU-02 c1: el numero de junta, si vino, se valida antes de tocar nada
-        // (formato y que no sea de otro medico). Cuando es obligatorio se
-        // decide abajo, segun haya o no ficha.
-        String junta = esMedico ? juntaNormalizada(registroJunta, user) : null;
-        boolean fichaSinJunta = ficha.map(Medico::getRegistroJunta)
-                .map(String::isBlank)
-                .orElse(true);
-
-        if (user.getRoles().contains(role)) {
-            // Cuentas a las que se les dio MEDICO antes de que esto creara la
-            // ficha: volver a darlo con la especialidad las repara.
-            if (esMedico && ficha.isEmpty() && especialidadId != null) {
-                exigirJunta(junta);
-                Medico creada = asegurarFichaDeMedico(user, ficha, especialidadId, junta);
-                asignarSedeSiFalta(user, sede);
-                return UserMapper.toDto(user, creada.getEspecialidad().getNombre(), sedesDe(user));
-            }
-            // Medicos dados de alta antes de exigir la junta: volver a darles el
-            // rol con su numero se lo completa.
-            if (esMedico && ficha.isPresent() && junta != null) {
-                Medico completada = asegurarFichaDeMedico(user, ficha, especialidadId, junta);
-                return UserMapper.toDto(user, completada.getEspecialidad().getNombre(), sedesDe(user));
-            }
-            throw new GeneralException("El usuario ya cuenta con este rol", "409");
-        }
-        // Se valida ANTES de tocar los roles: sin especialidad no se puede
-        // crear la ficha, y un rol MEDICO sin ficha es justo el estado roto
-        // que se quiere evitar.
-        if (esMedico && ficha.isEmpty() && especialidadId == null) {
+        if (esMedico && ficha.isEmpty()) {
             throw new GeneralException(
-                    "Para dar el rol de médico hay que indicar su especialidad", "400");
+                    "Esta cuenta no tiene ficha de médico: regístrela primero en Médicos, con su "
+                            + "especialidad y su número de junta, y dele acceso desde ahí", "409");
         }
-        // Lo mismo con la junta (HU-02 c1): es lo que distingue a un medico
-        // habilitado de cualquier cuenta. Una ficha que ya la tiene no la pide.
-        if (esMedico && fichaSinJunta) {
-            exigirJunta(junta);
-        }
+
         // Un medico o una enfermera trabaja en una sede: sin ninguna, la cuenta
         // se queda en la pantalla de seleccion de clinica sin poder entrar. Por
         // eso, a quien todavia no tiene sede, el rol clinico se da junto con
@@ -253,24 +230,19 @@ public class UserService {
         bitacora.registrar(user.getUserID(), BitacoraDeUsuario.ROL_ASIGNADO,
                 "Rol " + role.getName(), administrador.getEmail());
 
-        // Asignar un rol clinico crea tambien su ficha: `enfermeras` para
-        // ENFERMERA y `medicos` para MEDICO.
-        //
-        // Sin esto la asignacion queda a medias de la peor forma posible: la
-        // cuenta pasa el hasRole(...) del controlador y despues el servicio
-        // la rechaza con 403, porque lo que autoriza el acto clinico es la
-        // FILA, no la etiqueta del token. Quien lo sufre no tiene como saber
-        // que le falta.
-        //
-        // La ficha de medico lleva la especialidad (`especialidad_id` es NOT
-        // NULL) y el numero de junta, por eso con MEDICO se piden
-        // `especialidadId` y `registroJunta`. Desde que no hay registro
-        // publico, esta es la unica alta de medicos (HU-02).
+        // Asignar ENFERMERA crea tambien su ficha en `enfermeras`: sin ella la
+        // cuenta pasa el hasRole(...) y despues el servicio la rechaza con 403,
+        // porque lo que autoriza el acto clinico es la FILA, no la etiqueta del
+        // token.
         if (RolesEnum.ENFERMERA.getId() == roleID) {
             asegurarFichaDeEnfermeria(user);
         }
+        // La ficha de medico ya existe (se exigio arriba); si se habia dado de
+        // baja al quitarle el rol, darselo otra vez la reactiva.
         if (esMedico) {
-            Medico medico = asegurarFichaDeMedico(user, ficha, especialidadId, junta);
+            Medico medico = ficha.get();
+            medico.setActivo(true);
+            medicoRepository.save(medico);
             return UserMapper.toDto(user, medico.getEspecialidad().getNombre(), sedesDe(user));
         }
 
@@ -299,70 +271,6 @@ public class UserService {
         return user.getRoles().stream().anyMatch(r ->
                 RolesEnum.MEDICO.getName().equals(r.getName())
                         || RolesEnum.ENFERMERA.getName().equals(r.getName()));
-    }
-
-    /**
-     * Crea o reactiva la ficha de medico. `ficha` es la que ya existe, si
-     * existe; `especialidadId` solo es obligatorio cuando hay que crearla, y
-     * si viene con una ficha existente le cambia la especialidad.
-     *
-     * OJO: no fijar personaId en el builder. Con @MapsId lo deriva de
-     * `persona`; con el id puesto, Spring Data haria merge en vez de persist
-     * (ver el mismo comentario en AuthService).
-     */
-    private Medico asegurarFichaDeMedico(User user, Optional<Medico> ficha, Long especialidadId,
-                                         String registroJunta) {
-        Especialidad especialidad = especialidadId == null
-                ? null
-                : especialidadRepository.findById(especialidadId)
-                        .orElseThrow(() -> new NoResourceFoundException(
-                                "No se encontro la especialidad con id: " + especialidadId, "404"));
-
-        Medico medico = ficha.orElseGet(() -> Medico.builder()
-                .persona(user.getPersona())
-                .build());
-        medico.setActivo(true);
-        if (especialidad != null) {
-            medico.setEspecialidad(especialidad);
-        }
-        if (registroJunta != null) {
-            medico.setRegistroJunta(registroJunta);
-        }
-        return medicoRepository.save(medico);
-    }
-
-    /**
-     * El numero de junta que vino al dar el rol de medico, ya normalizado, o
-     * null si no vino.
-     *
-     * El formato es basico a proposito -3 a 20 letras, numeros o guiones, con
-     * al menos un numero-: la Junta no publica un patron unico (JVPM-1234,
-     * 12345, JVPM-ENF-4471 conviven) y rechazar uno legitimo es peor que dejar
-     * pasar uno raro. Se guarda en mayusculas. La columna es UNIQUE: la junta
-     * de otro medico es 409.
-     */
-    private String juntaNormalizada(String registroJunta, User user) {
-        if (registroJunta == null || registroJunta.isBlank()) return null;
-        String junta = registroJunta.trim().toUpperCase();
-        if (!junta.matches("^(?=.*\\d)[A-Z0-9-]{3,20}$")) {
-            throw new GeneralException("El número de junta de vigilancia no tiene un formato válido: use de 3 a 20 "
-                    + "letras, números o guiones, con al menos un número", "400");
-        }
-        Long persona = user.getPersona().getPersonaId();
-        medicoRepository.findByRegistroJuntaIgnoreCase(junta)
-                .filter(otro -> !otro.getPersonaId().equals(persona))
-                .ifPresent(otro -> {
-                    throw new GeneralException("Este número de junta de vigilancia ya está registrado", "409");
-                });
-        return junta;
-    }
-
-    /** HU-02 c1: sin numero de junta no hay medico. */
-    private static void exigirJunta(String junta) {
-        if (junta == null) {
-            throw new GeneralException(
-                    "Para dar el rol de médico hay que indicar su número de junta de vigilancia", "400");
-        }
     }
 
     /**

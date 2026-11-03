@@ -62,28 +62,20 @@ public class UserControler {
             description = "Solo añade; no reemplaza los que ya tiene. Asignar ENFERMERA crea "
                     + "además su ficha en enfermería, porque sin esa fila la cuenta pasa el "
                     + "control de rol y luego recibe 403 al registrar constantes. Asignar MEDICO "
-                    + "crea su ficha de medico con especialidadId y registroJunta, obligatorios si la "
-                    + "persona aun no los tiene (400 si faltan o si la junta no tiene 3 a 20 letras, "
-                    + "numeros o guiones con al menos un numero; 409 si la junta es de otro medico). "
-                    + "Es la unica alta de medicos: no hay registro publico (HU-02). A una cuenta que "
-                    + "ya tiene MEDICO pero no ficha, volver a asignarlo con especialidadId y "
-                    + "registroJunta se la crea. Asignar MEDICO o ENFERMERA a "
-                    + "una cuenta sin ninguna sede exige clinicaId, que se le asigna en el mismo paso "
-                    + "(400 si falta)."
+                    + "exige que la persona ya tenga ficha de médico (409 si no): la ficha, con "
+                    + "especialidad y número de junta, se registra en /medicos, que es también donde "
+                    + "se le da acceso a un médico (HU-02). Asignar MEDICO o ENFERMERA a una cuenta "
+                    + "sin ninguna sede exige clinicaId, que se le asigna en el mismo paso (400 si falta)."
     )
     @PostMapping("/{userId}/role/{roleId}")
     public ResponseEntity<UserResponseDto> addRole(
             @PathVariable(required = true) int userId,
             @PathVariable(required = true) int roleId,
-            @RequestParam(required = false) Long especialidadId,
             // Con MEDICO o ENFERMERA, obligatorio si la cuenta aun no tiene
             // ninguna sede: es la primera donde va a trabajar.
-            @RequestParam(required = false) Integer clinicaId,
-            // Con MEDICO, obligatorio si la ficha aun no tiene numero de junta
-            // de vigilancia (HU-02 c1).
-            @RequestParam(required = false) String registroJunta
+            @RequestParam(required = false) Integer clinicaId
     ) {
-        return ResponseEntity.ok(userService.addRole(userId, roleId, especialidadId, clinicaId, registroJunta));
+        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId));
     }
 
     @Operation(

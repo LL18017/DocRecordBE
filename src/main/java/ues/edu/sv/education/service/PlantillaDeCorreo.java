@@ -29,6 +29,10 @@ public enum PlantillaDeCorreo {
     RECUPERACION_DE_CONTRASENA("recuperacion-contrasena",
             "Restablece tu contraseña de DocRecord Sv"),
 
+    // HU-02: la cuenta la abre el administrador y la persona elige su
+    // contrasena con este enlace. Sirve tambien para el paciente.
+    INVITACION("invitacion", "Te dieron acceso a DocRecord Sv"),
+
     NUEVA_PRESCRIPCION(
         "nueva-prescripcion",
                 "Nueva prescripción médica en DocRecord Sv"

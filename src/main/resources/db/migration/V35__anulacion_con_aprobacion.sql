@@ -138,3 +138,33 @@ CREATE TABLE public.aprobaciones_de_anulacion (
     aprobada_en  TIMESTAMP NOT NULL,
     PRIMARY KEY (solicitud_id, user_id)
 );
+
+
+-- ----------------------------------------------------------------------------
+-- HU-02 · Invitaciones a crear la cuenta (DRS-77)
+--
+-- Va en esta misma migracion porque V35 todavia no se aplico en ningun
+-- entorno compartido y es el unico numero reservado para esta tarea.
+--
+-- La cuenta de un medico ya no la crea el medico (se retiro el registro
+-- publico): el administrador registra su ficha y despues le da acceso. Darle
+-- acceso crea la cuenta sin contrasena utilizable y manda una INVITACION con
+-- un enlace para que la persona elija la suya. Al canjearla la cuenta queda
+-- habilitada. Sirve igual para el paciente: es la cuenta que se activa sobre
+-- un expediente que ya existe.
+--
+-- Tabla propia y no token_restablecimiento ni verification_token por la misma
+-- razon que V14 separo esas dos: cada tipo de enlace concede algo distinto, y
+-- con tablas separadas uno no puede servir para lo del otro por un descuido en
+-- una consulta.
+-- ----------------------------------------------------------------------------
+CREATE TABLE public.invitaciones (
+    invitacion_id BIGSERIAL PRIMARY KEY,
+    token         VARCHAR(255) NOT NULL UNIQUE,
+    user_id       INTEGER NOT NULL REFERENCES public.users (user_id),
+    vence_en      TIMESTAMP NOT NULL,
+    usada         BOOLEAN NOT NULL DEFAULT FALSE,
+    creada_en     TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_invitaciones_user ON public.invitaciones (user_id);

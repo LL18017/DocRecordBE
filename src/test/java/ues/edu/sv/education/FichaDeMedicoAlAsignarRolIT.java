@@ -26,8 +26,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * la cuenta lista para atender.
  *
  * El rol pasaba el @PreAuthorize, pero consultas, recetas y antecedentes exigen
- * ademas la fila en `medicos` (MedicoAutenticado), y esa fila solo la creaba el
- * registro publico (hoy retirado, HU-02). La cuenta veia los botones y recibia 403 al guardar.
+ * ademas la fila en `medicos` (MedicoAutenticado). La cuenta veia los botones y
+ * recibia 403 al guardar.
+ *
+ * Desde HU-02 la ficha se registra en Medicos (FichaDeMedicoIT) y Usuarios y
+ * Roles ya no la crea: dar MEDICO a quien no la tiene responde 409.
  */
 class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
 
@@ -73,22 +76,49 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
         return "/user/" + user.getUserID() + "/role/" + rol.getId();
     }
 
+    /** Registra la ficha de medico de esa cuenta, como se hace en Medicos. */
+    private void registrarFicha(Cuenta cuenta) throws Exception {
+        mockMvc.perform(post("/medicos")
+                        .header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nombres":"Cuenta","apellidos":"Con Ficha","especialidadId":%d,
+                                 "registroJunta":"%s","userId":%d}
+                                """.formatted(especialidadId, juntaUnica(), cuenta.user().getUserID())))
+                .andExpect(status().isCreated());
+    }
+
     @Test
-    @DisplayName("dar MEDICO con especialidad crea la ficha, y la cuenta ya puede registrar un acto clinico")
-    void darMedicoDejaLaCuentaListaParaAtender() throws Exception {
-        Cuenta cuenta = cuentaSinFicha(RolesEnum.ADMIN);
+    @DisplayName("HU-02: dar MEDICO a quien no tiene ficha da 409 y no deja el rol a medias")
+    void sinFichaNoSeDaElRol() throws Exception {
+        Cuenta cuenta = cuentaSinFicha();
 
         String cuerpo = mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
-                        .param("especialidadId", String.valueOf(especialidadId))
                         .param("clinicaId", String.valueOf(sede))
-                        .param("registroJunta", juntaUnica())
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isConflict())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(cuerpo.contains("Médicos"), "debe decir donde se registra la ficha: " + cuerpo);
+
+        User releido = usuarios.findById(cuenta.user().getUserID()).orElseThrow();
+        assertTrue(releido.getRoles().isEmpty());
+        assertTrue(medicos.findById(cuenta.user().getPersona().getPersonaId()).isEmpty(),
+                "Usuarios y Roles ya no crea fichas de medico");
+    }
+
+    @Test
+    @DisplayName("con la ficha registrada, dar MEDICO deja la cuenta lista para registrar un acto clinico")
+    void conFichaElRolDejaLaCuentaListaParaAtender() throws Exception {
+        Cuenta cuenta = cuentaSinFicha(RolesEnum.ADMIN);
+        registrarFicha(cuenta);
+
+        String cuerpo = mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
+                        .param("clinicaId", String.valueOf(sede))
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertFalse(json.readTree(cuerpo).get("especialidad").isNull());
-        assertTrue(medicos.findById(cuenta.user().getPersona().getPersonaId()).isPresent());
 
-        // La prueba de fondo: antes de esto, este POST respondia 403.
         String token = iniciarSesion(cuenta.correo());
         long paciente = crearPaciente(token);
         mockMvc.perform(post("/antecedentes-patologicos")
@@ -101,47 +131,14 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("dar MEDICO sin especialidad a quien no tiene ficha da 400 y no deja el rol a medias")
-    void sinEspecialidadNoSeDaElRol() throws Exception {
-        Cuenta cuenta = cuentaSinFicha();
-
-        mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
-                        .header("Authorization", bearer(admin)))
-                .andExpect(status().isBadRequest());
-
-        User releido = usuarios.findById(cuenta.user().getUserID()).orElseThrow();
-        assertTrue(releido.getRoles().isEmpty());
-    }
-
-    @Test
-    @DisplayName("una cuenta que ya tenia MEDICO sin ficha se repara volviendo a darlo con la especialidad")
-    void unaCuentaRotaSeRepara() throws Exception {
-        Cuenta cuenta = cuentaSinFicha(RolesEnum.MEDICO);
-
-        // Sin especialidad sigue siendo lo de siempre: ya tiene el rol.
-        mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
-                        .header("Authorization", bearer(admin)))
-                .andExpect(status().isConflict());
-
-        mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
-                        .param("especialidadId", String.valueOf(especialidadId))
-                        .param("clinicaId", String.valueOf(sede))
-                        .param("registroJunta", juntaUnica())
-                        .header("Authorization", bearer(admin)))
-                .andExpect(status().isOk());
-        assertTrue(medicos.findById(cuenta.user().getPersona().getPersonaId()).isPresent());
-    }
-
-    @Test
     @DisplayName("quitar MEDICO marca la ficha inactiva, no la borra; volver a darlo la reactiva")
     void quitarYVolverADar() throws Exception {
         Cuenta cuenta = cuentaSinFicha();
         Long personaId = cuenta.user().getPersona().getPersonaId();
+        registrarFicha(cuenta);
 
         mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
-                        .param("especialidadId", String.valueOf(especialidadId))
                         .param("clinicaId", String.valueOf(sede))
-                        .param("registroJunta", juntaUnica())
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
 
@@ -150,7 +147,6 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
                 .andExpect(status().isOk());
         assertFalse(medicos.findById(personaId).orElseThrow().isActivo());
 
-        // Ya tiene ficha: no hace falta repetir la especialidad.
         mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());

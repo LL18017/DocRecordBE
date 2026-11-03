@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import ues.edu.sv.education.model.dto.auth.ActivarInvitacionRequestDto;
 import ues.edu.sv.education.model.dto.auth.LoginResponseDto;
 import ues.edu.sv.education.model.dto.auth.RecuperacionRequestDto;
 import ues.edu.sv.education.model.dto.auth.RecuperacionResponseDto;
@@ -25,6 +26,7 @@ import ues.edu.sv.education.model.dto.auth.UserLoginDto;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.service.auth.AuthService;
+import ues.edu.sv.education.service.auth.InvitacionService;
 import ues.edu.sv.education.service.auth.RecuperacionDeContrasenaService;
 import ues.edu.sv.education.service.auth.UserAuthService;
 
@@ -38,6 +40,7 @@ public class AuthController {
     private final UserAuthService service;
     private final AuthService authService;
     private final RecuperacionDeContrasenaService recuperacionService;
+    private final InvitacionService invitacionService;
 
     /**
      * Donde vive el frontend. En desarrollo es localhost:3000; en el despliegue
@@ -172,6 +175,23 @@ public class AuthController {
             @Valid @RequestBody RestablecerContrasenaRequestDto request) {
         return ResponseEntity.ok(
                 recuperacionService.restablecer(request.token(), request.password()));
+    }
+
+    @Operation(
+            summary = "Activar una cuenta con la invitacion del correo",
+            description = "HU-02. La cuenta la abre el administrador (desde la ficha del medico, o el "
+                    + "expediente del paciente) y la persona elige aqui su contrasena: la cuenta queda "
+                    + "habilitada y la invitacion usada. Un token inexistente, usado o vencido dan el "
+                    + "mismo 400; 400 tambien si la contrasena no cumple la regla."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Cuenta activada; ya puede iniciar sesion"),
+            @ApiResponse(responseCode = "400", description = "Invitacion no valida o vencida, o contrasena debil")
+    })
+    @PostMapping("/invitacion")
+    public ResponseEntity<Void> activarInvitacion(@Valid @RequestBody ActivarInvitacionRequestDto request) {
+        invitacionService.activar(request.token(), request.password());
+        return ResponseEntity.noContent().build();
     }
 
     /**
