@@ -10,16 +10,19 @@ import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
 import ues.edu.sv.education.model.dto.common.PaginaDto;
+import ues.edu.sv.education.model.dto.consulta.ClinicaResumenDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
 import ues.edu.sv.education.model.dto.signosvitales.AnularSignosVitalesRequestDto;
 import ues.edu.sv.education.model.dto.signosvitales.EnfermeraTomaDto;
 import ues.edu.sv.education.model.dto.signosvitales.SignosVitalesRequestDto;
 import ues.edu.sv.education.model.dto.signosvitales.SignosVitalesResponseDto;
+import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.Consulta;
 import ues.edu.sv.education.model.entity.Enfermera;
 import ues.edu.sv.education.model.entity.Paciente;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.SignosVitales;
+import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.ConsultaRepository;
 import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.SignosVitalesRepository;
@@ -27,6 +30,7 @@ import ues.edu.sv.education.service.auth.EnfermeraAutenticado;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Signos vitales: el triage que precede a la consulta.
@@ -61,6 +65,7 @@ public class SignosVitalesService {
     private final SignosVitalesRepository signosVitalesRepository;
     private final PacienteRepository pacienteRepository;
     private final ConsultaRepository consultaRepository;
+    private final ClinicaRepository clinicaRepository;
     private final EnfermeraAutenticado enfermeraAutenticado;
 
     /**
@@ -96,6 +101,18 @@ public class SignosVitalesService {
                             "No se encontro la consulta con id: " + request.consultaId(), "404"));
         }
 
+        // La sede de la toma (HU-15): la que manda el cliente, que es la sede
+        // activa de la sesion; si no viene, la de la consulta a la que
+        // precede, que es un hecho y no una suposicion. Sin ninguna de las
+        // dos queda en null, igual que una consulta sin sucursal.
+        Clinicas clinica = null;
+        if (request.clinicaId() != null) {
+            clinica = clinicaRepository.findById(request.clinicaId())
+                    .orElseThrow(() -> new NoResourceFoundException("Clínica no encontrada", "404"));
+        } else if (consulta != null) {
+            clinica = consulta.getClinica();
+        }
+
         // tomadoEn lo pone el servidor cuando no viene. Se permite mandarlo
         // porque enfermeria a veces captura minutos despues de haber tomado
         // la constante en papel, y la hora que importa clinicamente es la de
@@ -106,6 +123,7 @@ public class SignosVitalesService {
                 .paciente(paciente)
                 .enfermera(enfermera)
                 .consulta(consulta)
+                .clinica(clinica)
                 .tomadoEn(tomadoEn)
                 .pesoKg(request.pesoKg())
                 .estaturaCm(request.estaturaCm())
@@ -173,6 +191,19 @@ public class SignosVitalesService {
      * Una toma ANULADA no cuenta (HU-16 criterio 4): si la mas reciente esta
      * anulada, la "ultima" es la anterior valida.
      */
+    /**
+     * Todas las tomas del paciente, anuladas incluidas, de la mas reciente a
+     * la mas antigua: la parte de enfermeria de la linea de tiempo del
+     * expediente (HU-15). Sin paginar porque la linea de tiempo es una sola
+     * vista y se filtra en el navegador; quien la pide ya comprobo que el
+     * paciente existe.
+     */
+    @Transactional(readOnly = true)
+    public List<SignosVitalesResponseDto> todasDelPaciente(Long pacienteId) {
+        return signosVitalesRepository.findByPaciente_PersonaIdOrderByTomadoEnDesc(pacienteId)
+                .stream().map(this::toDto).toList();
+    }
+
     @Transactional(readOnly = true)
     public SignosVitalesResponseDto ultimaDelPaciente(Long pacienteId) {
         exigirPacienteExistente(pacienteId);
@@ -291,6 +322,8 @@ public class SignosVitalesService {
                         personaEnfermera.getNombres(),
                         personaEnfermera.getApellidos()),
                 toma.getConsulta() == null ? null : toma.getConsulta().getConsultaId(),
+                toma.getClinica() == null ? null
+                        : new ClinicaResumenDto(toma.getClinica().getClinicaId(), toma.getClinica().getName()),
                 toma.getPesoKg(),
                 toma.getEstaturaCm(),
                 toma.getTemperaturaC(),

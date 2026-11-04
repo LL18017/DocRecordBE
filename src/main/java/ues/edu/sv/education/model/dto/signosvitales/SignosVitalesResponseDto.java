@@ -1,6 +1,7 @@
 package ues.edu.sv.education.model.dto.signosvitales;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import ues.edu.sv.education.model.dto.consulta.ClinicaResumenDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
 
 import java.math.BigDecimal;
@@ -31,6 +32,8 @@ public record SignosVitalesResponseDto(
 
         @Schema(description = "Consulta a la que quedo ligada, si hay alguna", example = "12", nullable = true)
         Long consultaId,
+        @Schema(description = "Sede donde se tomo; null si no se registro (HU-15)", nullable = true)
+        ClinicaResumenDto clinica,
 
         @Schema(example = "72.50", nullable = true) BigDecimal pesoKg,
         @Schema(example = "175.00", nullable = true) BigDecimal estaturaCm,

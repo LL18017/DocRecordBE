@@ -451,6 +451,23 @@ public class PrescripcionService {
         return PaginaDto.de(resultado.map(r -> toDto(r, envios)));
     }
 
+    /**
+     * Todas las recetas del paciente, anuladas incluidas, de la mas reciente
+     * a la mas antigua: la parte de recetas de la linea de tiempo del
+     * expediente (HU-15). La misma busqueda y el mismo armado que listar(),
+     * sin paginar, porque la linea de tiempo es una sola vista que se filtra
+     * en el navegador.
+     */
+    @Transactional(readOnly = true)
+    public List<PrescripcionResponseDto> todasDelPaciente(Long pacienteId) {
+        List<Prescripcion> recetas = prescripcionRepository.buscar(
+                        pacienteId, null, null, null, null,
+                        Pageable.unpaged(Sort.by(Sort.Order.desc("fecha"), Sort.Order.desc("prescripcionId"))))
+                .getContent();
+        Map<Long, Event> envios = enviosDe(recetas);
+        return recetas.stream().map(r -> toDto(r, envios)).toList();
+    }
+
     @Transactional(readOnly = true)
     public PrescripcionResponseDto obtener(Long prescripcionId) {
         Prescripcion receta = buscarPrescripcionOFallar(prescripcionId);

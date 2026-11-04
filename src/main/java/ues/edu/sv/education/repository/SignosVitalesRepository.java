@@ -10,6 +10,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.stereotype.Repository;
 import ues.edu.sv.education.model.entity.SignosVitales;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -20,6 +21,9 @@ public interface SignosVitalesRepository extends JpaRepository<SignosVitales, Lo
      * Es el orden en que se lee un expediente: lo ultimo primero.
      */
     Page<SignosVitales> findByPaciente_PersonaIdOrderByTomadoEnDesc(Long pacienteId, Pageable pageable);
+
+    /** El mismo historico completo, para la linea de tiempo del expediente (HU-15). */
+    List<SignosVitales> findByPaciente_PersonaIdOrderByTomadoEnDesc(Long pacienteId);
 
     /**
      * Todas las tomas, de la mas reciente a la mas antigua.
