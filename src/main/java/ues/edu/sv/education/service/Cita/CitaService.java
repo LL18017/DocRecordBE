@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
@@ -74,6 +75,7 @@ public class CitaService {
         TipoCita tipoCita = obtenerTipo(dto.tipoCitaId());
 
         validarHorarioDelMedico(medico, clinica, fecha);
+        bloquearFranja(medico.getUserID(), paciente.getPersonaId(), fecha);
         validarDisponibilidad(paciente.getPersonaId(), medico.getUserID(), fecha, null);
 
         Cita cita = Cita.builder()
@@ -240,6 +242,7 @@ public class CitaService {
             if (cita.getClinica() != null) {
                 validarHorarioDelMedico(medico, cita.getClinica(), fecha);
             }
+            bloquearFranja(medico.getUserID(), cita.getPaciente().getPersonaId(), fecha);
             validarDisponibilidad(cita.getPaciente().getPersonaId(), medico.getUserID(), fecha, cita.getCitaId());
 
             // HU-32 criterio 4: solo se avisa si de verdad cambio la fecha o el
@@ -411,6 +414,18 @@ public class CitaService {
             throw new GeneralException(
                     "No se puede " + accion + " una cita con menos de 4 horas de anticipación", "409");
         }
+    }
+
+    /**
+     * Toma el candado de la franja del medico y del paciente antes de
+     * comprobar la disponibilidad (HU-30, criterios 2 y 5; ver
+     * CitaRepository.bloquearFranja). Siempre en el mismo orden, medico y
+     * despues paciente, para que dos reservas nunca se esperen mutuamente.
+     */
+    private void bloquearFranja(Integer medicoId, Long pacienteId, LocalDateTime fechaHora) {
+        int minuto = Math.toIntExact(fechaHora.toEpochSecond(ZoneOffset.UTC) / 60);
+        citaRepository.bloquearFranja(medicoId, minuto);
+        citaRepository.bloquearFranja(-Math.toIntExact(pacienteId), minuto);
     }
 
     private void validarDisponibilidad(
