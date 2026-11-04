@@ -39,6 +39,14 @@ public record SignosVitalesRequestDto(
         Long consultaId,
 
         @Schema(
+                description = "Sede donde se toma (HU-15). Opcional, como en la consulta: sin ella la toma "
+                        + "se registra igual y queda la de la consulta, si viene",
+                example = "1",
+                nullable = true
+        )
+        Integer clinicaId,
+
+        @Schema(
                 description = "Momento de la toma. Si se omite, se usa el instante actual del servidor",
                 example = "2026-09-13T08:15:00",
                 nullable = true

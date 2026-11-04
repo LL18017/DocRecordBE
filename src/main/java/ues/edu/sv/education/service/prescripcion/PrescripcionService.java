@@ -451,6 +451,32 @@ public class PrescripcionService {
         return PaginaDto.de(resultado.map(r -> toDto(r, envios)));
     }
 
+    /**
+     * Todas las recetas del paciente, anuladas incluidas (marcadas por su
+     * estado y con el motivo), de la mas reciente a la mas antigua. La misma
+     * busqueda y el mismo armado que listar(), sin paginar. Lo usan dos
+     * lecturas que son una sola vista del expediente de UNA persona:
+     * <ul>
+     *   <li>la linea de tiempo del expediente (HU-15), que se filtra en el
+     *   navegador;</li>
+     *   <li>el portal del paciente (HU-34), cerrado al paciente de la sesion
+     *   (ver PortalDelPacienteService), que tiene que poder verlo entero,
+     *   igual que el PDF que descarga.</li>
+     * </ul>
+     * El tope de pagina de listar() esta para que nadie se lleve en una
+     * llamada la medicacion de TODOS los pacientes; aqui la pregunta ya viene
+     * cerrada a uno solo.
+     */
+    @Transactional(readOnly = true)
+    public List<PrescripcionResponseDto> todasDelPaciente(Long pacienteId) {
+        List<Prescripcion> recetas = prescripcionRepository.buscar(
+                        pacienteId, null, null, null, null,
+                        Pageable.unpaged(Sort.by(Sort.Order.desc("fecha"), Sort.Order.desc("prescripcionId"))))
+                .getContent();
+        Map<Long, Event> envios = enviosDe(recetas);
+        return recetas.stream().map(r -> toDto(r, envios)).toList();
+    }
+
     @Transactional(readOnly = true)
     public PrescripcionResponseDto obtener(Long prescripcionId) {
         Prescripcion receta = buscarPrescripcionOFallar(prescripcionId);

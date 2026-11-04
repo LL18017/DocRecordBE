@@ -60,6 +60,12 @@ public class SignosVitales {
     @JoinColumn(name = "consulta_id")
     private Consulta consulta;
 
+    // Donde se tomo (V37, HU-15). Null si no se sabe: la enfermera no tenia
+    // sede activa, o es una toma anterior a V37 sin consulta que la diga.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clinica_id")
+    private Clinicas clinica;
+
     @NotNull
     @Column(name = "tomado_en", nullable = false)
     private LocalDateTime tomadoEn;

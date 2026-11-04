@@ -38,8 +38,11 @@ import java.util.UUID;
  * (se retiro el registro publico) ni se le inventa una contrasena: el
  * administrador la abre y la persona elige la suya con una invitacion.
  *
- * Lo usa la ficha de medico (MedicoService.darAcceso) y esta pensado para el
- * paciente: la misma cuenta sobre el expediente, con rol PACIENTE y sin sede.
+ * Lo usan la ficha de medico (MedicoService.darAcceso) y el expediente del
+ * paciente (AccesoAlPortalService.darAcceso, HU-34): la misma cuenta sobre el
+ * expediente, con rol PACIENTE y sin sede. Al paciente se la abre el personal
+ * que lo atiende, no solo el administrador; por eso el correo dice "tu
+ * clinica" y no "el administrador".
  *
  * ── Como queda la cuenta mientras tanto ───────────────────────────────────
  * enabled = false y una contrasena aleatoria que nadie conoce: no se puede
