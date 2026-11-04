@@ -73,13 +73,22 @@ class AdminBootstrapIT extends PruebaDeIntegracion {
     }
 
     /**
-     * Borra cualquier administrador que otra clase de la suite haya dejado en
-     * la base compartida, para que cada prueba parta de un estado que ella
-     * misma controla.
+     * Deja la base sin administradores para que cada prueba parta de un estado
+     * que ella misma controla.
+     *
+     * A los administradores que dejaron otras clases se les quita el rol en
+     * vez de borrarlos: un administrador que anulo una consulta o una receta
+     * (HU-21) queda en su rastro (anulada_por, solicitudes y aprobaciones), y
+     * esas llaves no dejan borrarlo. Solo se borra la cuenta de ADMIN_EMAIL,
+     * que crea esta clase y nadie mas referencia.
      */
     @BeforeEach
     void limpiarAdministradoresPrevios() {
-        usuarios.deleteAll(usuarios.findByRolesName(RolesEnum.ADMIN.getName()));
+        usuarios.findByEmailIgnoreCase(ADMIN_EMAIL).ifPresent(usuarios::delete);
+        for (User admin : usuarios.findByRolesName(RolesEnum.ADMIN.getName())) {
+            admin.getRoles().removeIf(r -> RolesEnum.ADMIN.getName().equals(r.getName()));
+            usuarios.save(admin);
+        }
     }
 
     @Test
