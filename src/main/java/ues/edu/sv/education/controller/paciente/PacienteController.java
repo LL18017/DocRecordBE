@@ -9,9 +9,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ues.edu.sv.education.model.dto.paciente.AccesoAlPortalDto;
+import ues.edu.sv.education.model.dto.paciente.AccesoAlPortalRequestDto;
 import ues.edu.sv.education.model.dto.paciente.CambiarEstadoRequestDto;
 import ues.edu.sv.education.model.dto.paciente.PacienteRequestDto;
 import ues.edu.sv.education.model.dto.paciente.PacienteResponseDto;
+import ues.edu.sv.education.model.dto.portal.AccesoAlExpedienteDto;
+import ues.edu.sv.education.service.paciente.AccesoAlPortalService;
 import ues.edu.sv.education.service.paciente.PacienteService;
 
 import java.util.List;
@@ -23,9 +27,12 @@ import java.util.List;
 // toma signos vitales y registra pacientes; excluirla obligaria a que un
 // medico dé de alta cada paciente, que no es como funciona una clinica
 // (distinto del caso de clinicas: alli enfermeria trabaja pero no
-// administra). Cuando exista el portal del paciente (ver el paciente
-// consultando SU PROPIO expediente) va en un endpoint aparte resuelto por
-// SecurityContext, igual que /clinics/mias -no forzarlo en este listado.
+// administra). El portal del paciente -el paciente consultando SU PROPIO
+// expediente, HU-34- vive aparte, en /mi (PortalDelPacienteController),
+// resuelto por SecurityContext igual que /clinics/mias: este controlador
+// sigue cerrado al rol PACIENTE, y por eso un paciente que pide aqui el
+// expediente de otro recibe 403. Lo unico del portal que vive aqui es lo que
+// hace el personal: abrirle la cuenta al paciente y auditar sus accesos.
 @Slf4j
 @RestController
 @RequestMapping("/pacientes")
@@ -35,6 +42,7 @@ import java.util.List;
 public class PacienteController {
 
     private final PacienteService pacienteService;
+    private final AccesoAlPortalService accesoAlPortalService;
 
     @Operation(
             summary = "Registrar paciente",
@@ -145,5 +153,49 @@ public class PacienteController {
             @Valid @RequestBody CambiarEstadoRequestDto request
     ) {
         return ResponseEntity.ok(pacienteService.cambiarEstado(personaId, request.estado()));
+    }
+
+    @Operation(
+            summary = "Estado del acceso del paciente a su portal",
+            description = "HU-34. Si el paciente tiene cuenta, en que estado esta (SIN_ACTIVAR, ACTIVA o "
+                    + "DESACTIVADA) y si tiene el rol PACIENTE; cuenta null si todavia no tiene. Incluye el correo "
+                    + "de contacto de la ficha para proponerlo como usuario. 404 si el paciente no existe."
+    )
+    @GetMapping("/{personaId}/acceso-portal")
+    public ResponseEntity<AccesoAlPortalDto> accesoAlPortal(@PathVariable("personaId") Long personaId) {
+        return ResponseEntity.ok(accesoAlPortalService.consultar(personaId));
+    }
+
+    @Operation(
+            summary = "Dar acceso al portal al paciente",
+            description = "HU-34. Sin cuenta: la crea con email (o, si no viene, con el correo de contacto del "
+                    + "paciente) y el rol PACIENTE, sin sede, y manda una invitacion para que elija su contrasena "
+                    + "(POST /auth/invitacion). Con cuenta sin activar: manda una invitacion nueva. Con cuenta "
+                    + "activa: le agrega el rol PACIENTE si no lo tenia. 400 si no hay correo de ninguna de las "
+                    + "dos fuentes; 409 si el correo ya es de otra cuenta; 404 si el paciente no existe."
+    )
+    // Mismo alcance que la clase (ADMIN, MEDICO, ENFERMERA), a proposito: abrir
+    // la cuenta del portal es parte de recibir al paciente, como registrarlo.
+    // Ver AccesoAlPortalService para por que eso no abre una escalada.
+    @PostMapping("/{personaId}/acceso-portal")
+    public ResponseEntity<AccesoAlPortalDto> darAccesoAlPortal(
+            @PathVariable("personaId") Long personaId,
+            @Valid @RequestBody(required = false) AccesoAlPortalRequestDto request) {
+        return ResponseEntity.ok(accesoAlPortalService.darAcceso(personaId, request));
+    }
+
+    @Operation(
+            summary = "Accesos al expediente desde el portal",
+            description = "HU-34 c6. Cada vez que el paciente abrio su expediente (VISTA) o lo descargo (PDF), "
+                    + "con el correo de la sesion y la hora, lo mas reciente primero. 404 si el paciente no existe."
+    )
+    // Solo el ADMINISTRADOR: es la bitacora de auditoria, como la de usuarios.
+    // Leer quien abrio un expediente y cuando no es parte de atender al
+    // paciente.
+    @GetMapping("/{personaId}/accesos")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<AccesoAlExpedienteDto>> accesosAlExpediente(
+            @PathVariable("personaId") Long personaId) {
+        return ResponseEntity.ok(accesoAlPortalService.accesosAlExpediente(personaId));
     }
 }

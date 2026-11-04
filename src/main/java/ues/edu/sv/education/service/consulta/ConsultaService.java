@@ -211,6 +211,31 @@ public class ConsultaService {
                 .stream().map(this::toDto).toList();
     }
 
+    /**
+     * Todas las consultas de un paciente, de la mas reciente a la mas antigua
+     * y con el diagnostico SIEMPRE visible, anuladas incluidas. Es la lectura
+     * del portal del paciente (HU-34) y de nadie mas.
+     *
+     * ── Por que no es listar(pacienteId, ...) ─────────────────────────────
+     * Porque listar recorta el diagnostico segun el rol de quien pregunta
+     * (diagnosticoVisible, HU-20 criterio 4), y para un PACIENTE lo dejaria en
+     * null: el recorte existe para que enfermeria no lea el juicio clinico de
+     * terceros, no para esconderle a alguien lo que el medico concluyo sobre
+     * el mismo. Aqui no hay terceros: quien llama (PortalDelPacienteService)
+     * saco el pacienteId del token, nunca de la peticion. Por eso este metodo
+     * no debe exponerse en un endpoint que reciba el id desde afuera.
+     *
+     * Las ANULADAS van tambien, marcadas por su estado y con el motivo: el
+     * criterio de HU-21 es que una anulada sigue visible en el historial, y
+     * esconderla en el portal haria que el paciente no sepa por que la
+     * consulta que recuerda no aparece.
+     */
+    @Transactional(readOnly = true)
+    public List<ConsultaResponseDto> delPropioPaciente(Long pacienteId) {
+        return consultaRepository.buscar(pacienteId, null, null, null)
+                .stream().map(c -> toDto(c, c.getDiagnostico())).toList();
+    }
+
     @Transactional(readOnly = true)
     public ConsultaResponseDto obtener(Long consultaId) {
         return toDto(buscarConsultaOFallar(consultaId));
@@ -362,6 +387,10 @@ public class ConsultaService {
     }
 
     private ConsultaResponseDto toDto(Consulta consulta) {
+        return toDto(consulta, diagnosticoVisible(consulta));
+    }
+
+    private ConsultaResponseDto toDto(Consulta consulta, String diagnostico) {
 
         Paciente paciente = consulta.getPaciente();
         Persona personaPaciente = paciente.getPersona();
@@ -373,7 +402,7 @@ public class ConsultaService {
                 consulta.getConsultaId(),
                 consulta.getFecha(),
                 consulta.getMotivo(),
-                diagnosticoVisible(consulta),
+                diagnostico,
                 consulta.getExploracionFisica(),
                 consulta.getIndicaciones(),
                 consulta.getEstado(),

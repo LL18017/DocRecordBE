@@ -4,7 +4,9 @@
 
   Desde que no hay registro publico, la cuenta de un medico la abre el
   administrador desde su ficha, y la persona elige aqui su contrasena. Al
-  canjear el enlace la cuenta queda activa. Sirve igual para el paciente.
+  canjear el enlace la cuenta queda activa. Sirve igual para el paciente
+  (HU-34), cuya cuenta la abre el personal que lo atiende: por eso dice "tu
+  clinica" y no "el administrador".
 
   El enlace aparece dos veces, como boton y como direccion escrita, por lo
   mismo que en confirmacion-registro: si el cliente bloquea los estilos el
@@ -45,8 +47,8 @@
                             Activa tu cuenta
                         </h1>
                         <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
-                            Hola<span th:if="${nombre}" th:text="' ' + ${nombre}"> Ana</span>, el administrador
-                            de tu clínica te dio acceso a DocRecord Sv como
+                            Hola<span th:if="${nombre}" th:text="' ' + ${nombre}"> Ana</span>, tu clínica
+                            te dio acceso a DocRecord Sv como
                             <strong th:text="${rol}">médico</strong>.
                         </p>
                         <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
@@ -82,7 +84,7 @@
                         </p>
                         <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#64748B;">
                             El enlace vence en <strong th:text="${horas} + ' horas'">72 horas</strong> y sirve
-                            una sola vez. Si vence, pide al administrador que te mande otro.
+                            una sola vez. Si vence, pide en tu clínica que te manden otro.
                         </p>
                     </td>
                 </tr>

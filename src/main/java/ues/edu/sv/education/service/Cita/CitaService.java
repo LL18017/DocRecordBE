@@ -136,6 +136,25 @@ public class CitaService {
                 .toList();
     }
 
+    /**
+     * Las citas que el paciente todavia tiene por delante (HU-34 criterio 1):
+     * AGENDADAS y a futuro, la mas proxima primero.
+     *
+     * Las canceladas y las atendidas no son "proximas" aunque su fecha lo
+     * sea: una ya no va a ocurrir y la otra ya ocurrio. "Ahora" es la hora de
+     * El Salvador, como en todo este servicio (ver ZONA).
+     */
+    @Transactional(readOnly = true)
+    public List<CitaResponseDto> proximasDelPaciente(Long pacienteId) {
+        LocalDateTime ahora = LocalDateTime.now(ZONA);
+        return citaRepository
+                .findByPacienteOrderByFechaHoraAsc(pacienteId)
+                .stream()
+                .filter(c -> Cita.AGENDADA.equals(c.getEstado()) && c.getFechaHora().isAfter(ahora))
+                .map(citaMapper::toResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<CitaResponseDto> obtenerPorMedico(Integer medicoId) {
 
