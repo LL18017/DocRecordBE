@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * entidad, quien filtraba el hash.
  *
  * Extiende PruebaClinica por una sola razon: necesita un token ADMIN. Todo el
- * controller /user es hasRole('ADMIN') y /auth/register solo crea medicos, asi
+ * controller /user es hasRole('ADMIN') y no hay alta publica de cuentas, asi
  * que un administrador hay que fabricarlo por repositorio y despues iniciar
  * sesion por HTTP; eso es justo lo que hace tokenDeAdminQueNoEjerce().
  */

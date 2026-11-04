@@ -19,6 +19,7 @@ import ues.edu.sv.education.model.entity.Medico;
 import ues.edu.sv.education.model.entity.Paciente;
 import ues.edu.sv.education.model.entity.SignosVitales;
 import ues.edu.sv.education.model.entity.Persona;
+import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.enums.EstadoConsulta;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.ConsultaRepository;
@@ -157,6 +158,7 @@ public class ConsultaService {
                 .exploracionFisica(textoONull(request.exploracionFisica()))
                 .indicaciones(textoONull(request.indicaciones()))
                 .estado(estadoSegun(diagnostico))
+                .registradaEn(LocalDateTime.now())
                 .build();
 
         Consulta guardada = consultaRepository.save(consulta);
@@ -227,6 +229,13 @@ public class ConsultaService {
 
         Consulta consulta = buscarConsultaOFallar(consultaId);
 
+        // HU-21, criterio 2: una consulta anulada se lee, no se edita. Lo que
+        // dice quedo como estaba cuando se anulo, que es lo que el rastro
+        // tiene que conservar; corregir una anulada es registrar otra.
+        if (consulta.getEstado() == EstadoConsulta.ANULADA) {
+            throw new GeneralException("La consulta está anulada y no se puede editar", "409");
+        }
+
         // HU-19, criterio 3: medico, clinica y fecha quedan fijados al
         // registrar y no se tocan aqui (el DTO ni siquiera los trae).
         if (textoONull(request.motivo()) != null) consulta.setMotivo(request.motivo().trim());
@@ -280,7 +289,8 @@ public class ConsultaService {
 
     // Aqui vivia eliminar(). Ver la nota de ConsultaController: HU-21 exige que
     // el sistema no borre consultas nunca, y ademas este metodo no comprobaba
-    // de quien era la que estaba borrando.
+    // de quien era la que estaba borrando. La anulacion, que es lo que lo
+    // sustituye, esta en AnulacionService.
 
     // ══════════════════════════════════════════════════════════════════════
     // Apoyo
@@ -345,6 +355,12 @@ public class ConsultaService {
         return puedeVerlo ? consulta.getDiagnostico() : null;
     }
 
+    private static String nombreDe(User usuario) {
+        if (usuario == null) return null;
+        Persona persona = usuario.getPersona();
+        return persona.getNombres() + " " + persona.getApellidos();
+    }
+
     private ConsultaResponseDto toDto(Consulta consulta) {
 
         Paciente paciente = consulta.getPaciente();
@@ -373,7 +389,11 @@ public class ConsultaService {
                         personaMedico.getApellidos(),
                         medico.getEspecialidad() != null ? medico.getEspecialidad().getNombre() : null
                 ),
-                clinica == null ? null : new ClinicaResumenDto(clinica.getClinicaId(), clinica.getName())
+                clinica == null ? null : new ClinicaResumenDto(clinica.getClinicaId(), clinica.getName()),
+                consulta.getRegistradaEn(),
+                consulta.getMotivoAnulacion(),
+                consulta.getAnuladaEn(),
+                nombreDe(consulta.getAnuladaPor())
         );
     }
 }

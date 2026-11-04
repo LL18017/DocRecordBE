@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!--/*
+  Invitacion a crear la cuenta (HU-02).
+
+  Desde que no hay registro publico, la cuenta de un medico la abre el
+  administrador desde su ficha, y la persona elige aqui su contrasena. Al
+  canjear el enlace la cuenta queda activa. Sirve igual para el paciente.
+
+  El enlace aparece dos veces, como boton y como direccion escrita, por lo
+  mismo que en confirmacion-registro: si el cliente bloquea los estilos el
+  boton se vuelve un enlace suelto pero sigue sirviendo.
+
+  Variables: nombre, rol, enlace, horas.
+*/-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Te dieron acceso a DocRecord Sv</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EEF2F7;">
+
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Elige tu contraseña para activar tu cuenta. El enlace vence en [[${horas}]] horas.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       bgcolor="#EEF2F7" style="background-color:#EEF2F7;">
+    <tr>
+        <td align="center" style="padding:24px 12px;">
+
+            <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+                   bgcolor="#FFFFFF"
+                   style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:10px;overflow:hidden;">
+
+                <tr th:replace="~{correo/html/_marco :: cabecera}"></tr>
+                <tr>
+                    <td bgcolor="#1E3A5F" height="4"
+                        style="background-color:#1E3A5F;height:4px;line-height:4px;font-size:0;">&nbsp;</td>
+                </tr>
+
+                <tr>
+                    <td style="padding:32px 28px 8px 28px;">
+                        <h1 style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;color:#1E3A5F;">
+                            Activa tu cuenta
+                        </h1>
+                        <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Hola<span th:if="${nombre}" th:text="' ' + ${nombre}"> Ana</span>, el administrador
+                            de tu clínica te dio acceso a DocRecord Sv como
+                            <strong th:text="${rol}">médico</strong>.
+                        </p>
+                        <p style="margin:0 0 24px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#1E293B;">
+                            Para activarla, elige tu contraseña. Tu usuario para iniciar sesión es este
+                            mismo correo.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td align="center" style="padding:0 28px 24px 28px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                            <tr>
+                                <td align="center" bgcolor="#1E3A5F" style="background-color:#1E3A5F;border-radius:6px;">
+                                    <a th:href="${enlace}" href="#"
+                                       style="display:inline-block;padding:16px 34px;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:6px;">
+                                        Elegir mi contraseña
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:0 28px 28px 28px;">
+                        <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#475569;">
+                            ¿No se abre el botón? Copia esta dirección y pégala en tu navegador:
+                        </p>
+                        <p style="margin:0 0 20px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;word-break:break-all;">
+                            <a th:href="${enlace}" th:text="${enlace}" href="#"
+                               style="color:#1E3A5F;text-decoration:underline;">enlace</a>
+                        </p>
+                        <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#64748B;">
+                            El enlace vence en <strong th:text="${horas} + ' horas'">72 horas</strong> y sirve
+                            una sola vez. Si vence, pide al administrador que te mande otro.
+                        </p>
+                    </td>
+                </tr>
+
+                <tr th:replace="~{correo/html/_marco :: pie}"></tr>
+            </table>
+
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

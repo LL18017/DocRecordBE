@@ -69,26 +69,15 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
     }
 
     /**
-     * Registra un medico nuevo, lo habilita e inicia sesion. Devuelve su token.
+     * Crea un medico nuevo e inicia sesion. Devuelve su token.
      *
-     * Cada llamada usa un correo distinto porque el registro COMMITEA: reutilizar
-     * uno fijo haria que la segunda llamada chocara con 409.
+     * Cada llamada usa un correo distinto porque el alta COMMITEA: reutilizar
+     * uno fijo chocaria con el UNIQUE del correo.
      */
     private String registrarMedicoYObtenerToken() throws Exception {
         String correo = "crud.clinica." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
 
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Medico","apellidos":"De Clinicas",
-                                 "email":"%s","password":"%s","especialidadId":1,"registroJunta":"%s"}
-                                """.formatted(correo, CLAVE, juntaUnica())))
-                .andExpect(status().is2xxSuccessful());
-
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
+        crearMedicoHabilitado(correo, CLAVE, "Medico", "De Clinicas");
 
         String cuerpo = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -530,8 +519,8 @@ class ClinicaCrudIT extends PruebaDeIntegracion {
     /**
      * Crea un ADMIN sin clinicas propias ni asignadas, y devuelve su token.
      *
-     * Se fabrica por repositorio porque /auth/register solo da de alta medicos:
-     * no hay ningun endpoint que cree un administrador. Y se le deja a
+     * Se fabrica por repositorio porque no hay ningun endpoint publico que
+     * cree un administrador. Y se le deja a
      * proposito sin una sola clinica, que es justo la situacion que esta prueba
      * examina.
      */

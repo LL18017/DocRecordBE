@@ -64,14 +64,13 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final ClinicaRepository clinicaRepository;
     private final EnfermeraRepository enfermeraRepository;
-    private final EspecialidadRepository especialidadRepository;
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
     // HU-05 criterio 5: quien hizo que sobre las cuentas.
     private final BitacoraDeUsuarios bitacora;
     private final EnlaceDeConfirmacion enlaceDeConfirmacion;
-    // El mismo bean que usa /auth/register: Argon2PasswordEncoder, definido en
+    // El mismo bean que usa toda alta de contrasena: Argon2PasswordEncoder, definido en
     // Security/BasicConfiguration.passwordEncoder().
     private final PasswordEncoder passwordEncoder;
     // HU-02 criterio 3: el enlace de confirmacion vale 24 horas. Eran 5 minutos
@@ -171,12 +170,12 @@ public class UserService {
         return UserMapper.toDto(guardado);
     }
 
-    // @Transactional porque ahora hace DOS escrituras que tienen que ir juntas:
-    // el rol y, para ENFERMERA, su ficha. Media asignacion -rol sin ficha- es
-    // justo el estado que deja a alguien pasando el hasRole y recibiendo 403
-    // del servicio, sin forma de entender por que.
+    // @Transactional porque puede hacer DOS escrituras que tienen que ir
+    // juntas: el rol y, para ENFERMERA, su ficha. Media asignacion -rol sin
+    // ficha- es justo el estado que deja a alguien pasando el hasRole y
+    // recibiendo 403 del servicio, sin forma de entender por que.
     @Transactional
-    public UserResponseDto addRole(int userID, int roleID, Long especialidadId, Integer clinicaId) {
+    public UserResponseDto addRole(int userID, int roleID, Integer clinicaId) {
         User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
@@ -196,27 +195,25 @@ public class UserService {
                 : clinicaRepository.findById(clinicaId)
                         .orElseThrow(() -> new NoResourceFoundException(
                                 "No se encontro la clinica con id: " + clinicaId, "404"));
+
+        if (user.getRoles().contains(role)) {
+            throw new GeneralException("El usuario ya cuenta con este rol", "409");
+        }
+
+        // HU-02: el rol MEDICO ya no crea la ficha. La ficha -especialidad y
+        // numero de junta- se registra en Medicos (MedicoService), que es
+        // donde se da de alta a un medico; aqui solo se le da acceso a quien
+        // ya la tiene. Sin ficha seria un rol que pasa el hasRole y recibe 403
+        // al guardar una consulta, que es justo el estado roto que se evita.
         Optional<Medico> ficha = esMedico
                 ? medicoRepository.findById(user.getPersona().getPersonaId())
                 : Optional.empty();
-
-        if (user.getRoles().contains(role)) {
-            // Cuentas a las que se les dio MEDICO antes de que esto creara la
-            // ficha: volver a darlo con la especialidad las repara.
-            if (esMedico && ficha.isEmpty() && especialidadId != null) {
-                Medico creada = asegurarFichaDeMedico(user, ficha, especialidadId);
-                asignarSedeSiFalta(user, sede);
-                return UserMapper.toDto(user, creada.getEspecialidad().getNombre(), sedesDe(user));
-            }
-            throw new GeneralException("El usuario ya cuenta con este rol", "409");
-        }
-        // Se valida ANTES de tocar los roles: sin especialidad no se puede
-        // crear la ficha, y un rol MEDICO sin ficha es justo el estado roto
-        // que se quiere evitar.
-        if (esMedico && ficha.isEmpty() && especialidadId == null) {
+        if (esMedico && ficha.isEmpty()) {
             throw new GeneralException(
-                    "Para dar el rol de médico hay que indicar su especialidad", "400");
+                    "Esta cuenta no tiene ficha de médico: regístrela primero en Médicos, con su "
+                            + "especialidad y su número de junta, y dele acceso desde ahí", "409");
         }
+
         // Un medico o una enfermera trabaja en una sede: sin ninguna, la cuenta
         // se queda en la pantalla de seleccion de clinica sin poder entrar. Por
         // eso, a quien todavia no tiene sede, el rol clinico se da junto con
@@ -233,23 +230,19 @@ public class UserService {
         bitacora.registrar(user.getUserID(), BitacoraDeUsuario.ROL_ASIGNADO,
                 "Rol " + role.getName(), administrador.getEmail());
 
-        // Asignar un rol clinico crea tambien su ficha: `enfermeras` para
-        // ENFERMERA y `medicos` para MEDICO.
-        //
-        // Sin esto la asignacion queda a medias de la peor forma posible: la
-        // cuenta pasa el hasRole(...) del controlador y despues el servicio
-        // la rechaza con 403, porque lo que autoriza el acto clinico es la
-        // FILA, no la etiqueta del token. Quien lo sufre no tiene como saber
-        // que le falta.
-        //
-        // La ficha de medico lleva la especialidad (`especialidad_id` es NOT
-        // NULL), por eso con MEDICO se pide `especialidadId`. Antes esa alta
-        // solo pasaba por /auth/register.
+        // Asignar ENFERMERA crea tambien su ficha en `enfermeras`: sin ella la
+        // cuenta pasa el hasRole(...) y despues el servicio la rechaza con 403,
+        // porque lo que autoriza el acto clinico es la FILA, no la etiqueta del
+        // token.
         if (RolesEnum.ENFERMERA.getId() == roleID) {
             asegurarFichaDeEnfermeria(user);
         }
+        // La ficha de medico ya existe (se exigio arriba); si se habia dado de
+        // baja al quitarle el rol, darselo otra vez la reactiva.
         if (esMedico) {
-            Medico medico = asegurarFichaDeMedico(user, ficha, especialidadId);
+            Medico medico = ficha.get();
+            medico.setActivo(true);
+            medicoRepository.save(medico);
             return UserMapper.toDto(user, medico.getEspecialidad().getNombre(), sedesDe(user));
         }
 
@@ -278,32 +271,6 @@ public class UserService {
         return user.getRoles().stream().anyMatch(r ->
                 RolesEnum.MEDICO.getName().equals(r.getName())
                         || RolesEnum.ENFERMERA.getName().equals(r.getName()));
-    }
-
-    /**
-     * Crea o reactiva la ficha de medico. `ficha` es la que ya existe, si
-     * existe; `especialidadId` solo es obligatorio cuando hay que crearla, y
-     * si viene con una ficha existente le cambia la especialidad.
-     *
-     * OJO: no fijar personaId en el builder. Con @MapsId lo deriva de
-     * `persona`; con el id puesto, Spring Data haria merge en vez de persist
-     * (ver el mismo comentario en AuthService).
-     */
-    private Medico asegurarFichaDeMedico(User user, Optional<Medico> ficha, Long especialidadId) {
-        Especialidad especialidad = especialidadId == null
-                ? null
-                : especialidadRepository.findById(especialidadId)
-                        .orElseThrow(() -> new NoResourceFoundException(
-                                "No se encontro la especialidad con id: " + especialidadId, "404"));
-
-        Medico medico = ficha.orElseGet(() -> Medico.builder()
-                .persona(user.getPersona())
-                .build());
-        medico.setActivo(true);
-        if (especialidad != null) {
-            medico.setEspecialidad(especialidad);
-        }
-        return medicoRepository.save(medico);
     }
 
     /**
@@ -520,13 +487,13 @@ public class UserService {
      * copia de seguridad mal guardada- se llevaba las credenciales de todo el
      * personal de un expediente clinico; y como la gente reusa contrasenas, el
      * dano no se habria quedado en este sistema. Ahora pasa por el mismo
-     * PasswordEncoder (argon2) que /auth/register, que es el unico flujo que
-     * lo hacia bien.
+     * PasswordEncoder (argon2) que usaba el registro publico (ya retirado),
+     * que era el unico flujo que lo hacia bien.
      *
-     * ── Confirmacion por correo, igual que /auth/register ─────────────────
+     * ── Confirmacion por correo ───────────────────────────────────────────
      * Nace con enabled = false -lo fija UserMapper.toEntity- y ahora si se le
      * emite un VerificationToken y se manda el correo de confirmacion, mismo
-     * patron que AuthService.registrarMedico. Si el correo falla (MailException),
+     * patron que tenia el registro publico. Si el correo falla (MailException),
      * la cuenta se crea de todos modos -no depender de un SMTP externo para dar
      * de alta personal- y correoDeVerificacionEnviado sale en false para que el
      * cliente lo sepa. En ese caso el administrador tiene una salida aparte:

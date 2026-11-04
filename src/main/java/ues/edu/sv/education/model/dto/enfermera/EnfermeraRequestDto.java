@@ -21,8 +21,8 @@ import ues.edu.sv.education.model.dto.persona.PersonaRequestDto;
  * verdad necesita una.
  *
  * ── Por que el alta la hace un ADMIN y no es publica ───────────────────────
- * /auth/register es publico y por eso solo crea cuentas MEDICO sin privilegio
- * real hasta que alguien las habilita. Enfermeria escribe en el expediente
+ * No hay alta publica de cuentas (el registro de medicos se retiro, HU-02).
+ * Enfermeria escribe en el expediente
  * clinico -las constantes que el medico lee para diagnosticar-, asi que quien
  * entra al sistema como enfermera tiene que haber sido admitido por alguien
  * que responde por ello, no haberse dado de alta a si mismo.

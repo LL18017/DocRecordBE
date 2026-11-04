@@ -1,6 +1,8 @@
 package ues.edu.sv.education.repository;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ues.edu.sv.education.model.entity.Consulta;
@@ -66,4 +68,16 @@ public interface ConsultaRepository extends JpaRepository<Consulta, Long> {
     WHERE c.consultaId = :consultaId
 """)
     Optional<Consulta> buscarConDetalle(@Param("consultaId") Long consultaId);
+
+    /**
+     * La consulta con bloqueo de escritura, para anularla (V35).
+     *
+     * Sin el bloqueo, dos anulaciones simultaneas -o una anulacion directa y
+     * la ultima aprobacion de una solicitud- leerian ambas el documento vigente
+     * y la segunda pisaria el motivo y la autoria de la primera. Mismo caso que
+     * SignosVitalesRepository.buscarParaAnular.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Consulta c where c.consultaId = :id")
+    Optional<Consulta> buscarParaAnular(@Param("id") Long id);
 }

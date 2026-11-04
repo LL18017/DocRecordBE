@@ -20,7 +20,16 @@ import javax.sql.DataSource;
  * ddl-auto=validate compare el esquema.
  *
  * Si una futura snapshot de Boot 4 agrega la autoconfiguracion oficial, esta
- * clase se puede borrar sin mas cambios.
+ * clase se puede borrar sin mas cambios (pasando outOfOrder a
+ * spring.flyway.out-of-order=true).
+ *
+ * ── Por que outOfOrder ────────────────────────────────────────────────────
+ * Los numeros de migracion se reparten por persona (V33 y V34 de Mario, V35
+ * de Naun) y cada uno integra cuando termina. Sin outOfOrder, si V35 llega a
+ * produccion antes que V33, la V33 que llega despues tumba el arranque con
+ * "Detected resolved migration not applied to database", que es lo que paso
+ * el 24 de octubre. Con outOfOrder la aplica igual, porque las migraciones
+ * reservadas tocan tablas distintas y el orden entre ellas no importa.
  */
 @Component
 public class FlywayBootstrap implements BeanPostProcessor {
@@ -31,6 +40,7 @@ public class FlywayBootstrap implements BeanPostProcessor {
             Flyway.configure()
                     .dataSource(dataSource)
                     .baselineOnMigrate(true)
+                    .outOfOrder(true)
                     .load()
                     .migrate();
 

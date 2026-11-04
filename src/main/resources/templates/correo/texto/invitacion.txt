@@ -1,0 +1,15 @@
+[# th:if="${nombre}"]Hola [(${nombre})],[/][# th:unless="${nombre}"]Hola,[/] el administrador de tu clínica te dio acceso a DocRecord Sv como [(${rol})].
+
+Para activar tu cuenta, abre este enlace y elige tu contraseña:
+
+[(${enlace})]
+
+El enlace vence en [(${horas})] horas y sirve una sola vez. Si vence, pide
+al administrador que te mande otro.
+
+Tu usuario para iniciar sesión es este mismo correo.
+
+--
+DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
+Correo automático, no respondas a esta dirección.
+Universidad de El Salvador - Diseño de Sistemas II

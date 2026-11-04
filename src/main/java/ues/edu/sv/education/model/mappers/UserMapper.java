@@ -54,8 +54,7 @@ public class UserMapper {
      * Al exigir el hash en la firma el error deja de ser posible por olvido:
      * quien llame a toEntity tiene que haber pasado la contrasena por el
      * PasswordEncoder antes, porque el DTO por si solo ya no basta para
-     * construir la entidad. Ver UserService.createUser y, para el mismo
-     * cifrado en el registro publico, AuthService.registrarMedico.
+     * construir la entidad. Ver UserService.createUser.
      *
      * La persona ya debe existir (guardada) antes de llamar esto: User solo
      * guarda la referencia, no crea su propia identidad.

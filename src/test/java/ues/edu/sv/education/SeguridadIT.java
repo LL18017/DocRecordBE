@@ -59,10 +59,10 @@ class SeguridadIT extends PruebaDeIntegracion {
     // Se instancia en vez de inyectarse: este contexto no expone un bean de ObjectMapper.
     private final ObjectMapper json = new ObjectMapper();
 
-    // Cada prueba registra su propio medico. El registro COMMITEA (la clase no
-    // es @Transactional a proposito: MockMvc debe ver el usuario ya guardado
-    // para poder autenticarlo), asi que reutilizar un correo fijo haria que la
-    // segunda prueba chocara con 409 "correo ya registrado".
+    // Cada prueba crea su propio medico. El alta COMMITEA (la clase no es
+    // @Transactional a proposito: MockMvc debe ver el usuario ya guardado para
+    // poder autenticarlo), asi que reutilizar un correo fijo chocaria con el
+    // UNIQUE del correo.
     private static final AtomicInteger CONTADOR = new AtomicInteger();
 
     private static final String CLAVE = "Docrecord2026!";
@@ -77,25 +77,7 @@ class SeguridadIT extends PruebaDeIntegracion {
         correoDelMedico = correo;
         String clave = CLAVE;
 
-        // Se pide ADEMAS el rol ADMIN en el cuerpo. Si el servidor lo respetara,
-        // esta cuenta seria administradora y el resto de las pruebas pasarian
-        // por la razon equivocada.
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Medico","apellidos":"De Pruebas",
-                                 "email":"%s","password":"%s",
-                                 "especialidadId":1,"registroJunta":"%s",
-                                 "roles":[1],"userType":1}
-                                """.formatted(correo, clave, juntaUnica())))
-                .andExpect(status().is2xxSuccessful());
-
-        // La cuenta nace deshabilitada a la espera del correo de confirmacion.
-        User usuario = usuarios.findByEmailIgnoreCase(correo)
-                .orElseThrow(() -> new AssertionError("el registro no creo el usuario"));
-        usuario.setEnabled(true);
-        usuarios.saveAndFlush(usuario);
-        idDelMedico = usuario.getUserID();
+        idDelMedico = crearMedicoHabilitado(correo, clave, "Medico", "De Pruebas").getUserID();
 
         MvcResult login = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -119,20 +101,26 @@ class SeguridadIT extends PruebaDeIntegracion {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("el registro publico ignora los roles que pida el cliente")
-    void elRegistroPublicoIgnoraLosRolesDelCliente() throws Exception {
-        // /auth/** es permitAll. Antes, AuthService tomaba request.roles() y se
-        // los asignaba tal cual, asi que cualquiera en internet podia crearse
-        // una cuenta ADMIN mandando "roles":[1]. Que la cuenta naciera
-        // deshabilitada no protegia nada: el atacante controla su propio correo.
-        User medico = usuarios.findByEmailIgnoreCase(correoDelMedico)
-                .orElseThrow(() -> new AssertionError("no se encontro el usuario"));
+    @DisplayName("ya no existe un registro publico: nadie se da de alta solo")
+    void noHayRegistroPublico() throws Exception {
+        // /auth/** es permitAll. Primero /auth/register aceptaba los roles del
+        // cuerpo (cualquiera podia crearse un ADMIN mandando "roles":[1]); se
+        // cerro, pero seguia dejando a cualquiera hacerse MEDICO y leer todos
+        // los expedientes. HU-02 lo retiro: al medico lo da de alta el
+        // administrador. Lo que se comprueba es que la ruta ya no existe y que
+        // intentarlo, aun pidiendo ADMIN, no deja ninguna cuenta.
+        String correo = "intruso." + CONTADOR.incrementAndGet() + "@ues.edu.sv";
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nombres":"Intruso","apellidos":"Externo",
+                                 "email":"%s","password":"%s",
+                                 "especialidadId":1,"registroJunta":"%s",
+                                 "roles":[1],"userType":1}
+                                """.formatted(correo, CLAVE, juntaUnica())))
+                .andExpect(status().isNotFound());
 
-        var roles = medico.getRoles().stream().map(r -> r.getName()).toList();
-
-        assertEquals(1, roles.size(), "el registro publico debe asignar exactamente un rol");
-        assertEquals("MEDICO", roles.get(0),
-                "pidio ADMIN en el cuerpo y debe haber quedado MEDICO; el servidor decide el rol");
+        assertTrue(usuarios.findByEmailIgnoreCase(correo).isEmpty(), "no debe quedar ninguna cuenta");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -279,16 +267,17 @@ class SeguridadIT extends PruebaDeIntegracion {
     }
 
     @Test
-    @DisplayName("el catalogo de especialidades SI es publico, porque lo usa el registro")
+    @DisplayName("el catalogo de especialidades SI es publico")
     void elCatalogoDeEspecialidadesEsPublico() throws Exception {
-        // Excepcion deliberada a "todo requiere token": /register es una
-        // pantalla publica y necesita este catalogo para llenar su selector.
-        // Exigirle sesion dejaba el <select> en "Cargando especialidades..."
-        // para siempre y hacia imposible crear una cuenta desde la interfaz.
+        // Excepcion deliberada a "todo requiere token". Nacio para la pantalla
+        // publica de registro, que ya no existe (HU-02), pero sigue haciendo
+        // falta: el despliegue comprueba que la API responde pidiendo
+        // justamente GET /especialidades sin token (deploy.yml), y el mapa
+        // publico de clinicas filtra por especialidad.
         //
         // Es seguro: son nombres de especialidades medicas, sin dato personal.
-        // Esta prueba existe para que nadie lo "corrija" cerrandolo de nuevo
-        // sin darse cuenta de que rompe el registro.
+        // Esta prueba existe para que nadie lo cierre sin darse cuenta de que
+        // rompe el chequeo del despliegue.
         mockMvc.perform(get("/especialidades"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(7))))

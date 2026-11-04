@@ -78,4 +78,22 @@ public class Consulta {
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false, length = 20)
     private EstadoConsulta estado;
+
+    // Cuando se guardo en el sistema, que no siempre es `fecha` (el cliente
+    // puede registrar una atencion de hace un rato). La ventana de anulacion
+    // directa se cuenta desde aqui. Ver V35.
+    @Column(name = "registrada_en", nullable = false, updatable = false)
+    private LocalDateTime registradaEn;
+
+    // El rastro de la anulacion (HU-21): por que, quien y cuando. Los tres van
+    // juntos o no va ninguno (CHECK en V35).
+    @Column(name = "motivo_anulacion", length = 500)
+    private String motivoAnulacion;
+
+    @Column(name = "anulada_en")
+    private LocalDateTime anuladaEn;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "anulada_por")
+    private User anuladaPor;
 }

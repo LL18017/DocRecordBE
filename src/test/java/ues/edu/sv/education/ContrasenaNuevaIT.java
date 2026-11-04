@@ -65,19 +65,6 @@ class ContrasenaNuevaIT extends PruebaClinica {
                 "el rechazo debe ser el del token, no el de la contrasena: " + mensaje);
     }
 
-    @ParameterizedTest(name = "el registro rechaza \"{0}\"")
-    @ValueSource(strings = {SIN_MAYUSCULA, SIN_NUMERO, MUY_CORTA})
-    @DisplayName("el registro publico aplica la misma regla")
-    void elRegistroRechazaContrasenasDebiles(String clave) throws Exception {
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"nombres":"Medico","apellidos":"Debil",
-                                 "email":"%s","password":"%s","especialidadId":1}
-                                """.formatted(correoUnico("clave.debil"), clave)))
-                .andExpect(status().isBadRequest());
-    }
-
     @ParameterizedTest(name = "el administrador no puede asignar \"{0}\"")
     @ValueSource(strings = {SIN_MAYUSCULA, SIN_NUMERO, MUY_CORTA})
     @DisplayName("la asignacion de contrasena por un administrador aplica la misma regla")

@@ -22,7 +22,8 @@ public record ConsultaResponseDto(
         @Schema(description = "Indicaciones para el paciente; null si no se registraron")
         String indicaciones,
 
-        @Schema(description = "PENDIENTE mientras no haya diagnostico; FINALIZADA cuando lo hay")
+        @Schema(description = "PENDIENTE mientras no haya diagnostico; FINALIZADA cuando lo hay; ANULADA si se "
+                + "anulo (HU-21): sigue visible y ya no se edita")
         EstadoConsulta estado,
 
         PacienteResumenDto paciente,
@@ -30,7 +31,19 @@ public record ConsultaResponseDto(
         MedicoResumenDto medico,
 
         @Schema(description = "Null si la consulta no registro sucursal")
-        ClinicaResumenDto clinica
+        ClinicaResumenDto clinica,
+
+        @Schema(description = "Cuando se guardo en el sistema; desde aqui corre la ventana de anulacion directa")
+        LocalDateTime registradaEn,
+
+        @Schema(description = "Por que se anulo; null si no esta ANULADA")
+        String motivoAnulacion,
+
+        @Schema(description = "Cuando se anulo; null si no esta ANULADA")
+        LocalDateTime anuladaEn,
+
+        @Schema(description = "Nombre de quien la anulo (o pidio anularla); null si no esta ANULADA")
+        String anuladaPor
 
 ) {
 }
