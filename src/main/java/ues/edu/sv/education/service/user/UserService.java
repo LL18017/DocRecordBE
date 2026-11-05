@@ -194,7 +194,7 @@ public class UserService {
     // recibiendo 403 del servicio, sin forma de entender por que.
     @Transactional
     public UserResponseDto addRole(int userID, int roleID, Integer clinicaId) {
-        return addRole(userID, roleID, clinicaId, null, null);
+        return addRole(userID, roleID, clinicaId, null, null, null);
     }
 
     /**
@@ -205,11 +205,13 @@ public class UserService {
      * sin ella-, asi que darlo sin expediente seria dejar la cuenta en el
      * estado roto que esta pantalla evita. El expediente se abre sobre la
      * MISMA persona de la cuenta, que ya existe desde el alta: no se crea
-     * otra ni se pide DUI, que una cuenta de Usuarios y Roles no tiene.
-     * Fecha de nacimiento y sexo si se piden, porque sin ellos no se abre
-     * un expediente (PacienteService.crear, 422). Si la persona ya era
+     * otra. Fecha de nacimiento y sexo son obligatorios, porque sin ellos no
+     * se abre un expediente (PacienteService.crear, 422). El DUI lo pide la
+     * pantalla -una cuenta de Usuarios y Roles nace sin el, y sin el el
+     * expediente no se encuentra al buscar por DUI- y aqui se valida: 400 con
+     * otro formato, 409 si ya es de otra persona. Si la persona ya era
      * paciente -la registraron por su DUI en Pacientes- solo se agrega el
-     * rol y esos dos datos se ignoran.
+     * rol y esos datos se ignoran.
      *
      * Con PACIENTE, clinicaId es la sede donde se abre el expediente y NO
      * se le asigna a la cuenta: un paciente no trabaja en ninguna sede
@@ -217,7 +219,7 @@ public class UserService {
      */
     @Transactional
     public UserResponseDto addRole(int userID, int roleID, Integer clinicaId,
-                                   LocalDate fechaNacimiento, String sexo) {
+                                   LocalDate fechaNacimiento, String sexo, String dui) {
         User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
@@ -269,7 +271,7 @@ public class UserService {
 
         // Antes del rol: si el expediente no se puede abrir (faltan la fecha
         // o el sexo), la excepcion deshace todo y la cuenta queda como estaba.
-        String expediente = esPaciente ? asegurarExpediente(user, fechaNacimiento, sexo, clinicaId) : null;
+        String expediente = esPaciente ? asegurarExpediente(user, fechaNacimiento, sexo, dui, clinicaId) : null;
 
         user.getRoles().add(role);
         asignarSedeSiFalta(user, esPaciente ? null : sede);
@@ -301,7 +303,8 @@ public class UserService {
      * El expediente de la persona de la cuenta: el que ya tenia, o uno nuevo.
      * Devuelve su numero.
      */
-    private String asegurarExpediente(User user, LocalDate fechaNacimiento, String sexo, Integer clinicaId) {
+    private String asegurarExpediente(User user, LocalDate fechaNacimiento, String sexo, String dui,
+                                      Integer clinicaId) {
         Persona persona = user.getPersona();
         Optional<String> yaTiene = pacienteRepository.findById(persona.getPersonaId())
                 .map(p -> p.getExpediente());
@@ -317,11 +320,29 @@ public class UserService {
             throw new GeneralException("El sexo debe ser M o F", "400");
         }
 
+        // El DUI, igual: se guarda como 01234567-8 (con 9 digitos seguidos se
+        // le pone el guion) y no puede ser de otra persona, porque el DUI es
+        // la clave con que Pacientes reconoce a alguien. Si la persona ya
+        // tenia otro DUI, PacienteService lo rechaza con su propio 409.
+        String duiLimpio = dui == null || dui.isBlank() ? null : dui.trim();
+        if (duiLimpio != null && duiLimpio.matches("\\d{9}")) {
+            duiLimpio = duiLimpio.substring(0, 8) + "-" + duiLimpio.substring(8);
+        }
+        if (duiLimpio != null && !duiLimpio.matches("\\d{8}-\\d")) {
+            throw new GeneralException("El DUI debe tener 9 dígitos, por ejemplo 01234567-8", "400");
+        }
+        if (duiLimpio != null && personaRepository.findByDui(duiLimpio)
+                .filter(otra -> !otra.getPersonaId().equals(persona.getPersonaId()))
+                .isPresent()) {
+            throw new GeneralException(
+                    "Ese DUI ya está registrado para otra persona. Revise el número", "409");
+        }
+
         // El correo de la cuenta queda como correo de contacto si la persona
         // no tenia uno: es el que ya se sabe suyo, y el que el expediente
         // propone despues para su portal.
         PersonaRequestDto datos = new PersonaRequestDto(
-                persona.getPersonaId(), null, null, null, fechaNacimiento, sexoLimpio, null, null,
+                persona.getPersonaId(), duiLimpio, null, null, fechaNacimiento, sexoLimpio, null, null,
                 persona.getEmail() == null ? user.getEmail() : null);
         return pacienteService.crear(new PacienteRequestDto(datos, null, clinicaId)).expediente();
     }

@@ -85,9 +85,12 @@ public class UserControler {
             @org.springframework.format.annotation.DateTimeFormat(
                     iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
             java.time.LocalDate fechaNacimiento,
-            @RequestParam(required = false) String sexo
+            @RequestParam(required = false) String sexo,
+            // Opcional en la API, obligatorio en la pantalla: con el DUI el
+            // expediente se encuentra al buscar por DUI en Pacientes.
+            @RequestParam(required = false) String dui
     ) {
-        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId, fechaNacimiento, sexo));
+        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId, fechaNacimiento, sexo, dui));
     }
 
     @Operation(
