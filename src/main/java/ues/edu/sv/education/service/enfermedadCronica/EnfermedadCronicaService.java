@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.enfermedadCronica;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public class EnfermedadCronicaService {
 
     private final EnfermedadCronicaRepository enfermedadCronicaRepository;
     private final UserRepository userRepository;
+    private final ExpedientePropio expedientePropio;
 
     public EnfermedadCronicaResponse crear(
             EnfermedadCronicaRequest request
@@ -32,6 +34,7 @@ public class EnfermedadCronicaService {
                 .orElseThrow(() ->
                         new NoResourceFoundException("Usuario no encontrado","404")
                 );
+        expedientePropio.exigirCuentaAjena(user.getUserID());
 
         EnfermedadCronica enfermedad = EnfermedadCronicaMapper.toEntity(
                 request,
@@ -85,6 +88,7 @@ public class EnfermedadCronicaService {
                                 )
                         );
 
+        expedientePropio.exigirCuentaAjena(enfermedad.getUser().getUserID());
         EnfermedadCronicaMapper.updateEntity(
                 enfermedad,
                 request
@@ -104,6 +108,8 @@ public class EnfermedadCronicaService {
             );
         }
 
+        enfermedadCronicaRepository.findById(id).ifPresent(
+                e -> expedientePropio.exigirCuentaAjena(e.getUser().getUserID()));
         enfermedadCronicaRepository.deleteById(id);
     }
 }

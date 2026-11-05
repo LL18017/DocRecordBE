@@ -65,17 +65,29 @@ public class UserControler {
                     + "exige que la persona ya tenga ficha de médico (409 si no): la ficha, con "
                     + "especialidad y número de junta, se registra en /medicos, que es también donde "
                     + "se le da acceso a un médico (HU-02). Asignar MEDICO o ENFERMERA a una cuenta "
-                    + "sin ninguna sede exige clinicaId, que se le asigna en el mismo paso (400 si falta)."
+                    + "sin ninguna sede exige clinicaId, que se le asigna en el mismo paso (400 si falta). "
+                    + "Asignar PACIENTE abre en el mismo paso el expediente de la persona de la cuenta, "
+                    + "si todavia no lo tiene: exige fechaNacimiento y sexo (422 si faltan), no pide DUI, "
+                    + "y clinicaId es la sede donde se abre el expediente, nunca una sede de la cuenta. "
+                    + "Si la persona ya tenia expediente solo se le agrega el rol."
     )
     @PostMapping("/{userId}/role/{roleId}")
     public ResponseEntity<UserResponseDto> addRole(
             @PathVariable(required = true) int userId,
             @PathVariable(required = true) int roleId,
             // Con MEDICO o ENFERMERA, obligatorio si la cuenta aun no tiene
-            // ninguna sede: es la primera donde va a trabajar.
-            @RequestParam(required = false) Integer clinicaId
+            // ninguna sede: es la primera donde va a trabajar. Con PACIENTE,
+            // opcional: la sede donde se abre su expediente.
+            @RequestParam(required = false) Integer clinicaId,
+            // Solo con PACIENTE y solo si todavia no tiene expediente: son los
+            // dos datos sin los que un expediente no se abre (HU-07).
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate fechaNacimiento,
+            @RequestParam(required = false) String sexo
     ) {
-        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId));
+        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId, fechaNacimiento, sexo));
     }
 
     @Operation(

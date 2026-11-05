@@ -80,4 +80,14 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     Long siguienteCorrelativoDeExpediente();
 
     Optional<Paciente> findByPersonaId(Long personaId);
+
+    /** Los expedientes de un grupo de personas, en una consulta (listado de usuarios). */
+    @Query("""
+            SELECT new ues.edu.sv.education.repository.proyeccion.ExpedienteDePersona(
+                       p.personaId, p.expediente)
+            FROM Paciente p
+            WHERE p.personaId IN :personaIds
+            """)
+    java.util.List<ues.edu.sv.education.repository.proyeccion.ExpedienteDePersona> expedientesDe(
+            @Param("personaIds") java.util.List<Long> personaIds);
 }

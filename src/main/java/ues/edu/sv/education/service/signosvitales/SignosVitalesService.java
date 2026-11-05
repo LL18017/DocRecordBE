@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.signosvitales;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -67,6 +68,7 @@ public class SignosVitalesService {
     private final ConsultaRepository consultaRepository;
     private final ClinicaRepository clinicaRepository;
     private final EnfermeraAutenticado enfermeraAutenticado;
+    private final ExpedientePropio expedientePropio;
 
     /**
      * Registra una toma. La firma la enfermera autenticada.
@@ -83,6 +85,7 @@ public class SignosVitalesService {
         Paciente paciente = pacienteRepository.findById(request.pacienteId())
                 .orElseThrow(() -> new NoResourceFoundException(
                         "No se encontro el paciente con id: " + request.pacienteId(), "404"));
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
 
         // Una toma parcial es normal; una toma VACIA no es una toma. Sin esta
         // guarda, un POST con solo el pacienteId dejaria en el expediente una
@@ -253,6 +256,7 @@ public class SignosVitalesService {
         SignosVitales toma = signosVitalesRepository.buscarParaAnular(signosVitalesId)
                 .orElseThrow(() -> new NoResourceFoundException(
                         "No se encontro la toma de signos vitales con id: " + signosVitalesId, "404"));
+        expedientePropio.exigirAjeno(toma.getPaciente().getPersonaId());
 
         if (!toma.getEnfermera().getPersonaId().equals(enfermera.getPersonaId())) {
             throw new GeneralException(

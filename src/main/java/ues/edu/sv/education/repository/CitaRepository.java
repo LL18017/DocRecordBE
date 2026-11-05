@@ -134,6 +134,25 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
             @Param("excluirCitaId") Integer excluirCitaId
     );
 
+    /**
+     * Candado de una franja hasta el final de la transaccion (HU-30, criterios
+     * 2 y 5).
+     *
+     * Dos reservas de la misma franja que llegan a la vez pasarian las dos por
+     * medicoOcupado()/pacienteOcupado() antes de que ninguna guarde. El indice
+     * unico parcial de V24 las frena en la base, pero esa migracion solo lo
+     * crea si no habia choques previos, asi que no se puede dar por hecho que
+     * exista. Con el candado la segunda reserva espera a que la primera
+     * confirme y entonces ve su cita.
+     *
+     * La clave son dos enteros: el dueño de la franja (el user_id del medico,
+     * o el persona_id del paciente en negativo, para que no se crucen) y el
+     * minuto de la franja contado desde la epoca. Se suelta solo al confirmar
+     * o deshacer la transaccion.
+     */
+    @Query(value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(:dueno, :minuto)) AS candado", nativeQuery = true)
+    Integer bloquearFranja(@Param("dueno") int dueno, @Param("minuto") int minuto);
+
     // HU-33: las citas AGENDADAS de la ventana que todavia no tienen
     // recordatorio. A una cita cancelada o atendida no se le recuerda nada
     // (criterio 3), y la marca recordatorio_enviado_en garantiza "una sola vez"

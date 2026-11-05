@@ -49,5 +49,15 @@ public record UserResponseDto(
          * sede, que no puede entrar a trabajar en ninguna. Null cuando el
          * endpoint no lo calculo: no es lo mismo que cero.
          */
-        Integer sedes) {
+        Integer sedes,
+        /**
+         * El numero de expediente, si la persona de esta cuenta tambien es
+         * paciente.
+         *
+         * Null cuando no lo es. Lo usa Usuarios y Roles al dar el rol
+         * PACIENTE: con expediente solo se agrega el rol; sin el, hay que
+         * pedir la fecha de nacimiento y el sexo para abrirlo. Null tambien
+         * cuando el endpoint no lo calculo, como `sedes`.
+         */
+        String expediente) {
 }

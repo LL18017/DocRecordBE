@@ -33,6 +33,11 @@ import ues.edu.sv.education.repository.proyeccion.EspecialidadDePersona;
 import ues.edu.sv.education.repository.proyeccion.SedesDeUsuario;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.EnfermeraRepository;
+import ues.edu.sv.education.repository.PacienteRepository;
+import ues.edu.sv.education.repository.proyeccion.ExpedienteDePersona;
+import ues.edu.sv.education.model.dto.paciente.PacienteRequestDto;
+import ues.edu.sv.education.model.dto.persona.PersonaRequestDto;
+import ues.edu.sv.education.service.paciente.PacienteService;
 import ues.edu.sv.education.repository.EspecialidadRepository;
 import ues.edu.sv.education.repository.PersonaRepository;
 import ues.edu.sv.education.repository.RoleRepository;
@@ -43,6 +48,7 @@ import ues.edu.sv.education.service.PlantillaDeCorreo;
 import ues.edu.sv.education.service.auth.AdminAutenticado;
 import ues.edu.sv.education.service.auth.EnlaceDeConfirmacion;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -64,6 +70,8 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final ClinicaRepository clinicaRepository;
     private final EnfermeraRepository enfermeraRepository;
+    private final PacienteRepository pacienteRepository;
+    private final PacienteService pacienteService;
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
@@ -118,11 +126,21 @@ public class UserService {
                                 SedesDeUsuario::userId,
                                 s -> s.sedes().intValue()));
 
+        // Y el expediente, para que Usuarios y Roles sepa, al dar el rol
+        // PACIENTE, si hay que abrirlo o la persona ya lo tiene.
+        Map<Long, String> expedientes = personaIds.isEmpty()
+                ? Map.of()
+                : pacienteRepository.expedientesDe(personaIds).stream()
+                        .collect(Collectors.toMap(
+                                ExpedienteDePersona::personaId,
+                                ExpedienteDePersona::expediente));
+
         return usuarios.stream()
                 .map(u -> UserMapper.toDto(
                         u,
                         especialidades.get(u.getPersona().getPersonaId()),
-                        sedes.getOrDefault(u.getUserID(), 0)))
+                        sedes.getOrDefault(u.getUserID(), 0),
+                        expedientes.get(u.getPersona().getPersonaId())))
                 .toList();
     }
 
@@ -176,6 +194,30 @@ public class UserService {
     // recibiendo 403 del servicio, sin forma de entender por que.
     @Transactional
     public UserResponseDto addRole(int userID, int roleID, Integer clinicaId) {
+        return addRole(userID, roleID, clinicaId, null, null);
+    }
+
+    /**
+     * Con PACIENTE, ademas, el expediente.
+     *
+     * Es el mismo criterio que con ENFERMERA y su ficha: el rol solo no
+     * concede nada -el portal exige la fila en `pacientes` y responde 403
+     * sin ella-, asi que darlo sin expediente seria dejar la cuenta en el
+     * estado roto que esta pantalla evita. El expediente se abre sobre la
+     * MISMA persona de la cuenta, que ya existe desde el alta: no se crea
+     * otra ni se pide DUI, que una cuenta de Usuarios y Roles no tiene.
+     * Fecha de nacimiento y sexo si se piden, porque sin ellos no se abre
+     * un expediente (PacienteService.crear, 422). Si la persona ya era
+     * paciente -la registraron por su DUI en Pacientes- solo se agrega el
+     * rol y esos dos datos se ignoran.
+     *
+     * Con PACIENTE, clinicaId es la sede donde se abre el expediente y NO
+     * se le asigna a la cuenta: un paciente no trabaja en ninguna sede
+     * (AccesoAlPortalService tampoco se la da).
+     */
+    @Transactional
+    public UserResponseDto addRole(int userID, int roleID, Integer clinicaId,
+                                   LocalDate fechaNacimiento, String sexo) {
         User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
@@ -188,6 +230,7 @@ public class UserService {
         User user = userOpt.get();
         Role role = roleOpt.get();
         boolean esMedico = RolesEnum.MEDICO.getId() == roleID;
+        boolean esPaciente = RolesEnum.PACIENTE.getId() == roleID;
         // La sede del alta. Se resuelve antes de tocar nada: una clinica que no
         // existe tiene que dar 404 sin dejar el rol puesto a medias.
         Clinicas sede = clinicaId == null
@@ -224,11 +267,16 @@ public class UserService {
                     "Un médico o una enfermera necesita al menos una sede: indique en cuál va a trabajar", "400");
         }
 
+        // Antes del rol: si el expediente no se puede abrir (faltan la fecha
+        // o el sexo), la excepcion deshace todo y la cuenta queda como estaba.
+        String expediente = esPaciente ? asegurarExpediente(user, fechaNacimiento, sexo, clinicaId) : null;
+
         user.getRoles().add(role);
-        asignarSedeSiFalta(user, sede);
+        asignarSedeSiFalta(user, esPaciente ? null : sede);
         userRepository.save(user);
         bitacora.registrar(user.getUserID(), BitacoraDeUsuario.ROL_ASIGNADO,
-                "Rol " + role.getName(), administrador.getEmail());
+                "Rol " + role.getName() + (esPaciente ? " (expediente " + expediente + ")" : ""),
+                administrador.getEmail());
 
         // Asignar ENFERMERA crea tambien su ficha en `enfermeras`: sin ella la
         // cuenta pasa el hasRole(...) y despues el servicio la rechaza con 403,
@@ -246,7 +294,36 @@ public class UserService {
             return UserMapper.toDto(user, medico.getEspecialidad().getNombre(), sedesDe(user));
         }
 
-        return UserMapper.toDto(user, null, sedesDe(user));
+        return UserMapper.toDto(user, null, sedesDe(user), expediente);
+    }
+
+    /**
+     * El expediente de la persona de la cuenta: el que ya tenia, o uno nuevo.
+     * Devuelve su numero.
+     */
+    private String asegurarExpediente(User user, LocalDate fechaNacimiento, String sexo, Integer clinicaId) {
+        Persona persona = user.getPersona();
+        Optional<String> yaTiene = pacienteRepository.findById(persona.getPersonaId())
+                .map(p -> p.getExpediente());
+        if (yaTiene.isPresent()) {
+            return yaTiene.get();
+        }
+
+        // Por aqui no pasa la validacion del cuerpo (@Valid): son parametros
+        // de la URL, asi que el formato del sexo se revisa a mano antes de
+        // que llegue a la restriccion de la base.
+        String sexoLimpio = sexo == null || sexo.isBlank() ? null : sexo.trim().toUpperCase();
+        if (sexoLimpio != null && !sexoLimpio.matches("[MF]")) {
+            throw new GeneralException("El sexo debe ser M o F", "400");
+        }
+
+        // El correo de la cuenta queda como correo de contacto si la persona
+        // no tenia uno: es el que ya se sabe suyo, y el que el expediente
+        // propone despues para su portal.
+        PersonaRequestDto datos = new PersonaRequestDto(
+                persona.getPersonaId(), null, null, null, fechaNacimiento, sexoLimpio, null, null,
+                persona.getEmail() == null ? user.getEmail() : null);
+        return pacienteService.crear(new PacienteRequestDto(datos, null, clinicaId)).expediente();
     }
 
     /** Agrega la sede a la cuenta si viene y si aun no la tenia. */

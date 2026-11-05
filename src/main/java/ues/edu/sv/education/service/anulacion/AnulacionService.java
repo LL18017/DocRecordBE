@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.anulacion;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -68,6 +69,7 @@ public class AnulacionService {
     private final AprobacionDeAnulacionRepository aprobacionRepository;
     private final ParametroDeAnulacionRepository parametroRepository;
     private final MedicoAutenticado medicoAutenticado;
+    private final ExpedientePropio expedientePropio;
 
     /**
      * Lo que paso al pedir una anulacion: o el documento ya quedo anulado
@@ -96,6 +98,7 @@ public class AnulacionService {
 
         Consulta consulta = consultaRepository.buscarParaAnular(consultaId)
                 .orElseThrow(() -> new NoResourceFoundException("Consulta no encontrada", "404"));
+        expedientePropio.exigirAjeno(consulta.getPaciente().getPersonaId());
 
         exigirFirmanteOAdmin(consulta.getMedico(), "Solo el médico que registró la consulta o un administrador puede anularla");
 
@@ -134,6 +137,7 @@ public class AnulacionService {
 
         Prescripcion receta = prescripcionRepository.buscarParaAnular(prescripcionId)
                 .orElseThrow(() -> new NoResourceFoundException("Prescripcion no encontrada", "404"));
+        expedientePropio.exigirAjeno(receta.getConsulta().getPaciente().getPersonaId());
 
         exigirFirmanteOAdmin(receta.getMedico(), "Solo el médico que firmó la receta puede anularla");
 
@@ -394,6 +398,9 @@ public class AnulacionService {
         if (solicitud.getSolicitadaPor().getUserID().equals(medicoAutenticado.usuario().getUserID())) {
             throw new GeneralException("No puede resolver una anulación que pidió usted", "403");
         }
+        // Tampoco la de un documento de su propio expediente: la pudo pedir
+        // otro, pero resolverla seria decidir sobre lo suyo.
+        expedientePropio.exigirAjenoParaResolver(solicitud.getConsulta().getPaciente().getPersonaId());
         if (solicitud.getEstado() != EstadoSolicitudDeAnulacion.PENDIENTE) {
             throw new GeneralException("La solicitud ya fue resuelta", "409");
         }

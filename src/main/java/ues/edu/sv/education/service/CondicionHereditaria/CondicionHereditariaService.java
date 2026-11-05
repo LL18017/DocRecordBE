@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.CondicionHereditaria;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +36,11 @@ public class CondicionHereditariaService {
 
     private final CondicionHereditariaRepository condicionHereditariaRepository;
     private final PacienteRepository pacienteRepository;
+    private final ExpedientePropio expedientePropio;
 
     public CondicionHereditariaResponse crear(CondicionHereditariaRequest request) {
         Paciente paciente = exigirPaciente(request.pacienteId());
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
         CondicionHereditaria guardada = condicionHereditariaRepository.save(
                 CondicionHereditariaMapper.toEntity(request, paciente));
         return CondicionHereditariaMapper.toResponse(guardada);
@@ -61,12 +64,15 @@ public class CondicionHereditariaService {
 
     public CondicionHereditariaResponse actualizar(Integer id, CondicionHereditariaUpdateRequest request) {
         CondicionHereditaria condicion = exigirCondicion(id);
+        expedientePropio.exigirAjeno(condicion.getPaciente().getPersonaId());
         CondicionHereditariaMapper.updateEntity(condicion, request);
         return CondicionHereditariaMapper.toResponse(condicion);
     }
 
     public void eliminar(Integer id) {
-        condicionHereditariaRepository.delete(exigirCondicion(id));
+        CondicionHereditaria condicion = exigirCondicion(id);
+        expedientePropio.exigirAjeno(condicion.getPaciente().getPersonaId());
+        condicionHereditariaRepository.delete(condicion);
     }
 
     private Paciente exigirPaciente(Long pacienteId) {
