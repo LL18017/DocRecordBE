@@ -31,7 +31,10 @@ jobs:
   pruebas:
     name: Pruebas (./mvnw -B test)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 30 y no 15: la suite ya tardaba 14 min 51 s (4 nov 2026) y, con las
+    # pruebas de reserva simultanea de citas y del expediente propio, pasa de
+    # 15 y el job se cancela sin que haya fallado ninguna prueba.
+    timeout-minutes: 30
 
     # Postgres real como servicio del job (no Testcontainers: docker-java
     # negocia una API vieja contra el Docker del runner y falla). Ver el
