@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.consulta;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -64,6 +65,7 @@ public class ConsultaService {
     private final SignosVitalesRepository signosVitalesRepository;
     private final ClinicaRepository clinicaRepository;
     private final MedicoAutenticado medicoAutenticado;
+    private final ExpedientePropio expedientePropio;
 
     /**
      * Registra una consulta.
@@ -104,6 +106,7 @@ public class ConsultaService {
         }
 
         Paciente paciente = buscarPacienteOFallar(request.pacienteId());
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
         Clinicas clinica = buscarClinicaSiVino(request.clinicaId());
 
         // HU-10, criterio 3: a un paciente dado de baja se le puede LEER el
@@ -253,6 +256,7 @@ public class ConsultaService {
     public ConsultaResponseDto actualizar(Long consultaId, ConsultaActualizacionDto request) {
 
         Consulta consulta = buscarConsultaOFallar(consultaId);
+        expedientePropio.exigirAjeno(consulta.getPaciente().getPersonaId());
 
         // HU-21, criterio 2: una consulta anulada se lee, no se edita. Lo que
         // dice quedo como estaba cuando se anulo, que es lo que el rastro

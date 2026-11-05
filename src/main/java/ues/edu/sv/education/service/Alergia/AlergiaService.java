@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.Alergia;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,10 +57,12 @@ public class AlergiaService {
     private final PacienteRepository pacienteRepository;
     private final MedicoAutenticado medicoAutenticado;
     private final EnfermeraAutenticado enfermeraAutenticado;
+    private final ExpedientePropio expedientePropio;
 
     public AlergiaResponse crear(AlergiaRequest request) {
         Persona autor = exigirPersonalClinico();
         Paciente paciente = exigirPaciente(request.pacienteId());
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
         String sustancia = request.sustancia().trim();
 
         // Criterio 3: la misma sustancia no se registra dos veces. El mensaje
@@ -116,6 +119,7 @@ public class AlergiaService {
     public void eliminar(Integer id) {
         Persona autor = exigirPersonalClinico();
         Alergia alergia = exigirAlergia(id);
+        expedientePropio.exigirAjeno(alergia.getPaciente().getPersonaId());
         if (!alergia.estaVigente()) {
             throw new NoResourceFoundException("Alergia no encontrada", "404");
         }

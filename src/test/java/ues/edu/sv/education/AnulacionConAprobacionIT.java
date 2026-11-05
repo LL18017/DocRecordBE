@@ -57,7 +57,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("HU-21 c2: dentro de la ventana la consulta queda ANULADA con motivo, autor y fecha, y sigue visible")
+    @DisplayName("HU-21 c2 y c5: dentro de la ventana la consulta queda ANULADA con motivo, autor y fecha, y sigue visible")
     void dentroDeLaVentanaSeAnulaDirecto() throws Exception {
         long consultaId = nuevaConsulta();
 
@@ -146,7 +146,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("fuera de la ventana queda una solicitud; la consulta sigue vigente y no se pide dos veces")
+    @DisplayName("HU-21 c6: fuera de la ventana queda una solicitud; la consulta sigue vigente y no se pide dos veces")
     void fueraDeLaVentanaQuedaUnaSolicitud() throws Exception {
         long consultaId = nuevaConsultaDeHaceUnaHora();
 
@@ -163,7 +163,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("hacen falta dos administradores distintos; con la segunda aprobacion la consulta se anula")
+    @DisplayName("HU-21 c6: hacen falta dos administradores distintos; con la segunda aprobacion la consulta se anula")
     void dosAprobacionesAnulanLaConsulta() throws Exception {
         long consultaId = nuevaConsultaDeHaceUnaHora();
         long recetaId = emitir(consultaId);
@@ -199,7 +199,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("un administrador no aprueba la anulacion que pidio el mismo")
+    @DisplayName("HU-21 c6: un administrador no aprueba la anulacion que pidio el mismo")
     void quienPideNoAprueba() throws Exception {
         long consultaId = nuevaConsultaDeHaceUnaHora();
         String admin = tokenDeAdministrador();
@@ -211,7 +211,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("un rechazo basta: la consulta sigue vigente y la anulacion se puede volver a pedir")
+    @DisplayName("HU-21 c6: un rechazo basta: la consulta sigue vigente y la anulacion se puede volver a pedir")
     void unRechazoDejaLaConsultaVigente() throws Exception {
         long consultaId = nuevaConsultaDeHaceUnaHora();
         long solicitudId = cuerpo(anularConsulta(medico, consultaId, MOTIVO).andExpect(status().isAccepted()))
@@ -254,7 +254,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("si la consulta se anula, la solicitud en curso de su receta se cancela")
+    @DisplayName("HU-21 c4: si la consulta se anula, la solicitud en curso de su receta se cancela")
     void anularLaConsultaCancelaLasSolicitudesDeSusRecetas() throws Exception {
         long consultaId = nuevaConsulta();
         long recetaId = emitir(consultaId);
@@ -275,7 +275,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("los parametros los lee el medico y solo los cambia un administrador, dentro de sus limites")
+    @DisplayName("HU-21 c7: los parametros los lee el medico y solo los cambia un administrador, dentro de sus limites")
     void losParametrosSonDelAdministrador() throws Exception {
         JsonNode parametros = cuerpo(mockMvc.perform(get("/anulaciones/parametros")
                 .header("Authorization", bearer(medico))).andExpect(status().isOk()));
@@ -302,7 +302,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("con 0 minutos toda anulacion pide aprobacion, aunque la consulta sea de hace un momento")
+    @DisplayName("HU-21 c5 y c7: con 0 minutos toda anulacion pide aprobacion, aunque la consulta sea de hace un momento")
     void ceroMinutosApagaLaAnulacionDirecta() throws Exception {
         cambiarParametros(tokenDeAdministrador(), "CONSULTA",
                 "{\"minutosAnulacionDirecta\":0,\"aprobacionesRequeridas\":1}").andExpect(status().isOk());
@@ -317,7 +317,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("pasado el tope de dias ya no se anula")
+    @DisplayName("HU-21 c7: pasado el tope de dias ya no se anula")
     void pasadoElTopeYaNoSeAnula() throws Exception {
         cambiarParametros(tokenDeAdministrador(), "CONSULTA",
                 "{\"minutosAnulacionDirecta\":10,\"aprobacionesRequeridas\":2,\"diasMaximos\":1}")
@@ -330,7 +330,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("cambiar los parametros no mueve la meta de una solicitud que ya estaba en curso")
+    @DisplayName("HU-21 c7: cambiar los parametros no mueve la meta de una solicitud que ya estaba en curso")
     void laSolicitudConservaSusAprobacionesRequeridas() throws Exception {
         long consultaId = nuevaConsultaDeHaceUnaHora();
         long solicitudId = cuerpo(anularConsulta(medico, consultaId, MOTIVO).andExpect(status().isAccepted()))
@@ -347,7 +347,7 @@ class AnulacionConAprobacionIT extends PruebaClinica {
     // ══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("el medico ve sus solicitudes y las de una consulta; enfermeria no entra")
+    @DisplayName("HU-21 c6: el medico ve sus solicitudes y las de una consulta; enfermeria no entra")
     void quienVeLasSolicitudes() throws Exception {
         long consultaId = nuevaConsultaDeHaceUnaHora();
         long solicitudId = cuerpo(anularConsulta(medico, consultaId, MOTIVO).andExpect(status().isAccepted()))

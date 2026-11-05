@@ -27,6 +27,11 @@ public class UserMapper {
      * exactamente lo que significa "esta cuenta no ejerce la medicina".
      */
     public static UserResponseDto toDto(User user, String especialidad, Integer sedes) {
+        return toDto(user, especialidad, sedes, null);
+    }
+
+    /** Igual, con el numero de expediente si la persona tambien es paciente. */
+    public static UserResponseDto toDto(User user, String especialidad, Integer sedes, String expediente) {
         Persona persona = user.getPersona();
         return new UserResponseDto(
                 user.getUserID(),
@@ -35,7 +40,8 @@ public class UserMapper {
                 user.getRoles().stream().map(RoleMapper::toDto).toList(),
                 especialidad,
                 user.isActivo(),
-                sedes
+                sedes,
+                expediente
         );
     }
 

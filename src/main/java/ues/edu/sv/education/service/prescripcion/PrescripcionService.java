@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.prescripcion;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -61,6 +62,7 @@ public class PrescripcionService {
     private final AlergiaRepository alergiaRepository;
     private final PacienteRepository pacienteRepository;
     private final ReportService reportService;
+    private final ExpedientePropio expedientePropio;
 
     private static final DateTimeFormatter FECHA_PDF = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
@@ -83,6 +85,7 @@ public class PrescripcionService {
 
         Medico medico = medicoAutenticado.exigir();
         Consulta consulta = buscarConsultaOFallar(request.consultaId());
+        expedientePropio.exigirAjeno(consulta.getPaciente().getPersonaId());
 
         if (!consulta.getMedico().getPersonaId().equals(medico.getPersonaId())) {
             throw new GeneralException(
@@ -249,6 +252,7 @@ public class PrescripcionService {
         if (!pacienteRepository.existsById(decision.pacienteId())) {
             throw new NoResourceFoundException("Paciente no encontrado", "404");
         }
+        expedientePropio.exigirAjeno(decision.pacienteId());
         Medicamento medicamento = medicamentoRepository.findById(decision.medicamentoId())
                 .orElseThrow(() -> new NoResourceFoundException("Medicamento no encontrado", "404"));
         List<AlertaDeAlergiaDto> alertas = alertasDe(decision.pacienteId(), medicamento);

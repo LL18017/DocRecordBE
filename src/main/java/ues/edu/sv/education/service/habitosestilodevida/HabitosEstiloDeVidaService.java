@@ -1,6 +1,7 @@
 
 package ues.edu.sv.education.service.habitosestilodevida;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,7 @@ public class HabitosEstiloDeVidaService {
     private final HabitoHistorialRepository historialRepository;
     private final MedicoAutenticado medicoAutenticado;
     private final EnfermeraAutenticado enfermeraAutenticado;
+    private final ExpedientePropio expedientePropio;
 
     @Transactional
     public HabitosEstiloDeVidaResponse crear(
@@ -55,6 +57,7 @@ public class HabitosEstiloDeVidaService {
 
         Persona autor = exigirPersonalClinico();
         Paciente paciente = obtenerPaciente(request.getPacienteId());
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
         TipoHabito tipoHabito =
                 obtenerTipoHabito(request.getTipoHabitoId());
 
@@ -97,7 +100,9 @@ public class HabitosEstiloDeVidaService {
 
         Persona autor = exigirPersonalClinico();
         HabitosEstiloDeVida habito = obtenerHabito(id);
+        expedientePropio.exigirAjeno(habito.getPaciente().getPersonaId());
         Paciente paciente = obtenerPaciente(request.getPacienteId());
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
         TipoHabito tipoHabito =
                 obtenerTipoHabito(request.getTipoHabitoId());
 
@@ -146,6 +151,7 @@ public class HabitosEstiloDeVidaService {
     @Transactional
     public void eliminar(Long id) {
         HabitosEstiloDeVida habito = obtenerHabito(id);
+        expedientePropio.exigirAjeno(habito.getPaciente().getPersonaId());
 
         try {
             habitosRepository.delete(habito);

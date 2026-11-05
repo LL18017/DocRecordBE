@@ -1,5 +1,6 @@
 package ues.edu.sv.education.service.antecedente;
 
+import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,11 +34,13 @@ public class AntecedentePatologicoService {
     private final AntecedentePatologicoRepository antecedenteRepository;
     private final PacienteRepository pacienteRepository;
     private final MedicoAutenticado medicoAutenticado;
+    private final ExpedientePropio expedientePropio;
 
     @Transactional
     public AntecedentePatologicoResponseDto crear(AntecedentePatologicoRequestDto request) {
         Medico medico = medicoAutenticado.exigir();
         Paciente paciente = exigirPaciente(request.pacienteId());
+        expedientePropio.exigirAjeno(paciente.getPersonaId());
 
         AntecedentePatologico antecedente = AntecedentePatologico.builder()
                 .paciente(paciente)
@@ -71,6 +74,7 @@ public class AntecedentePatologicoService {
     public AntecedentePatologicoResponseDto actualizar(Long antecedenteId, AntecedentePatologicoUpdateDto request) {
         medicoAutenticado.exigir();
         AntecedentePatologico antecedente = exigirAntecedente(antecedenteId);
+        expedientePropio.exigirAjeno(antecedente.getPaciente().getPersonaId());
 
         antecedente.setTipo(request.tipo());
         antecedente.setDescripcion(request.descripcion().trim());
@@ -83,7 +87,9 @@ public class AntecedentePatologicoService {
     @Transactional
     public void eliminar(Long antecedenteId) {
         medicoAutenticado.exigir();
-        antecedenteRepository.delete(exigirAntecedente(antecedenteId));
+        AntecedentePatologico antecedente = exigirAntecedente(antecedenteId);
+        expedientePropio.exigirAjeno(antecedente.getPaciente().getPersonaId());
+        antecedenteRepository.delete(antecedente);
     }
 
     private Paciente exigirPaciente(Long pacienteId) {
