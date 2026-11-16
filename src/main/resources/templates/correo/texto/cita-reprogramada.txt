@@ -13,10 +13,7 @@ Nueva hora:       [(${hora})]
 [/][# th:if="${direccion != null}"]Dirección:       [(${direccion})]
 [/]Antes:           [(${fechaAnterior})], [(${horaAnterior})]
 
-Para cancelar o reprogramar de nuevo, comunícate con el personal de la clínica
-o ingresa a DocRecord Sv:
-
-  [(${enlace})]
+Para cancelar o reprogramar de nuevo, [(${contacto})].
 
 --
 DocRecord Sv - Sistema de Gestión Clínica Ambulatoria

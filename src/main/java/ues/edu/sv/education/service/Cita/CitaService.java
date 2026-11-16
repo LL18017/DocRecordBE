@@ -298,10 +298,14 @@ public class CitaService {
         if (Cita.ATENDIDA.equals(cita.getEstado())) {
             throw new GeneralException("La cita ya fue atendida y no se puede cancelar", "409");
         }
+        String motivoLimpio = motivo == null ? "" : motivo.trim();
+        if (motivoLimpio.length() < 10 || motivoLimpio.length() > 500) {
+            throw new GeneralException("El motivo debe tener entre 10 y 500 caracteres", "400");
+        }
         exigirAnticipacion(cita, "cancelar");
 
         cita.setEstado(Cita.CANCELADA);
-        cita.setMotivoCancelacion(motivo.trim());
+        cita.setMotivoCancelacion(motivoLimpio);
         Cita guardada = guardar(cita);
 
         // HU-32 criterio 4: se avisa al paciente y al medico. Sin correo de

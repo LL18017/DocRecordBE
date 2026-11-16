@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
@@ -27,6 +28,7 @@ import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.ConsultaRepository;
 import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.SignosVitalesRepository;
+import ues.edu.sv.education.service.auth.AdminAutenticado;
 import ues.edu.sv.education.service.auth.EnfermeraAutenticado;
 
 import java.math.BigDecimal;
@@ -68,6 +70,7 @@ public class SignosVitalesService {
     private final ConsultaRepository consultaRepository;
     private final ClinicaRepository clinicaRepository;
     private final EnfermeraAutenticado enfermeraAutenticado;
+    private final AdminAutenticado adminAutenticado;
     private final ExpedientePropio expedientePropio;
 
     /**
@@ -234,12 +237,11 @@ public class SignosVitalesService {
      * deja de contar como "ultima" y como triage que habilita una consulta.
      *
      * ── Quien puede anular ────────────────────────────────────────────────
-     * Solo la enfermera que la registro. La toma lleva su firma y es ella quien
-     * responde por el dato; que otra companera la invalide sin haberla tomado
-     * seria reescribir un acto ajeno. Si la autora ya no esta, la correccion es
-     * tomar otra vez: la toma erronea queda en el historico con su hora y la
-     * nueva pasa a ser la "ultima". El resto del personal solo lee (el medico
-     * y el administrador reciben 403 desde el controller).
+     * La enfermera que la registro o un administrador (HU-16 c4). La toma lleva
+     * la firma de su autora; que otra companera la invalide seria reescribir un
+     * acto ajeno, pero el administrador puede corregir si la autora ya no esta.
+     * El medico y el resto de enfermeras reciben 403. El motivo exige de 10 a
+     * 500 caracteres (sin espacios de los bordes): 400 si no.
      *
      * 404 si la toma no existe; 403 si la registro otra enfermera; 409 si ya
      * estaba anulada (anular dos veces pisaria el motivo y la autoria de la
@@ -248,28 +250,37 @@ public class SignosVitalesService {
     @Transactional
     public SignosVitalesResponseDto anular(Long signosVitalesId, AnularSignosVitalesRequestDto request) {
 
-        Enfermera enfermera = enfermeraAutenticado.buscar().orElseThrow(() -> new GeneralException(
-                "El usuario autenticado no esta registrado como personal de enfermeria "
-                        + "y no puede anular signos vitales",
-                "403"));
+        String motivo = request.motivo() == null ? "" : request.motivo().trim();
+        if (motivo.length() < 10 || motivo.length() > 500) {
+            throw new GeneralException("El motivo debe tener entre 10 y 500 caracteres", "400");
+        }
+
+        var autenticacion = SecurityContextHolder.getContext().getAuthentication();
+        boolean esAdmin = autenticacion != null && autenticacion.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        Enfermera enfermera = enfermeraAutenticado.buscar().orElse(null);
 
         SignosVitales toma = signosVitalesRepository.buscarParaAnular(signosVitalesId)
                 .orElseThrow(() -> new NoResourceFoundException(
                         "No se encontro la toma de signos vitales con id: " + signosVitalesId, "404"));
         expedientePropio.exigirAjeno(toma.getPaciente().getPersonaId());
 
-        if (!toma.getEnfermera().getPersonaId().equals(enfermera.getPersonaId())) {
+        boolean esAutora = enfermera != null
+                && toma.getEnfermera().getPersonaId().equals(enfermera.getPersonaId());
+        if (!esAutora && !esAdmin) {
             throw new GeneralException(
-                    "Solo la enfermera que registro la toma puede anularla", "403");
+                    "Solo la enfermera que registro la toma o un administrador puede anularla", "403");
         }
         if (SignosVitales.ANULADA.equals(toma.getEstado())) {
             throw new GeneralException("La toma ya estaba anulada", "409");
         }
 
+        Persona quienAnula = esAutora ? enfermera.getPersona() : adminAutenticado.exigir().getPersona();
+
         toma.setEstado(SignosVitales.ANULADA);
-        toma.setMotivoAnulacion(request.motivo().trim());
+        toma.setMotivoAnulacion(motivo);
         toma.setAnuladaEn(LocalDateTime.now());
-        toma.setAnuladaPor(enfermera);
+        toma.setAnuladaPor(quienAnula);
 
         return toDto(signosVitalesRepository.save(toma));
     }
@@ -310,8 +321,7 @@ public class SignosVitalesService {
         String clasificacion = IndiceDeMasaCorporal.clasificar(
                 imc, personaPaciente.getFechaNacimiento());
 
-        Persona personaAnuladora = toma.getAnuladaPor() == null
-                ? null : toma.getAnuladaPor().getPersona();
+        Persona personaAnuladora = toma.getAnuladaPor();
 
         return new SignosVitalesResponseDto(
                 toma.getSignosVitalesId(),
@@ -343,7 +353,7 @@ public class SignosVitalesService {
                 toma.getMotivoAnulacion(),
                 toma.getAnuladaEn(),
                 personaAnuladora == null ? null : new EnfermeraTomaDto(
-                        toma.getAnuladaPor().getPersonaId(),
+                        personaAnuladora.getPersonaId(),
                         personaAnuladora.getNombres(),
                         personaAnuladora.getApellidos()));
     }

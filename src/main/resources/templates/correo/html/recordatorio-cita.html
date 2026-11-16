@@ -8,7 +8,7 @@
   - medico: nombre del médico.
   - clinica, direccion: sede de la cita. Pueden ser null en citas anteriores a
     que la cita guardara su sede; el bloque se omite en ese caso.
-  - enlace: dirección de la aplicación, para cancelar o reprogramar.
+  - contacto: frase para cancelar o reprogramar (telefono de la clínica o "comuníquese con la clínica").
 -->
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -139,10 +139,7 @@
                                         ¿No puedes asistir?
                                     </strong>
                                     <br><br>
-                                    Para cancelar o reprogramar tu cita, comunícate con el personal de la clínica o ingresa a DocRecord Sv desde este enlace:
-                                    <br><br>
-                                    <a th:href="${enlace}" th:text="${enlace}" href="#"
-                                       style="color:#1E3A5F;text-decoration:underline;">enlace</a>
+                                    Para cancelar o reprogramar tu cita, <span th:text="${contacto}">comunícate con la clínica</span>.
                                 </td>
                             </tr>
                         </table>

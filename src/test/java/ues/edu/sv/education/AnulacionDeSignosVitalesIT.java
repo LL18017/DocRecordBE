@@ -142,6 +142,7 @@ class AnulacionDeSignosVitalesIT extends PruebaClinica {
 
         anular(enfermera, id, "{}").andExpect(status().isBadRequest());
         anular(enfermera, id, "{\"motivo\":\"   \"}").andExpect(status().isBadRequest());
+        anular(enfermera, id, "{\"motivo\":\"corto\"}").andExpect(status().isBadRequest());
         anular(enfermera, id, "{\"motivo\":\"%s\"}".formatted("x".repeat(501)))
                 .andExpect(status().isBadRequest());
 
@@ -149,9 +150,39 @@ class AnulacionDeSignosVitalesIT extends PruebaClinica {
     }
 
     @Test
+    @DisplayName("HU-16 c4: el motivo de menos de 10 caracteres (con trim) responde 400 con el mensaje del rango")
+    void motivoCortoSeRechaza() throws Exception {
+        long id = tomar(enfermera, "\"pulsoLpm\":72").get("signosVitalesId").asLong();
+
+        String cuerpo = anular(enfermera, id, "{\"motivo\":\"   corto    \"}")
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(cuerpo.contains("El motivo debe tener entre 10 y 500 caracteres"), cuerpo);
+        anular(enfermera, id, "{\"motivo\":\"%s\"}".formatted("x".repeat(501)))
+                .andExpect(status().isBadRequest());
+
+        assertEquals("ACTIVA", leer(id).get("estado").asText());
+    }
+
+    @Test
+    @DisplayName("HU-16 c4: un administrador puede anular una toma ajena y queda como quien la anulo")
+    void elAdministradorAnula() throws Exception {
+        long id = tomar(enfermera, "\"pulsoLpm\":72").get("signosVitalesId").asLong();
+
+        String cuerpo = anular(tokenDeAdministrador(), id,
+                "{\"motivo\":\"Correccion pedida por la jefatura\"}")
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode anulada = json.readTree(cuerpo);
+        assertEquals("ANULADA", anulada.get("estado").asText());
+        assertEquals("Correccion pedida por la jefatura", anulada.get("motivoAnulacion").asText());
+        assertTrue(anulada.get("anuladaPor").get("nombres").asText().length() > 0);
+    }
+
+    @Test
     @DisplayName("anular una toma que no existe responde 404")
     void tomaInexistente() throws Exception {
-        anular(enfermera, 999_999L, "{\"motivo\":\"No existe\"}").andExpect(status().isNotFound());
+        anular(enfermera, 999_999L, "{\"motivo\":\"La toma no existe\"}").andExpect(status().isNotFound());
     }
 
     @Test
@@ -175,19 +206,18 @@ class AnulacionDeSignosVitalesIT extends PruebaClinica {
     void soloLaAutora() throws Exception {
         long id = tomar(enfermera, "\"pulsoLpm\":72").get("signosVitalesId").asLong();
 
-        anular(tokenDeEnfermera(), id, "{\"motivo\":\"No es mía\"}")
+        anular(tokenDeEnfermera(), id, "{\"motivo\":\"No es mía, es de otra\"}")
                 .andExpect(status().isForbidden());
 
         assertEquals("ACTIVA", leer(id).get("estado").asText());
     }
 
     @Test
-    @DisplayName("el médico y el administrador leen pero no anulan")
-    void medicoYAdministradorNoAnulan() throws Exception {
+    @DisplayName("HU-16 c4: el médico lee pero no anula (403)")
+    void medicoNoAnula() throws Exception {
         long id = tomar(enfermera, "\"pulsoLpm\":72").get("signosVitalesId").asLong();
 
-        anular(medico, id, "{\"motivo\":\"Intento\"}").andExpect(status().isForbidden());
-        anular(tokenDeAdministrador(), id, "{\"motivo\":\"Intento\"}").andExpect(status().isForbidden());
+        anular(medico, id, "{\"motivo\":\"Intento de anular\"}").andExpect(status().isForbidden());
 
         assertEquals("ACTIVA", leer(id).get("estado").asText());
     }

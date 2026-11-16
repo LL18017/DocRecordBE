@@ -1,7 +1,6 @@
 package ues.edu.sv.education.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -87,13 +86,6 @@ public class EventProcessorService {
     /** HU-33: se avisa cuando faltan entre 23 y 25 horas, o sea unas 24. */
     private static final Duration RECORDATORIO_DESDE = Duration.ofHours(23);
     private static final Duration RECORDATORIO_HASTA = Duration.ofHours(25);
-
-    /**
-     * A donde lleva el enlace de los correos de cita: la agenda de la
-     * aplicacion, desde donde se cancela o se reprograma con el personal.
-     */
-    @Value("${app.frontend.url:http://localhost:3000}")
-    private String urlDelFrontend;
 
     private final EventRepository eventRepository;
     private final EventStatusRepository eventStatusRepository;
@@ -519,7 +511,12 @@ public class EventProcessorService {
         datos.put("paciente", (paciente.getNombres() + " " + paciente.getApellidos()).trim());
         datos.put("clinica", cita.getClinica() == null ? null : cita.getClinica().getName());
         datos.put("direccion", cita.getClinica() == null ? null : direccionDe(cita.getClinica()));
-        datos.put("enlace", urlDelFrontend.replaceAll("/+$", "") + "/agenda");
+        // HU-33 criterio 2: para cancelar o reprogramar se llama a la clinica de
+        // la cita; ya no se enlaza a /agenda.
+        String telefono = cita.getClinica() == null ? null : cita.getClinica().getTelefono();
+        datos.put("contacto", telefono == null || telefono.isBlank()
+                ? "comunícate con la clínica"
+                : "comunícate con la clínica al " + telefono.trim());
         return datos;
     }
 
