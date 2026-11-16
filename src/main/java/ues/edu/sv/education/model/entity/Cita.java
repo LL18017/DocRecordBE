@@ -22,6 +22,12 @@ public class Cita {
     public static final String AGENDADA = "AGENDADA";
     public static final String CANCELADA = "CANCELADA";
     public static final String ATENDIDA = "ATENDIDA";
+    /** El paciente no se presento (HU-31). Estado final, como ATENDIDA. */
+    public static final String NO_ASISTIO = "NO_ASISTIO";
+
+    /** Motivo de la cita (HU-31), opcional. No es el de cancelacion. */
+    @Column(name = "motivo", length = 500)
+    private String motivo;
 
     /**
      * Paciente que tiene la cita: el del expediente, no una cuenta. La
@@ -60,7 +66,7 @@ public class Cita {
     private User medico;
 
     /**
-     * AGENDADA, CANCELADA o ATENDIDA. Lo pone el servicio, no el cliente.
+     * AGENDADA, CANCELADA, ATENDIDA o NO_ASISTIO. Lo pone el servicio, no el cliente.
      */
     @Column(name = "estado", nullable = false, length = 30)
     private String estado;

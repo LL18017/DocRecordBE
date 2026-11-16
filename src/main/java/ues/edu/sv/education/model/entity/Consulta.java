@@ -52,6 +52,12 @@ public class Consulta {
     @JoinColumn(name = "clinica_id")
     private Clinicas clinica;
 
+    // HU-31: la cita desde la que se inicio la consulta; null si no vino de
+    // la agenda. UNIQUE en la base (V40): una cita, a lo sumo una consulta.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cita_id")
+    private Cita cita;
+
     @Column(name = "fecha", nullable = false)
     private LocalDateTime fecha;
 

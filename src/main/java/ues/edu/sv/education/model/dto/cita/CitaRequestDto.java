@@ -24,7 +24,10 @@ public record CitaRequestDto(
         Integer medicoId,
 
         @NotNull(message = "La clínica es obligatoria")
-        Integer clinicaId
+        Integer clinicaId,
+
+        /** Motivo de la cita (HU-31). Opcional, hasta 500 caracteres. */
+        String motivo
 
 ) {
 }

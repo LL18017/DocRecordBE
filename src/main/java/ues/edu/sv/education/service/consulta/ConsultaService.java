@@ -4,6 +4,7 @@ import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
@@ -14,6 +15,7 @@ import ues.edu.sv.education.model.dto.consulta.ConsultaRequestDto;
 import ues.edu.sv.education.model.dto.consulta.ConsultaResponseDto;
 import ues.edu.sv.education.model.dto.consulta.MedicoResumenDto;
 import ues.edu.sv.education.model.dto.consulta.PacienteResumenDto;
+import ues.edu.sv.education.model.entity.Cita;
 import ues.edu.sv.education.model.entity.Clinicas;
 import ues.edu.sv.education.model.entity.Consulta;
 import ues.edu.sv.education.model.entity.Medico;
@@ -22,6 +24,7 @@ import ues.edu.sv.education.model.entity.SignosVitales;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.enums.EstadoConsulta;
+import ues.edu.sv.education.repository.CitaRepository;
 import ues.edu.sv.education.repository.ClinicaRepository;
 import ues.edu.sv.education.repository.ConsultaRepository;
 import ues.edu.sv.education.repository.PacienteRepository;
@@ -66,6 +69,7 @@ public class ConsultaService {
     private final ClinicaRepository clinicaRepository;
     private final MedicoAutenticado medicoAutenticado;
     private final ExpedientePropio expedientePropio;
+    private final CitaRepository citaRepository;
 
     /**
      * Registra una consulta.
@@ -128,6 +132,15 @@ public class ConsultaService {
                     "409");
         }
 
+        // HU-31 criterio 5: iniciar la consulta desde la cita. La cita se lee
+        // con candado de fila, asi que dos consultas a la vez desde la misma
+        // cita se esperan y la segunda la ve ATENDIDA. Si no se indico sede, la
+        // consulta toma la de la cita.
+        Cita cita = request.citaId() == null ? null : citaParaIniciar(request.citaId(), paciente);
+        if (cita != null && clinica == null) {
+            clinica = cita.getClinica();
+        }
+
         // El triage va ANTES de la consulta: sin constantes recientes no se
         // abre. Enfermeria pesa, mide y toma la presion, y el medico lee eso
         // para diagnosticar; una consulta sin ese paso previo es un
@@ -162,9 +175,24 @@ public class ConsultaService {
                 .indicaciones(textoONull(request.indicaciones()))
                 .estado(estadoSegun(diagnostico))
                 .registradaEn(LocalDateTime.now())
+                .cita(cita)
                 .build();
 
-        Consulta guardada = consultaRepository.save(consulta);
+        Consulta guardada;
+        if (cita == null) {
+            guardada = consultaRepository.save(consulta);
+        } else {
+            // Misma transaccion: la consulta y la cita ATENDIDA se confirman
+            // juntas o no se confirma ninguna.
+            cita.setEstado(Cita.ATENDIDA);
+            try {
+                guardada = consultaRepository.saveAndFlush(consulta);
+                citaRepository.saveAndFlush(cita);
+            } catch (DataIntegrityViolationException e) {
+                // consultas_cita_id_uq (V40): otra consulta ya salio de esta cita.
+                throw new GeneralException("La cita ya tiene una consulta registrada", "409");
+            }
+        }
 
         // La toma que habilito esta consulta queda ligada a ella, si no lo
         // estaba ya a otra. Asi el expediente puede responder "con que
@@ -330,6 +358,30 @@ public class ConsultaService {
         return textoONull(diagnostico) == null ? EstadoConsulta.PENDIENTE : EstadoConsulta.FINALIZADA;
     }
 
+    /**
+     * La cita desde la que se inicia una consulta (HU-31 criterio 5), ya
+     * comprobada: existe (404), es de este paciente (409), es del medico
+     * autenticado (403) y esta AGENDADA (409).
+     */
+    private Cita citaParaIniciar(Integer citaId, Paciente paciente) {
+        Cita cita = citaRepository.bloquearPorId(citaId)
+                .orElseThrow(() -> new GeneralException("Cita no encontrada", "404"));
+
+        if (!cita.getPaciente().getPersonaId().equals(paciente.getPersonaId())) {
+            throw new GeneralException("La cita no corresponde a este paciente", "409");
+        }
+        if (!cita.getMedico().getUserID().equals(medicoAutenticado.usuario().getUserID())) {
+            throw new GeneralException(
+                    "La cita pertenece a otro médico: solo su médico puede iniciar la consulta desde ella", "403");
+        }
+        if (!Cita.AGENDADA.equals(cita.getEstado())) {
+            throw new GeneralException(
+                    "Solo se puede iniciar la consulta desde una cita agendada; esta cita está "
+                            + cita.getEstado(), "409");
+        }
+        return cita;
+    }
+
     private Consulta buscarConsultaOFallar(Long consultaId) {
         return consultaRepository.buscarConDetalle(consultaId)
                 .orElseThrow(() -> new NoResourceFoundException("Consulta no encontrada", "404"));
@@ -426,7 +478,8 @@ public class ConsultaService {
                 consulta.getRegistradaEn(),
                 consulta.getMotivoAnulacion(),
                 consulta.getAnuladaEn(),
-                nombreDe(consulta.getAnuladaPor())
+                nombreDe(consulta.getAnuladaPor()),
+                consulta.getCita() != null ? consulta.getCita().getCitaId() : null
         );
     }
 }
