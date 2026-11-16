@@ -342,7 +342,9 @@ class AvisosDeCitaIT extends PruebaClinica {
     @DisplayName("HU-33: con recibeRecordatorios=false no sale el recordatorio, pero si la confirmacion y la cancelacion")
     void sinPreferenciaNoHayRecordatorio() throws Exception {
         String correo = correoUnico("paciente.sin.recordatorio");
-        LocalDateTime fecha = pasadoManana(17, 0);
+        // 13:30: dentro de la jornada por defecto (7:00 a 17:00) y en una franja que
+        // ninguna otra prueba de esta clase ocupa con el mismo médico.
+        LocalDateTime fecha = pasadoManana(13, 30);
         long pacienteId = pacienteConCorreo(correo);
         // La preferencia la cambia el paciente desde /api/mi-perfil (MiPerfilDelPacienteIT);
         // aqui se escribe por debajo porque lo que se prueba es el envio.
