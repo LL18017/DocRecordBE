@@ -443,6 +443,32 @@ class PortalDelPacienteIT extends PruebaClinica {
     }
 
     @Test
+    @DisplayName("acceso: sin activar, reenviar con otro correo lo corrige y la invitacion del equivocado deja de servir")
+    void corregirElCorreoDeUnaInvitacion() throws Exception {
+        long paciente = crearPaciente(medico);
+        String equivocado = correoUnico("portal.equivocado");
+        darAcceso(enfermera, paciente, "{\"email\":\"%s\"}".formatted(equivocado)).andExpect(status().isOk());
+        String alEquivocado = invitacionVigenteDe(equivocado);
+
+        String bueno = correoUnico("portal.bueno");
+        JsonNode reenvio = cuerpo(darAcceso(enfermera, paciente, "{\"email\":\"%s\"}".formatted(bueno))
+                .andExpect(status().isOk()));
+        assertTrue(reenvio.get("invitacionEnviada").asBoolean());
+        assertEquals(bueno, reenvio.get("cuenta").get("email").asText());
+        assertTrue(usuarios.findByEmailIgnoreCase(equivocado).isEmpty(), "no queda una segunda cuenta");
+
+        activar(alEquivocado).andExpect(status().isBadRequest());
+        activar(invitacionVigenteDe(bueno)).andExpect(status().isNoContent());
+
+        // Un correo que ya es de otra cuenta no sirve para corregir.
+        long otro = crearPaciente(medico);
+        String ajeno = correoUnico("portal.otro");
+        darAcceso(enfermera, otro, "{\"email\":\"%s\"}".formatted(ajeno)).andExpect(status().isOk());
+        darAcceso(enfermera, otro, "{\"email\":\"%s\"}".formatted(bueno)).andExpect(status().isConflict());
+        assertEquals(ajeno, usuarios.findByEmailIgnoreCase(ajeno).orElseThrow().getEmail());
+    }
+
+    @Test
     @DisplayName("acceso: sin correo en la peticion usa el de contacto del paciente")
     void usaElCorreoDeContacto() throws Exception {
         String correo = correoUnico("portal.contacto");

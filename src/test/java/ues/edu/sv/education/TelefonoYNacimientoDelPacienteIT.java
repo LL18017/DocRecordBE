@@ -110,6 +110,27 @@ class TelefonoYNacimientoDelPacienteIT extends PruebaClinica {
     }
 
     @Test
+    @DisplayName("el alta rechaza una fecha de nacimiento anterior a 1900 y acepta el 1 de enero de 1900")
+    void altaRechazaFechaAnteriorA1900() throws Exception {
+        String token = tokenDeMedico();
+        String cuerpo = alta(token, null, LocalDate.of(1899, 12, 31))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(json.readTree(cuerpo).get("message").asText().contains("anterior a 1900"), cuerpo);
+
+        alta(token, null, LocalDate.of(1900, 1, 1)).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("la edicion rechaza una fecha de nacimiento anterior a 1900")
+    void edicionRechazaFechaAnteriorA1900() throws Exception {
+        String token = tokenDeMedico();
+        long id = idDe(alta(token, null, LocalDate.of(1990, 5, 20)).andExpect(status().isCreated()));
+
+        edicion(token, id, "{\"fechaNacimiento\":\"0990-05-20\"}").andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("nacer hoy es valido")
     void altaAceptaHoy() throws Exception {
         alta(tokenDeMedico(), null, HOY).andExpect(status().isCreated());

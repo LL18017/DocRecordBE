@@ -88,6 +88,35 @@ class RolPacienteDesdeUsuariosIT extends PruebaClinica {
     }
 
     @Test
+    @DisplayName("con nombres y apellidos, el expediente y la cuenta quedan con el nombre corregido")
+    void conNombreCorregido() throws Exception {
+        int userId = altaPorUsuariosYRoles(correoUnico("usuarios.nombre"));
+        long persona = personaDe(userId);
+
+        JsonNode respuesta = cuerpo(darRolPaciente(userId, "fechaNacimiento", "1990-02-02", "sexo", "F",
+                "dui", duiUnico(), "nombres", " Ana Sofía ", "apellidos", "Guardado Rivas")
+                .andExpect(status().isOk()));
+
+        assertEquals("Ana Sofía Guardado Rivas", respuesta.get("userName").asText());
+        assertEquals("Ana Sofía", respuesta.get("nombres").asText());
+        assertEquals("Guardado Rivas", respuesta.get("apellidos").asText());
+        Map<String, Object> fila = jdbc.queryForMap(
+                "SELECT nombres, apellidos FROM persona WHERE persona_id = ?", persona);
+        assertEquals("Ana Sofía", fila.get("nombres"));
+        assertEquals("Guardado Rivas", fila.get("apellidos"));
+    }
+
+    @Test
+    @DisplayName("una fecha de nacimiento anterior a 1900 responde 400 y no abre nada")
+    void fechaAnteriorA1900() throws Exception {
+        int userId = altaPorUsuariosYRoles(correoUnico("usuarios.antigua"));
+
+        darRolPaciente(userId, "fechaNacimiento", "1899-12-31", "sexo", "M").andExpect(status().isBadRequest());
+
+        assertFalse(roles(userId).contains("PACIENTE"));
+    }
+
+    @Test
     @DisplayName("un sexo que no es M ni F responde 400 y no abre nada")
     void sexoInvalido() throws Exception {
         int userId = altaPorUsuariosYRoles(correoUnico("usuarios.sexo"));

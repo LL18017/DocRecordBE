@@ -237,10 +237,11 @@ class FichaDeMedicoIT extends PruebaClinica {
         User cuenta = cuentaSinRoles();
 
         JsonNode ficha = cuerpo(crearFicha("""
-                {"nombres":"Ignorado","apellidos":"Ignorado","especialidadId":1,"registroJunta":"%s","userId":%d}
+                {"nombres":"Corregido","apellidos":"De La Cuenta","especialidadId":1,"registroJunta":"%s","userId":%d}
                 """.formatted(juntaUnica(), cuenta.getUserID())).andExpect(status().isCreated()));
         assertEquals(cuenta.getPersona().getPersonaId(), ficha.get("personaId").asLong());
-        assertEquals("Cuenta", ficha.get("nombres").asText(), "los nombres salen de la persona de la cuenta");
+        assertEquals("Corregido", ficha.get("nombres").asText(),
+                "los nombres corrigen los de la persona de la cuenta: es la misma");
 
         // Una segunda ficha para la misma persona no.
         crearFicha("""

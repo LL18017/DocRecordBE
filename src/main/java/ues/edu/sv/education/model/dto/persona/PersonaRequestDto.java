@@ -65,4 +65,14 @@ public record PersonaRequestDto(
     public boolean fechaNacimientoEsFutura() {
         return fechaNacimiento != null && fechaNacimiento.isAfter(java.time.LocalDate.now(ZONA));
     }
+
+    /**
+     * La fecha mas antigua que se acepta. Nadie que se atienda hoy nacio antes
+     * de 1900: una fecha asi es un error al escribir el año (0990 por 1990).
+     */
+    public static final java.time.LocalDate PRIMERA_FECHA_DE_NACIMIENTO = java.time.LocalDate.of(1900, 1, 1);
+
+    public boolean fechaNacimientoAnteriorA1900() {
+        return fechaNacimiento != null && fechaNacimiento.isBefore(PRIMERA_FECHA_DE_NACIMIENTO);
+    }
 }

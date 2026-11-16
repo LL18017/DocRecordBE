@@ -85,7 +85,8 @@ public class MedicoController {
             description = "Sin cuenta: la crea con email, rol MEDICO y la sede clinicaId, y manda una invitacion "
                     + "para que elija su contrasena (la cuenta queda sin activar hasta canjearla en "
                     + "POST /auth/invitacion). Con cuenta: le da el rol MEDICO y la sede si faltan, y si la "
-                    + "cuenta no se ha activado manda una invitacion nueva. 400 si falta el correo o la sede; "
+                    + "cuenta no se ha activado manda una invitacion nueva (con otro email, corrige antes el "
+                    + "de la cuenta). 400 si falta el correo o la sede; "
                     + "409 si el correo ya es de otra cuenta o la ficha esta dada de baja; 404 si no existe."
     )
     @PostMapping("/{personaId}/acceso")

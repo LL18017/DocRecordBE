@@ -170,7 +170,8 @@ public class PacienteController {
             summary = "Dar acceso al portal al paciente",
             description = "HU-34. Sin cuenta: la crea con email (o, si no viene, con el correo de contacto del "
                     + "paciente) y el rol PACIENTE, sin sede, y manda una invitacion para que elija su contrasena "
-                    + "(POST /auth/invitacion). Con cuenta sin activar: manda una invitacion nueva. Con cuenta "
+                    + "(POST /auth/invitacion). Con cuenta sin activar: manda una invitacion nueva, y si viene otro "
+                    + "email corrige primero el de la cuenta. Con cuenta "
                     + "activa: le agrega el rol PACIENTE si no lo tenia. 400 si no hay correo de ninguna de las "
                     + "dos fuentes; 409 si el correo ya es de otra cuenta; 404 si el paciente no existe."
     )

@@ -77,7 +77,8 @@ public class MedicoService {
      * Registra la ficha. Sin cuenta: la cuenta se da despues con darAcceso.
      *
      * Con userId, la ficha se cuelga de la persona de esa cuenta -el
-     * administrador que tambien ejerce-, en vez de crear una persona repetida.
+     * administrador que tambien ejerce-, en vez de crear una persona repetida,
+     * y nombres y apellidos corrigen los de esa persona.
      */
     @Transactional
     public MedicoResponseDto crear(MedicoRequestDto request) {
@@ -105,8 +106,15 @@ public class MedicoService {
                     .apellidos(request.apellidos().trim())
                     .telefono(telefonoNormalizado(request.telefono()))
                     .build());
-        } else if (persona.getTelefono() == null && telefonoNormalizado(request.telefono()) != null) {
-            persona.setTelefono(telefonoNormalizado(request.telefono()));
+        } else {
+            // La persona de la cuenta: los nombres que vienen corrigen los
+            // suyos, porque ficha y cuenta son la misma persona y la cuenta
+            // puede traer uno de relleno («Administrador Del Sistema»).
+            persona.setNombres(request.nombres().trim());
+            persona.setApellidos(request.apellidos().trim());
+            if (persona.getTelefono() == null && telefonoNormalizado(request.telefono()) != null) {
+                persona.setTelefono(telefonoNormalizado(request.telefono()));
+            }
             personaRepository.save(persona);
         }
 
@@ -223,7 +231,8 @@ public class MedicoService {
         userRepository.save(cuenta);
 
         if (!cuenta.isEnabled()) {
-            boolean enviado = invitacionService.reenviar(cuenta, RolesEnum.MEDICO);
+            // Sin activar, el correo que venga corrige el de la cuenta.
+            boolean enviado = invitacionService.reenviar(cuenta, RolesEnum.MEDICO, request.email());
             return new AccesoResponseDto(toDto(ficha), true, enviado);
         }
         return new AccesoResponseDto(toDto(ficha), false, false);
