@@ -154,4 +154,60 @@ class FichaDeMedicoAlAsignarRolIT extends PruebaClinica {
         assertEquals(especialidadId,
                 medicos.findById(personaId).orElseThrow().getEspecialidad().getEspecialidadId());
     }
+
+    @Test
+    @DisplayName("HU-02: dar MEDICO con especialidad y junta registra la ficha sobre su persona, con el nombre corregido")
+    void sinFichaConDatosSeRegistraLaFichaAlDarElRol() throws Exception {
+        Cuenta cuenta = cuentaSinFicha(RolesEnum.ADMIN);
+        long personaId = cuenta.user().getPersona().getPersonaId();
+        String junta = juntaUnica();
+
+        String cuerpo = mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
+                        .param("clinicaId", String.valueOf(sede))
+                        .param("especialidadId", String.valueOf(especialidadId))
+                        .param("registroJunta", junta.toLowerCase())
+                        .param("telefono", "77778888")
+                        .param("nombres", "Lucía")
+                        .param("apellidos", "Mejía Ramos")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        var respuesta = json.readTree(cuerpo);
+        assertFalse(respuesta.get("especialidad").isNull(), "la cuenta sale con su especialidad: " + cuerpo);
+        assertEquals("Lucía Mejía Ramos", respuesta.get("userName").asText(), "la cuenta lleva el nombre corregido");
+
+        var ficha = medicos.findById(personaId).orElseThrow();
+        assertTrue(ficha.isActivo());
+        assertEquals(junta.toUpperCase(), ficha.getRegistroJunta());
+        Persona persona = personas.findById(personaId).orElseThrow();
+        assertEquals("Lucía", persona.getNombres());
+        assertEquals("Mejía Ramos", persona.getApellidos());
+        assertEquals("7777-8888", persona.getTelefono());
+        assertTrue(usuarios.findById(cuenta.user().getUserID()).orElseThrow().getRoles().stream()
+                .anyMatch(r -> RolesEnum.MEDICO.getName().equals(r.getName())));
+    }
+
+    @Test
+    @DisplayName("HU-02: con una junta sin formato no queda nada: ni rol, ni ficha, ni nombre cambiado")
+    void juntaSinFormatoNoDejaNada() throws Exception {
+        Cuenta cuenta = cuentaSinFicha();
+        long personaId = cuenta.user().getPersona().getPersonaId();
+
+        String cuerpo = mockMvc.perform(post(rutaDeRol(cuenta.user(), RolesEnum.MEDICO))
+                        .param("clinicaId", String.valueOf(sede))
+                        .param("especialidadId", String.valueOf(especialidadId))
+                        .param("registroJunta", "x")
+                        .param("nombres", "Otro")
+                        .param("apellidos", "Nombre")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(cuerpo.contains("junta"), cuerpo);
+
+        assertTrue(usuarios.findById(cuenta.user().getUserID()).orElseThrow().getRoles().isEmpty());
+        assertTrue(medicos.findById(personaId).isEmpty());
+        assertEquals("Cuenta", personas.findById(personaId).orElseThrow().getNombres(),
+                "el nombre no cambia si el rol no se da");
+    }
 }

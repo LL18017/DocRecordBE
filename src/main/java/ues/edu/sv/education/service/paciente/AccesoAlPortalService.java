@@ -69,7 +69,7 @@ public class AccesoAlPortalService {
      * Sin cuenta: la crea con el correo indicado -o, si no viene, el de
      * contacto de su ficha- y el rol PACIENTE, y manda la invitacion. Con
      * cuenta sin activar: manda una invitacion nueva (las anteriores dejan de
-     * servir). Con cuenta activa: le agrega el rol PACIENTE si no lo tenia, que
+     * servir), al correo indicado si viene otro, que corrige el de la cuenta. Con cuenta activa: le agrega el rol PACIENTE si no lo tenia, que
      * es el caso del medico o la enfermera que tambien se atiende aqui. Es
      * idempotente: pedirlo dos veces no duplica nada.
      */
@@ -105,7 +105,9 @@ public class AccesoAlPortalService {
         }
 
         if (!cuenta.isEnabled()) {
-            boolean enviado = invitacionService.reenviar(cuenta, RolesEnum.PACIENTE);
+            // Sin activar, el correo que venga corrige el de la cuenta.
+            boolean enviado = invitacionService.reenviar(cuenta, RolesEnum.PACIENTE,
+                    request == null ? null : request.email());
             return dto(paciente, cuenta, true, enviado);
         }
         return dto(paciente, cuenta, false, false);

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import ues.edu.sv.education.model.dto.User.AltaUsuarioResponseDto;
 import ues.edu.sv.education.model.dto.User.AsignarContrasenaRequestDto;
 import ues.edu.sv.education.model.dto.User.BitacoraDeUsuarioResponseDto;
+import ues.edu.sv.education.model.dto.User.DatosDelRolDto;
 import ues.edu.sv.education.model.dto.User.UserRequestDto;
 import ues.edu.sv.education.model.dto.User.CambiarEstadoUsuarioRequestDto;
 import ues.edu.sv.education.model.dto.User.UserResponseDto;
@@ -64,12 +65,16 @@ public class UserControler {
                     + "control de rol y luego recibe 403 al registrar constantes. Asignar MEDICO "
                     + "exige que la persona ya tenga ficha de médico (409 si no): la ficha, con "
                     + "especialidad y número de junta, se registra en /medicos, que es también donde "
-                    + "se le da acceso a un médico (HU-02). Asignar MEDICO o ENFERMERA a una cuenta "
+                    + "se le da acceso a un médico (HU-02). Si la persona todavía no tiene ficha, "
+                    + "especialidadId y registroJunta (y telefono, opcional) la registran en el mismo paso "
+                    + "sobre la persona de la cuenta; sin ellos, 409. Asignar MEDICO o ENFERMERA a una cuenta "
                     + "sin ninguna sede exige clinicaId, que se le asigna en el mismo paso (400 si falta). "
                     + "Asignar PACIENTE abre en el mismo paso el expediente de la persona de la cuenta, "
-                    + "si todavia no lo tiene: exige fechaNacimiento y sexo (422 si faltan), no pide DUI, "
-                    + "y clinicaId es la sede donde se abre el expediente, nunca una sede de la cuenta. "
-                    + "Si la persona ya tenia expediente solo se le agrega el rol."
+                    + "si todavia no lo tiene: exige fechaNacimiento y sexo (422 si faltan), valida el DUI "
+                    + "(400 con otro formato, 409 si es de otra persona), y clinicaId es la sede donde se abre "
+                    + "el expediente, nunca una sede de la cuenta. Si la persona ya tenia expediente solo se le "
+                    + "agrega el rol. Cuando se abre el expediente o se registra la ficha, nombres y apellidos "
+                    + "corrigen el nombre de la persona (el mismo de la cuenta); con los demás roles se ignoran."
     )
     @PostMapping("/{userId}/role/{roleId}")
     public ResponseEntity<UserResponseDto> addRole(
@@ -88,9 +93,19 @@ public class UserControler {
             @RequestParam(required = false) String sexo,
             // Opcional en la API, obligatorio en la pantalla: con el DUI el
             // expediente se encuentra al buscar por DUI en Pacientes.
-            @RequestParam(required = false) String dui
+            @RequestParam(required = false) String dui,
+            // Con PACIENTE sin expediente o MEDICO sin ficha: el nombre con que
+            // quedan, que es el de la persona de la cuenta.
+            @RequestParam(required = false) String nombres,
+            @RequestParam(required = false) String apellidos,
+            // Solo con MEDICO y solo si todavia no tiene ficha (HU-02 c1).
+            @RequestParam(required = false) Long especialidadId,
+            @RequestParam(required = false) String registroJunta,
+            @RequestParam(required = false) String telefono
     ) {
-        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId, fechaNacimiento, sexo, dui));
+        DatosDelRolDto datos = new DatosDelRolDto(fechaNacimiento, sexo, dui, nombres, apellidos,
+                especialidadId, registroJunta, telefono);
+        return ResponseEntity.ok(userService.addRole(userId, roleId, clinicaId, datos));
     }
 
     @Operation(

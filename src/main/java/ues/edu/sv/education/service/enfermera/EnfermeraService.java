@@ -162,6 +162,9 @@ public class EnfermeraService {
         if (request.fechaNacimientoEsFutura()) {
             throw new GeneralException("La fecha de nacimiento no puede ser posterior a hoy", "400");
         }
+        if (request.fechaNacimientoAnteriorA1900()) {
+            throw new GeneralException("La fecha de nacimiento no puede ser anterior a 1900", "400");
+        }
 
         if (request.personaId() == null) {
             if (isBlank(request.nombres()) || isBlank(request.apellidos())) {

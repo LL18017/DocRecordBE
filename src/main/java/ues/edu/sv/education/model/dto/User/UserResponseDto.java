@@ -59,5 +59,12 @@ public record UserResponseDto(
          * pedir la fecha de nacimiento y el sexo para abrirlo. Null tambien
          * cuando el endpoint no lo calculo, como `sedes`.
          */
-        String expediente) {
+        String expediente,
+        /**
+         * El nombre de la persona de la cuenta, por partes. userName es la
+         * union de los dos; separados los usa Usuarios y Roles para proponer
+         * el nombre del expediente o de la ficha que abre al dar un rol.
+         */
+        String nombres,
+        String apellidos) {
 }

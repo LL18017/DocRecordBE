@@ -47,7 +47,8 @@ public record MedicoRequestDto(
 
         @Schema(description = "Solo al crear, y opcional: la cuenta YA existente de esta persona (por "
                 + "ejemplo, un administrador que tambien ejerce). Con ella, la ficha se cuelga de su "
-                + "persona en vez de crear otra, y nombres y apellidos se toman de ahi.", example = "12")
+                + "persona en vez de crear otra, y nombres y apellidos corrigen los de esa persona "
+                + "(es la misma de la cuenta).", example = "12")
         Integer userId
 
 ) {

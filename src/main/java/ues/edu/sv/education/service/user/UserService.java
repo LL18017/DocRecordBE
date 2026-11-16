@@ -38,6 +38,9 @@ import ues.edu.sv.education.repository.proyeccion.ExpedienteDePersona;
 import ues.edu.sv.education.model.dto.paciente.PacienteRequestDto;
 import ues.edu.sv.education.model.dto.persona.PersonaRequestDto;
 import ues.edu.sv.education.service.paciente.PacienteService;
+import ues.edu.sv.education.service.medico.MedicoService;
+import ues.edu.sv.education.model.dto.medico.MedicoRequestDto;
+import ues.edu.sv.education.model.dto.User.DatosDelRolDto;
 import ues.edu.sv.education.repository.EspecialidadRepository;
 import ues.edu.sv.education.repository.PersonaRepository;
 import ues.edu.sv.education.repository.RoleRepository;
@@ -72,6 +75,7 @@ public class UserService {
     private final EnfermeraRepository enfermeraRepository;
     private final PacienteRepository pacienteRepository;
     private final PacienteService pacienteService;
+    private final MedicoService medicoService;
     private final VerificationTokenRepository verificationTokenRepository;
     private final EmailService emailService;
     private final AdminAutenticado adminAutenticado;
@@ -194,7 +198,7 @@ public class UserService {
     // recibiendo 403 del servicio, sin forma de entender por que.
     @Transactional
     public UserResponseDto addRole(int userID, int roleID, Integer clinicaId) {
-        return addRole(userID, roleID, clinicaId, null, null, null);
+        return addRole(userID, roleID, clinicaId, DatosDelRolDto.NINGUNO);
     }
 
     /**
@@ -216,10 +220,20 @@ public class UserService {
      * Con PACIENTE, clinicaId es la sede donde se abre el expediente y NO
      * se le asigna a la cuenta: un paciente no trabaja en ninguna sede
      * (AccesoAlPortalService tampoco se la da).
+     *
+     * Con MEDICO, si la persona aun no tiene ficha, especialidad y numero de
+     * junta la registran en el mismo paso (MedicoService.crear, colgada de
+     * esta cuenta); sin ellos, 409. Es la misma ficha que se registra en
+     * Medicos, solo que empezando por la cuenta.
+     *
+     * Cuando se abre el expediente o se registra la ficha, nombres y
+     * apellidos corrigen el nombre de la persona: el expediente y la ficha
+     * llevan el nombre de la cuenta, y una cuenta puede tener uno de relleno
+     * (el primer administrador nace como «Administrador Del Sistema»).
      */
     @Transactional
-    public UserResponseDto addRole(int userID, int roleID, Integer clinicaId,
-                                   LocalDate fechaNacimiento, String sexo, String dui) {
+    public UserResponseDto addRole(int userID, int roleID, Integer clinicaId, DatosDelRolDto datos) {
+        if (datos == null) datos = DatosDelRolDto.NINGUNO;
         User administrador = adminAutenticado.exigir();
         Optional<User> userOpt = userRepository.findById(userID);
         if (userOpt.isEmpty()) {
@@ -245,18 +259,18 @@ public class UserService {
             throw new GeneralException("El usuario ya cuenta con este rol", "409");
         }
 
-        // HU-02: el rol MEDICO ya no crea la ficha. La ficha -especialidad y
-        // numero de junta- se registra en Medicos (MedicoService), que es
-        // donde se da de alta a un medico; aqui solo se le da acceso a quien
-        // ya la tiene. Sin ficha seria un rol que pasa el hasRole y recibe 403
-        // al guardar una consulta, que es justo el estado roto que se evita.
+        // HU-02: el rol MEDICO no se da sin ficha -especialidad y numero de
+        // junta-. Sin ficha seria un rol que pasa el hasRole y recibe 403 al
+        // guardar una consulta, que es justo el estado roto que se evita. La
+        // ficha se registra en Medicos o aqui mismo, con esos dos datos.
         Optional<Medico> ficha = esMedico
                 ? medicoRepository.findById(user.getPersona().getPersonaId())
                 : Optional.empty();
-        if (esMedico && ficha.isEmpty()) {
+        boolean registraFicha = esMedico && ficha.isEmpty();
+        if (registraFicha && (datos.especialidadId() == null || estaVacio(datos.registroJunta()))) {
             throw new GeneralException(
-                    "Esta cuenta no tiene ficha de médico: regístrela primero en Médicos, con su "
-                            + "especialidad y su número de junta, y dele acceso desde ahí", "409");
+                    "Esta cuenta no tiene ficha de médico: indique su especialidad y su número de junta "
+                            + "para registrarla al darle el rol, o regístrela en Médicos", "409");
         }
 
         // Un medico o una enfermera trabaja en una sede: sin ninguna, la cuenta
@@ -269,15 +283,32 @@ public class UserService {
                     "Un médico o una enfermera necesita al menos una sede: indique en cuál va a trabajar", "400");
         }
 
+        // El nombre, antes del expediente o la ficha: los dos lo toman de la
+        // persona. Solo cuando se crea uno de ellos, que es cuando la pantalla
+        // lo pide; con los demas roles no se toca.
+        boolean abreExpediente = esPaciente
+                && !pacienteRepository.existsById(user.getPersona().getPersonaId());
+        if (abreExpediente || registraFicha) {
+            corregirNombre(user.getPersona(), datos.nombres(), datos.apellidos());
+        }
+
         // Antes del rol: si el expediente no se puede abrir (faltan la fecha
         // o el sexo), la excepcion deshace todo y la cuenta queda como estaba.
-        String expediente = esPaciente ? asegurarExpediente(user, fechaNacimiento, sexo, dui, clinicaId) : null;
+        String expediente = esPaciente
+                ? asegurarExpediente(user, datos.fechaNacimiento(), datos.sexo(), datos.dui(), clinicaId)
+                : null;
+        // Igual con la ficha: una junta repetida o sin formato no deja el rol.
+        if (registraFicha) {
+            ficha = Optional.of(registrarFicha(user, datos));
+        }
 
         user.getRoles().add(role);
         asignarSedeSiFalta(user, esPaciente ? null : sede);
         userRepository.save(user);
         bitacora.registrar(user.getUserID(), BitacoraDeUsuario.ROL_ASIGNADO,
-                "Rol " + role.getName() + (esPaciente ? " (expediente " + expediente + ")" : ""),
+                "Rol " + role.getName()
+                        + (esPaciente ? " (expediente " + expediente + ")" : "")
+                        + (registraFicha ? " (ficha de médico " + ficha.get().getRegistroJunta() + ")" : ""),
                 administrador.getEmail());
 
         // Asignar ENFERMERA crea tambien su ficha en `enfermeras`: sin ella la
@@ -287,8 +318,8 @@ public class UserService {
         if (RolesEnum.ENFERMERA.getId() == roleID) {
             asegurarFichaDeEnfermeria(user);
         }
-        // La ficha de medico ya existe (se exigio arriba); si se habia dado de
-        // baja al quitarle el rol, darselo otra vez la reactiva.
+        // La ficha de medico ya existe (la tenia o se acaba de registrar); si
+        // se habia dado de baja al quitarle el rol, darselo otra vez la reactiva.
         if (esMedico) {
             Medico medico = ficha.get();
             medico.setActivo(true);
@@ -297,6 +328,51 @@ public class UserService {
         }
 
         return UserMapper.toDto(user, null, sedesDe(user), expediente);
+    }
+
+    /**
+     * Corrige el nombre de la persona si vienen nombres y apellidos. Por aqui
+     * no pasa @Valid (son parametros de la URL), asi que se revisa a mano con
+     * los mismos limites que el alta de pacientes y de medicos.
+     */
+    private void corregirNombre(Persona persona, String nombres, String apellidos) {
+        if (estaVacio(nombres) && estaVacio(apellidos)) return;
+        if (estaVacio(nombres) || estaVacio(apellidos)) {
+            throw new GeneralException("Indique los nombres y los apellidos", "400");
+        }
+        if (nombres.trim().length() > 80 || apellidos.trim().length() > 80) {
+            throw new GeneralException("Los nombres y los apellidos no pueden superar los 80 caracteres", "400");
+        }
+        persona.setNombres(nombres.trim());
+        persona.setApellidos(apellidos.trim());
+        personaRepository.save(persona);
+    }
+
+    /**
+     * Registra la ficha de medico de la persona de la cuenta, con las mismas
+     * reglas que en Medicos. Por aqui no pasa @Valid (son parametros de la
+     * URL), asi que el formato de la junta y del telefono se revisa a mano con
+     * los patrones y mensajes de MedicoRequestDto; lo demas (especialidad
+     * vigente, junta libre) lo resuelve MedicoService.
+     */
+    private Medico registrarFicha(User user, DatosDelRolDto datos) {
+        String junta = datos.registroJunta().trim();
+        if (!junta.matches("(?=\\S*\\d)[A-Za-z0-9-]{3,20}")) {
+            throw new GeneralException("El número de junta de vigilancia no tiene un formato válido: use de 3 a "
+                    + "20 letras, números o guiones, con al menos un número", "400");
+        }
+        String telefono = estaVacio(datos.telefono()) ? null : datos.telefono().trim();
+        if (telefono != null && !telefono.matches("\\d{4}-?\\d{4}")) {
+            throw new GeneralException("El telefono debe tener 8 digitos (2222-2222 o 22222222)", "400");
+        }
+        Persona persona = user.getPersona();
+        medicoService.crear(new MedicoRequestDto(persona.getNombres(), persona.getApellidos(), telefono,
+                datos.especialidadId(), junta, user.getUserID()));
+        return medicoRepository.findById(persona.getPersonaId()).orElseThrow();
+    }
+
+    private static boolean estaVacio(String valor) {
+        return valor == null || valor.isBlank();
     }
 
     /**

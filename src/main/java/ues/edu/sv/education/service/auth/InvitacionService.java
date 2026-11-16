@@ -111,8 +111,33 @@ public class InvitacionService {
      */
     @Transactional
     public boolean reenviar(User usuario, RolesEnum rol) {
+        return reenviar(usuario, rol, null);
+    }
+
+    /**
+     * Igual, y antes corrige el correo de la cuenta si viene otro.
+     *
+     * Una cuenta que nadie ha activado todavia no le pertenece a nadie: un
+     * correo mal escrito al invitar (naunflores6200 por naunflores620) dejaba
+     * la invitacion yendo a ninguna parte, sin forma de arreglarlo desde la
+     * aplicacion. Como las invitaciones anteriores se queman, la que llego al
+     * correo equivocado deja de servir. 409 si el correo nuevo ya es de otra
+     * cuenta.
+     */
+    @Transactional
+    public boolean reenviar(User usuario, RolesEnum rol, String correoNuevo) {
         if (usuario.isEnabled()) {
             throw new GeneralException("La cuenta ya está activada; no hace falta otra invitación", "409");
+        }
+        if (correoNuevo != null && !correoNuevo.isBlank()) {
+            String limpio = correoNuevo.trim().toLowerCase();
+            if (!limpio.equalsIgnoreCase(usuario.getEmail())) {
+                if (userRepository.findByEmailIgnoreCase(limpio).isPresent()) {
+                    throw new GeneralException("Este correo ya está registrado", "409");
+                }
+                usuario.setEmail(limpio);
+                userRepository.save(usuario);
+            }
         }
         quemarPendientes(usuario);
         return enviar(usuario, rol);

@@ -41,7 +41,9 @@ public class UserMapper {
                 especialidad,
                 user.isActivo(),
                 sedes,
-                expediente
+                expediente,
+                persona.getNombres(),
+                persona.getApellidos()
         );
     }
 

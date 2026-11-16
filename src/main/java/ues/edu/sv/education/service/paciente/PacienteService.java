@@ -278,10 +278,13 @@ public class PacienteService {
         return personaRepository.save(persona);
     }
 
-    /** HU-07 / tutora: la fecha de nacimiento no puede ser posterior a hoy. */
+    /** HU-07 / tutora: la fecha de nacimiento no puede ser posterior a hoy ni anterior a 1900. */
     private void exigirFechaNoFutura(PersonaRequestDto persona) {
         if (persona != null && persona.fechaNacimientoEsFutura()) {
             throw new GeneralException("La fecha de nacimiento no puede ser posterior a hoy", "400");
+        }
+        if (persona != null && persona.fechaNacimientoAnteriorA1900()) {
+            throw new GeneralException("La fecha de nacimiento no puede ser anterior a 1900", "400");
         }
     }
 
