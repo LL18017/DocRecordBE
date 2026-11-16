@@ -69,7 +69,7 @@ public class Cita {
      * Por que se cancelo. Una cita cancelada no se borra: conserva su estado
      * y su motivo (HU-32).
      */
-    @Column(name = "motivo_cancelacion", length = 255)
+    @Column(name = "motivo_cancelacion", length = 500)
     private String motivoCancelacion;
 
     /**

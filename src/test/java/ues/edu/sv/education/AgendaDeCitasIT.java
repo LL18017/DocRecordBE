@@ -161,6 +161,12 @@ class AgendaDeCitasIT extends PruebaClinica {
         int citaId = agendar(paciente, pasadoManana(14, 0)).get("citaId").asInt();
 
         intentarCancelar(citaId, null).andExpect(status().isBadRequest());
+        String corto = intentarCancelar(citaId, "  corto  ")
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue(corto.contains("El motivo debe tener entre 10 y 500 caracteres"),
+                "HU-32: el motivo de menos de 10 caracteres se rechaza: " + corto);
+        intentarCancelar(citaId, "x".repeat(501)).andExpect(status().isBadRequest());
 
         String cuerpo = intentarCancelar(citaId, "El paciente viaja ese dia")
                 .andExpect(status().isOk())
@@ -177,7 +183,7 @@ class AgendaDeCitasIT extends PruebaClinica {
         assertEquals(2, agenda.size());
         assertTrue(agenda.findValuesAsText("estado").contains("CANCELADA"));
 
-        intentarCancelar(citaId, "otra vez").andExpect(status().isConflict());
+        intentarCancelar(citaId, "otra vez, ya cancelada").andExpect(status().isConflict());
     }
 
     @Test
@@ -260,6 +266,6 @@ class AgendaDeCitasIT extends PruebaClinica {
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get("/citas/999999").header("Authorization", bearer(medico)))
                 .andExpect(status().isNotFound());
-        intentarCancelar(999999, "No existe").andExpect(status().isNotFound());
+        intentarCancelar(999999, "La cita no existe").andExpect(status().isNotFound());
     }
 }

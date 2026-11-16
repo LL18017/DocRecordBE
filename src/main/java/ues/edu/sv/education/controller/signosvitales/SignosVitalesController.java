@@ -106,11 +106,11 @@ public class SignosVitalesController {
             summary = "Anular una toma",
             description = "Anulacion logica (HU-16): la toma queda ANULADA con su motivo, quien la anulo y "
                     + "cuando; no se borra, sigue en el historico y deja de contar como ultima. "
-                    + "Solo la enfermera que la registro. 400 sin motivo; 403 si la registro otra "
-                    + "enfermera; 404 si no existe; 409 si ya estaba anulada."
+                    + "La enfermera que la registro o un administrador. 400 si el motivo no tiene de 10 a 500 "
+                    + "caracteres; 403 si la registro otra enfermera o es un medico; 404 si no existe; 409 si ya estaba anulada."
     )
     @PatchMapping("/{signosVitalesId}/anulacion")
-    @PreAuthorize("hasRole('ENFERMERA')")
+    @PreAuthorize("hasAnyRole('ENFERMERA','ADMIN')")
     public ResponseEntity<SignosVitalesResponseDto> anular(
             @PathVariable("signosVitalesId") Long signosVitalesId,
             @Valid @RequestBody AnularSignosVitalesRequestDto request) {

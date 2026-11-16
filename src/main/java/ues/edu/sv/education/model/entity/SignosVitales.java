@@ -118,5 +118,5 @@ public class SignosVitales {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "anulada_por")
-    private Enfermera anuladaPor;
+    private Persona anuladaPor;
 }

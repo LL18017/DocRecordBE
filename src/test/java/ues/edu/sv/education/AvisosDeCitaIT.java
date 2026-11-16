@@ -272,8 +272,12 @@ class AvisosDeCitaIT extends PruebaClinica {
         assertTrue(html.contains("Medico Del Turno"), "el medico");
         assertTrue(html.contains("Sede "), "la clinica con su nombre");
         assertTrue(html.contains("Calle Principal"), "la direccion");
-        assertTrue(html.contains("/agenda"), "el enlace a la aplicacion");
-        assertTrue(CorreosDePrueba.parteDeTexto(recordatorio).contains("/agenda"));
+        // HU-33 c2: para cancelar o reprogramar, el telefono de la clinica; sin enlace a /agenda.
+        assertTrue(html.contains("2440-0000"), "el telefono de la clinica");
+        assertFalse(html.contains("/agenda"), "no enlaza a la agenda");
+        String texto = CorreosDePrueba.parteDeTexto(recordatorio);
+        assertTrue(texto.contains("2440-0000"));
+        assertFalse(texto.contains("/agenda"));
 
         // Ni la hora siguiente ni el trabajo de nuevo lo repiten.
         procesador.recordarCitas(fecha.minusHours(24));

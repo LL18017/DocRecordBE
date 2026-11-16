@@ -8,7 +8,7 @@
   - paciente: nombre del paciente (se muestra a los médicos).
   - fecha, hora, medico, clinica, direccion: los datos vigentes de la cita.
   - fechaAnterior, horaAnterior: los de antes del cambio.
-  - enlace: dirección de la aplicación.
+  - contacto: frase para cancelar o reprogramar (telefono de la clínica o "comuníquese con la clínica").
 -->
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -167,10 +167,7 @@
                                         ¿Necesitas otro cambio?
                                     </strong>
                                     <br><br>
-                                    Para cancelar o reprogramar de nuevo, comunícate con el personal de la clínica o ingresa a DocRecord Sv desde este enlace:
-                                    <br><br>
-                                    <a th:href="${enlace}" th:text="${enlace}" href="#"
-                                       style="color:#1E3A5F;text-decoration:underline;">enlace</a>
+                                    Para cancelar o reprogramar de nuevo, <span th:text="${contacto}">comunícate con la clínica</span>.
                                 </td>
                             </tr>
                         </table>

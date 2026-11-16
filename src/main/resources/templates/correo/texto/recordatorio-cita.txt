@@ -11,10 +11,7 @@ Médico:    [(${medico})]
 Procura llegar con anticipación y, si tienes estudios o documentos médicos
 relevantes, llévalos contigo.
 
-¿NO PUEDES ASISTIR? Para cancelar o reprogramar tu cita, comunícate con el
-personal de la clínica o ingresa a DocRecord Sv:
-
-  [(${enlace})]
+¿NO PUEDES ASISTIR? Para cancelar o reprogramar tu cita, [(${contacto})].
 
 --
 DocRecord Sv - Sistema de Gestión Clínica Ambulatoria
