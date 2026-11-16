@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /// **
@@ -425,8 +426,8 @@ class HabitosEstiloDeVidaCrudIT extends PruebaClinica {
     }
 
     @Test
-    @DisplayName("c2: el historial de un hábito inexistente es 404 y eliminar el hábito se lleva su historial")
-    void historialDeHabitoInexistenteYEliminacion() throws Exception {
+    @DisplayName("HU-14 c2: el historial de un hábito inexistente es 404 y anular el hábito conserva su historial")
+    void historialDeHabitoInexistenteYAnulacion() throws Exception {
         mockMvc.perform(get(BASE + "/{id}/historial", ID_INEXISTENTE)
                         .header("Authorization", bearer(medico)))
                 .andExpect(status().isNotFound());
@@ -438,54 +439,143 @@ class HabitosEstiloDeVidaCrudIT extends PruebaClinica {
                 "Dieta", "ALTO", pacienteId, tipoHabitoId));
         assertEquals(1, historial(medico, id).size());
 
-        mockMvc.perform(delete(BASE + "/{id}", id)
-                        .header("Authorization", bearer(medico)))
-                .andExpect(status().isNoContent());
-        mockMvc.perform(get(BASE + "/{id}/historial", id)
-                        .header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+        anularHabito(medico, id, "Registrado en el paciente equivocado")
+                .andExpect(status().isOk());
+
+        assertEquals(1, historial(medico, id).size(), "anular no borra el historial");
     }
 
     // ================================================================
-    // Hábitos: eliminación
+    // Hábitos: anulación (DEF-03). Ya no se borran.
     // ================================================================
 
     @Test
-    @DisplayName("el médico puede eliminar un hábito")
-    void eliminarHabito() throws Exception {
+    @DisplayName("HU-14: quien registró el hábito lo anula; queda ANULADO con motivo, quién y cuándo, y sigue listado")
+    void anularHabito() throws Exception {
         JsonNode creado = crearHabito(medico, solicitudHabito(
-                "Hábito que será eliminado", "BAJO",
+                "Hábito que será anulado", "BAJO",
                 pacienteId, tipoHabitoId));
-
         long id = creado.get("id").asLong();
+        assertEquals("ACTIVO", creado.get("estado").asText());
 
-        mockMvc.perform(delete(BASE + "/{id}", id)
-                        .header("Authorization", bearer(medico)))
-                .andExpect(status().isNoContent());
+        JsonNode anulado = json.readTree(anularHabito(medico, id, "  Se registró en el paciente equivocado  ")
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
 
-        mockMvc.perform(get(BASE + "/{id}", id)
+        assertEquals("ANULADO", anulado.get("estado").asText());
+        assertEquals("Se registró en el paciente equivocado", anulado.get("motivoAnulacion").asText());
+        assertTrue(anulado.hasNonNull("anuladoEn"));
+        assertEquals("Medico Del Turno", anulado.get("anuladoPor").asText());
+
+        // Sigue en el expediente, marcado: no se borró.
+        JsonNode porId = json.readTree(mockMvc.perform(get(BASE + "/{id}", id)
                         .header("Authorization", bearer(medico)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertEquals("ANULADO", porId.get("estado").asText());
+
+        JsonNode listado = json.readTree(mockMvc.perform(get(BASE + "/paciente/{pacienteId}", pacienteId)
+                        .header("Authorization", bearer(enfermera)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertTrue(contieneId(listado, id), "el anulado se sigue listando para trazabilidad");
+        for (JsonNode habito : listado) {
+            if (habito.get("id").asLong() == id) {
+                assertEquals("ANULADO", habito.get("estado").asText());
+            }
+        }
     }
 
     @Test
-    @DisplayName("la enfermera no puede eliminar hábitos")
-    void enfermeraNoPuedeEliminarHabito() throws Exception {
-        JsonNode creado = crearHabito(medico, solicitudHabito(
-                "Hábito protegido", "BAJO",
-                pacienteId, tipoHabitoId));
+    @DisplayName("HU-14: un motivo de menos de 10 caracteres (tras recortar) responde 400")
+    void anularConMotivoCorto() throws Exception {
+        long id = crearHabito(medico, solicitudHabito(
+                "Hábito de motivo corto", "BAJO", pacienteId, tipoHabitoId)).get("id").asLong();
 
-        mockMvc.perform(delete(BASE + "/{id}", creado.get("id").asLong())
-                        .header("Authorization", bearer(enfermera)))
+        anularHabito(medico, id, "   corto   ")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("El motivo debe tener entre 10 y 500 caracteres"));
+        anularHabito(medico, id, "x".repeat(501))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("El motivo debe tener entre 10 y 500 caracteres"));
+    }
+
+    @Test
+    @DisplayName("HU-14: otro usuario que no lo registró ni es administrador recibe 403")
+    void otroUsuarioNoPuedeAnular() throws Exception {
+        long id = crearHabito(medico, solicitudHabito(
+                "Hábito de otro autor", "BAJO", pacienteId, tipoHabitoId)).get("id").asLong();
+
+        anularHabito(enfermera, id, "La enfermera intenta anular un hábito ajeno")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(
+                        "Solo quien registró el hábito o un administrador puede anularlo"));
+        anularHabito(tokenDeMedico(), id, "Otro médico intenta anular un hábito ajeno")
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("eliminar un hábito inexistente devuelve 404")
-    void eliminarHabitoInexistente() throws Exception {
-        mockMvc.perform(delete(BASE + "/{id}", ID_INEXISTENTE)
-                        .header("Authorization", bearer(medico)))
+    @DisplayName("HU-14: un administrador puede anular un hábito que registró otra persona")
+    void administradorPuedeAnular() throws Exception {
+        long id = crearHabito(enfermera, solicitudHabito(
+                "Hábito que corrige el administrador", "BAJO", pacienteId, tipoHabitoId)).get("id").asLong();
+
+        anularHabito(admin, id, "La autora ya no trabaja en la clínica")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("ANULADO"));
+    }
+
+    @Test
+    @DisplayName("HU-14: anular un hábito ya anulado responde 409 y no pisa la primera anulación")
+    void anularDosVeces() throws Exception {
+        long id = crearHabito(medico, solicitudHabito(
+                "Hábito anulado dos veces", "BAJO", pacienteId, tipoHabitoId)).get("id").asLong();
+        anularHabito(medico, id, "Primera anulación del hábito").andExpect(status().isOk());
+
+        anularHabito(medico, id, "Segunda anulación del hábito")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("El hábito ya estaba anulado"));
+
+        mockMvc.perform(get(BASE + "/{id}", id).header("Authorization", bearer(medico)))
+                .andExpect(jsonPath("$.motivoAnulacion").value("Primera anulación del hábito"));
+    }
+
+    @Test
+    @DisplayName("HU-14: un hábito anulado no se puede editar (409)")
+    void noSeEditaUnAnulado() throws Exception {
+        long id = crearHabito(medico, solicitudHabito(
+                "Hábito que no se edita", "BAJO", pacienteId, tipoHabitoId)).get("id").asLong();
+        anularHabito(medico, id, "Registrado por error en consulta").andExpect(status().isOk());
+
+        mockMvc.perform(put(BASE + "/{id}", id)
+                        .header("Authorization", bearer(medico))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(solicitudHabito("Hábito revivido", "ALTO", pacienteId, tipoHabitoId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("El hábito está anulado y no se puede modificar"));
+    }
+
+    @Test
+    @DisplayName("HU-14: anular un hábito inexistente devuelve 404")
+    void anularHabitoInexistente() throws Exception {
+        anularHabito(medico, ID_INEXISTENTE, "Motivo válido de anulación")
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("HU-14: DELETE de un hábito ya no existe y responde 405; el hábito sigue ahí")
+    void deleteDeHabitoEs405() throws Exception {
+        long id = crearHabito(medico, solicitudHabito(
+                "Hábito que no se borra", "BAJO", pacienteId, tipoHabitoId)).get("id").asLong();
+
+        mockMvc.perform(delete(BASE + "/{id}", id)
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isMethodNotAllowed());
+
+        mockMvc.perform(get(BASE + "/{id}", id)
+                        .header("Authorization", bearer(medico)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("ACTIVO"));
     }
 
     // ================================================================
@@ -752,6 +842,14 @@ class HabitosEstiloDeVidaCrudIT extends PruebaClinica {
                                 .content(cuerpo))
                         .andExpect(status().isOk())
                         .andReturn().getResponse().getContentAsString());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions anularHabito(
+            String token, long id, String motivo) throws Exception {
+        return mockMvc.perform(patch(BASE + "/{id}/anulacion", id)
+                .header("Authorization", bearer(token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(java.util.Map.of("motivo", motivo))));
     }
 
     private JsonNode historial(String token, long id) throws Exception {

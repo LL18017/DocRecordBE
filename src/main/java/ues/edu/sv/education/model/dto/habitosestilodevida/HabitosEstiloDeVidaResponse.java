@@ -23,4 +23,10 @@ public class HabitosEstiloDeVidaResponse {
     private String actualizadoPor;
     private Long pacienteId;
     private TipoHabitoResponse tipoHabito;
+    // HU-14 DEF-03: ACTIVO o ANULADO. Los anulados se siguen listando,
+    // marcados, con su motivo, cuando y quien (nombre) los anulo.
+    private String estado;
+    private String motivoAnulacion;
+    private LocalDateTime anuladoEn;
+    private String anuladoPor;
 }

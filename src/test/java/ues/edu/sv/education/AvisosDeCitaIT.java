@@ -337,4 +337,37 @@ class AvisosDeCitaIT extends PruebaClinica {
         procesador.recordarCitas(fecha.minusHours(23));
         assertNotNull(marcaDeRecordatorio(citaId));
     }
+
+    @Test
+    @DisplayName("HU-33: con recibeRecordatorios=false no sale el recordatorio, pero si la confirmacion y la cancelacion")
+    void sinPreferenciaNoHayRecordatorio() throws Exception {
+        String correo = correoUnico("paciente.sin.recordatorio");
+        // 13:30: dentro de la jornada por defecto (7:00 a 17:00) y en una franja que
+        // ninguna otra prueba de esta clase ocupa con el mismo médico.
+        LocalDateTime fecha = pasadoManana(13, 30);
+        long pacienteId = pacienteConCorreo(correo);
+        // La preferencia la cambia el paciente desde /api/mi-perfil (MiPerfilDelPacienteIT);
+        // aqui se escribe por debajo porque lo que se prueba es el envio.
+        jdbc.update("UPDATE pacientes SET recibe_recordatorios = false WHERE persona_id = ?", pacienteId);
+
+        int citaId = agendar(pacienteId, fecha);
+        procesador.processAppoinmentEvents();
+        assertEquals(1, correosPara(correo).size(), "la confirmacion se envia igual");
+
+        procesador.recordarCitas(fecha.minusHours(24));
+        assertEquals(1, correosPara(correo).size(), "no debe llegar el recordatorio");
+        assertNull(marcaDeRecordatorio(citaId), "la cita no queda como recordada");
+
+        // Si lo vuelve a encender dentro de la ventana, la pasada siguiente lo avisa.
+        jdbc.update("UPDATE pacientes SET recibe_recordatorios = true WHERE persona_id = ?", pacienteId);
+        procesador.recordarCitas(fecha.minusHours(23).minusMinutes(30));
+        assertEquals(2, correosPara(correo).size());
+        assertNotNull(marcaDeRecordatorio(citaId));
+
+        // La cancelacion no es un recordatorio: se envia con la preferencia apagada.
+        jdbc.update("UPDATE pacientes SET recibe_recordatorios = false WHERE persona_id = ?", pacienteId);
+        cancelar(citaId, "El paciente avisa que no puede asistir");
+        procesador.processAppoinmentEvents();
+        assertEquals(3, correosPara(correo).size(), "la cancelacion se envia igual");
+    }
 }

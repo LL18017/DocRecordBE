@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import ues.edu.sv.education.model.dto.habitosestilodevida.AnularHabitoRequest;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitoHistorialResponse;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitosEstiloDeVidaRequest;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitosEstiloDeVidaResponse;
@@ -123,15 +124,34 @@ public class HabitosEstiloDeVidaController {
         );
     }
 
-    @Operation(summary = "Eliminar un hábito")
-    @PreAuthorize("hasRole('MEDICO')")
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarHabito(
-            @PathVariable Long id) {
+    @Operation(
+            summary = "Anular un hábito",
+            description = "HU-14 (DEF-03): el hábito no se borra. Queda ANULADO con el motivo, quién y cuándo, "
+                    + "sigue en los listados marcado y conserva su historial. Lo anula quien registró la "
+                    + "versión vigente (actualizadoPor) o un administrador. 400 si el motivo no tiene de 10 a "
+                    + "500 caracteres; 403 si lo registró otra persona o es del propio expediente; 404 si no "
+                    + "existe; 409 si ya estaba anulado. DELETE /{id} ya no existe: responde 405."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hábito anulado",
+                    content = @Content(schema = @Schema(implementation = HabitosEstiloDeVidaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Motivo fuera de 10 a 500 caracteres"),
+            @ApiResponse(responseCode = "403", description = "No lo registró ni es administrador"),
+            @ApiResponse(responseCode = "404", description = "Hábito no encontrado"),
+            @ApiResponse(responseCode = "409", description = "Ya estaba anulado")
+    })
+    @PatchMapping("/{id}/anulacion")
+    public ResponseEntity<HabitosEstiloDeVidaResponse> anularHabito(
+            @Parameter(description = "ID del hábito", example = "1")
+            @PathVariable Long id,
+            @RequestBody AnularHabitoRequest request) {
 
-        habitosService.eliminar(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(habitosService.anular(id, request));
     }
+
+    // DEF-03: no hay @DeleteMapping("/{id}") a proposito. Un habito es dato
+    // del expediente y se anula; DELETE /{id} lo responde Spring con 405
+    // (GlobalExceptionHandler.handleMethodNotSupported).
 
     // =========================
     // TIPOS DE HÁBITO
