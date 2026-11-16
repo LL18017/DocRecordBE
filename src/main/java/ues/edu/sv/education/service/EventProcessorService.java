@@ -236,6 +236,10 @@ public class EventProcessorService {
      * y la marca impide que caiga en dos.
      *
      * Cancelada o atendida no entra (criterio 3): la consulta pide AGENDADA.
+     * Tampoco el paciente que apago los recordatorios en "Mi perfil"
+     * (criterio 4, V43): lo filtra la misma consulta. Esa preferencia solo
+     * toca ESTE aviso; la confirmacion, la cancelacion y la reprogramacion
+     * (processAppoinmentEvents) se siguen enviando porque avisan de algo que paso.
      */
     @Scheduled(fixedDelayString = "${app.recordatorios.intervalo-ms:3600000}",
             initialDelayString = "${app.eventos.retraso-inicial-ms:0}")

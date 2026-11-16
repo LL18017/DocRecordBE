@@ -168,7 +168,9 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
     // HU-33: las citas AGENDADAS de la ventana que todavia no tienen
     // recordatorio. A una cita cancelada o atendida no se le recuerda nada
     // (criterio 3), y la marca recordatorio_enviado_en garantiza "una sola vez"
-    // (criterio 1). La clinica va con LEFT JOIN: las citas anteriores a V24 no
+    // (criterio 1). Tampoco al paciente que lo apago desde su perfil
+    // (criterio 4, V43): su cita no se marca, asi que si lo vuelve a encender
+    // dentro de la ventana, la pasada siguiente lo avisa. La clinica va con LEFT JOIN: las citas anteriores a V24 no
     // la guardaron.
     @Query("""
     SELECT c
@@ -181,6 +183,7 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
     WHERE c.fechaHora BETWEEN :desde AND :hasta
       AND c.estado = 'AGENDADA'
       AND c.recordatorioEnviadoEn IS NULL
+      AND p.recibeRecordatorios = true
     ORDER BY c.fechaHora ASC
 """)
     List<Cita> pendientesDeRecordatorio(

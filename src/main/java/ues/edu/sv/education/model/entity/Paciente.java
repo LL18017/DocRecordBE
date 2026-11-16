@@ -83,6 +83,16 @@ public class Paciente {
     @Column(name = "modificado_en")
     private LocalDateTime modificadoEn;
 
+    /**
+     * HU-33 c4 (DEF-07, V43): si el paciente quiere el recordatorio automatico
+     * de cita. Lo cambia el propio paciente desde /api/mi-perfil. TRUE por
+     * defecto, que es lo que todos tenian antes de V43. Solo apaga el
+     * recordatorio; confirmaciones y cancelaciones se siguen enviando.
+     */
+    @Column(name = "recibe_recordatorios", nullable = false)
+    @Builder.Default
+    private boolean recibeRecordatorios = true;
+
     public static final String ESTADO_ACTIVO = "ACTIVO";
     public static final String ESTADO_INACTIVO = "INACTIVO";
 }
