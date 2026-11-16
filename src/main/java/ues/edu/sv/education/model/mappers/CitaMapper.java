@@ -27,7 +27,8 @@ public class CitaMapper {
                 entity.getClinica() != null ? entity.getClinica().getClinicaId() : null,
                 entity.getClinica() != null ? entity.getClinica().getName() : null,
                 entity.getEstado(),
-                entity.getMotivoCancelacion()
+                entity.getMotivoCancelacion(),
+                entity.getMotivo()
         );
     }
 

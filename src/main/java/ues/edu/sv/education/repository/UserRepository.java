@@ -144,4 +144,18 @@ public interface UserRepository extends JpaRepository<User,Integer> {
               AND (propia.clinicaId = :clinicaId OR asignada.clinicaId = :clinicaId)
             """)
     List<User> medicosDeClinica(@Param("clinicaId") Integer clinicaId);
+
+    /**
+     * Si la cuenta trabaja en la sede: la registro o la tiene asignada (las
+     * mismas dos fuentes que medicosDeClinica). HU-31: enfermeria marca la
+     * inasistencia solo en su sede.
+     */
+    @Query("""
+            SELECT COUNT(u) > 0 FROM User u
+            LEFT JOIN u.clinicas propia
+            LEFT JOIN u.clinicasAsignadas asignada
+            WHERE u.UserID = :userId
+              AND (propia.clinicaId = :clinicaId OR asignada.clinicaId = :clinicaId)
+            """)
+    boolean trabajaEnClinica(@Param("userId") Integer userId, @Param("clinicaId") Integer clinicaId);
 }

@@ -13,8 +13,11 @@ public record CitaUpdateRequestDto(
 
         Integer medicoId,
 
-        /** Solo AGENDADA o ATENDIDA. */
-        String estado
+        /** Solo AGENDADA o ATENDIDA. NO_ASISTIO va por PATCH /citas/{id}/no-asistio. */
+        String estado,
+
+        /** Motivo de la cita (HU-31). Si viene lo reemplaza; vacio lo borra. */
+        String motivo
 
 ) {
 }

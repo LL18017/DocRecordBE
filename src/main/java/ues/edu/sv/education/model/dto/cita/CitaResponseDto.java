@@ -31,6 +31,9 @@ public record CitaResponseDto(
 
         String estado,
 
-        String motivoCancelacion
+        String motivoCancelacion,
+
+        /** Motivo de la cita (HU-31); null si no se indico. */
+        String motivo
 ) {
 }

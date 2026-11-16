@@ -46,7 +46,12 @@ public record ConsultaRequestDto(
         String indicaciones,
 
         @Schema(description = "Fecha y hora de la atencion. Si no viene, la pone el servidor", example = "2026-08-23T10:30:00")
-        LocalDateTime fecha
+        LocalDateTime fecha,
+
+        @Schema(description = "HU-31: cita desde la que se inicia la consulta. Opcional. Si viene, debe ser del mismo "
+                + "paciente, del medico autenticado y estar AGENDADA; al registrar la consulta la cita queda ATENDIDA",
+                example = "15")
+        Integer citaId
 
 ) {
 }

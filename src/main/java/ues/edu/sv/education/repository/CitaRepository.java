@@ -1,6 +1,8 @@
 package ues.edu.sv.education.repository;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -102,6 +104,16 @@ public interface CitaRepository extends JpaRepository<Cita, Integer> {
     );
 
     List<Cita> findByEstado(String estado);
+
+    /**
+     * La cita con candado de fila hasta el final de la transaccion (HU-31):
+     * dos consultas iniciadas a la vez desde la misma cita, o una consulta y
+     * una inasistencia, se esperan y la segunda ve el estado que dejo la
+     * primera.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Cita c WHERE c.citaId = :citaId")
+    Optional<Cita> bloquearPorId(@Param("citaId") Integer citaId);
 
     // Las dos de disponibilidad ignoran las canceladas: cancelar libera la
     // franja (HU-32). `excluirCitaId` es la cita que se esta reprogramando,

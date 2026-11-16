@@ -19,14 +19,20 @@ import ues.edu.sv.education.model.enums.EventStatusEnums;
 import ues.edu.sv.education.model.enums.RolesEnum;
 import ues.edu.sv.education.model.mappers.CitaMapper;
 import ues.edu.sv.education.repository.*;
+import ues.edu.sv.education.service.auth.MedicoAutenticado;
 import ues.edu.sv.education.service.horario.HorarioDeMedicoService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 
@@ -44,6 +50,13 @@ import java.util.List;
 public class CitaService {
 
     private static final int DURACION_CITA_MINUTOS = 30;
+
+    /** La agenda no se pide por mas de 31 dias, extremos incluidos (HU-31). */
+    static final int RANGO_MAXIMO_DIAS = 31;
+
+    private static final int MOTIVO_MAXIMO = 500;
+
+    private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     /** Una cita no se cancela ni se reprograma con menos anticipacion (HU-32). */
     static final Duration ANTICIPACION_MINIMA = Duration.ofHours(4);
@@ -63,6 +76,7 @@ public class CitaService {
     private final EventRepository eventRepository;
     private final EventStatusRepository eventStatusRepository;
     private final HorarioDeMedicoService horarios;
+    private final MedicoAutenticado usuarioAutenticado;
 
     public CitaResponseDto crear(CitaRequestDto dto) {
         LocalDateTime fecha = leerFecha(dto.fechaHora());
@@ -85,6 +99,7 @@ public class CitaService {
                 .tipo(tipoCita)
                 .fechaHora(fecha)
                 .estado(Cita.AGENDADA)
+                .motivo(motivoDeCita(dto.motivo()))
                 .build();
 
         cita = guardar(cita);
@@ -169,25 +184,51 @@ public class CitaService {
 
     /**
      * La agenda de una sede o de un medico entre dos dias, ambos incluidos.
-     * Hace falta al menos uno de los dos filtros.
+     * Hace falta al menos uno de los dos filtros, o mias=true.
+     *
+     * HU-31: con mias=true el medico es el autenticado, resuelto aqui desde el
+     * token (el cliente no conoce su id), y medicoId se ignora. Solo para quien
+     * tiene el rol MEDICO: a otro rol se le responde 400 en vez de ignorar el
+     * parametro, para que la pantalla no muestre como "mis citas" una agenda
+     * que no lo es. Sin desde es hoy; sin hasta, el mismo dia. El rango no
+     * pasa de 31 dias (vista de semana o de mes, nunca la historia entera).
      */
     @Transactional(readOnly = true)
-    public List<CitaResponseDto> agenda(Integer clinicaId, Integer medicoId, LocalDate desde, LocalDate hasta) {
+    public List<CitaResponseDto> agenda(
+            Integer clinicaId, Integer medicoId, LocalDate desde, LocalDate hasta, boolean mias) {
+        if (mias) {
+            if (!tieneRol("ROLE_MEDICO")) {
+                throw new GeneralException(
+                        "Solo un médico puede consultar sus propias citas (mias=true)", "400");
+            }
+            medicoId = usuarioAutenticado.usuario().getUserID();
+        }
+        if (desde == null) {
+            desde = LocalDate.now(ZONA);
+        }
+        if (hasta == null) {
+            hasta = desde;
+        }
         if (clinicaId == null && medicoId == null) {
             throw new GeneralException("Indique la clínica o el médico de la agenda", "400");
         }
         if (hasta.isBefore(desde)) {
             throw new GeneralException("La fecha final no puede ser anterior a la inicial", "400");
         }
+        if (ChronoUnit.DAYS.between(desde, hasta) >= RANGO_MAXIMO_DIAS) {
+            throw new GeneralException(
+                    "El rango de la agenda no puede superar " + RANGO_MAXIMO_DIAS + " días", "400");
+        }
         LocalDateTime inicio = desde.atStartOfDay();
         LocalDateTime fin = hasta.plusDays(1).atStartOfDay();
+        Integer filtroMedico = medicoId;
 
         List<Cita> citas = clinicaId != null
                 ? citaRepository.agendaDeClinica(clinicaId, inicio, fin)
-                : citaRepository.agendaDeMedico(medicoId, inicio, fin);
+                : citaRepository.agendaDeMedico(filtroMedico, inicio, fin);
 
         return citas.stream()
-                .filter(c -> medicoId == null || c.getMedico().getUserID().equals(medicoId))
+                .filter(c -> filtroMedico == null || c.getMedico().getUserID().equals(filtroMedico))
                 .map(citaMapper::toResponse)
                 .toList();
     }
@@ -222,6 +263,13 @@ public class CitaService {
 
         if (Cita.CANCELADA.equals(cita.getEstado())) {
             throw new GeneralException("La cita está cancelada y ya no se puede modificar", "409");
+        }
+        // HU-31: ATENDIDA y NO_ASISTIO son finales, como CANCELADA.
+        if (Cita.ATENDIDA.equals(cita.getEstado())) {
+            throw new GeneralException("La cita ya fue atendida y no se puede modificar", "409");
+        }
+        if (Cita.NO_ASISTIO.equals(cita.getEstado())) {
+            throw new GeneralException("La cita se marcó como no asistida y no se puede modificar", "409");
         }
 
         boolean cambiaMedico = dto.medicoId() != null && dto.medicoId() > 0
@@ -274,10 +322,18 @@ public class CitaService {
                 throw new GeneralException(
                         "Para cancelar una cita use la cancelación, que exige el motivo", "400");
             }
+            if (Cita.NO_ASISTIO.equals(estado)) {
+                throw new GeneralException(
+                        "Para marcar la inasistencia use PATCH /citas/{id}/no-asistio", "400");
+            }
             if (!Cita.AGENDADA.equals(estado) && !Cita.ATENDIDA.equals(estado)) {
                 throw new GeneralException("Estado de cita no válido: " + dto.estado(), "400");
             }
             cita.setEstado(estado);
+        }
+
+        if (dto.motivo() != null) {
+            cita.setMotivo(motivoDeCita(dto.motivo()));
         }
 
         // El paciente nunca se modifica
@@ -298,6 +354,9 @@ public class CitaService {
         if (Cita.ATENDIDA.equals(cita.getEstado())) {
             throw new GeneralException("La cita ya fue atendida y no se puede cancelar", "409");
         }
+        if (Cita.NO_ASISTIO.equals(cita.getEstado())) {
+            throw new GeneralException("La cita se marcó como no asistida y no se puede cancelar", "409");
+        }
         String motivoLimpio = motivo == null ? "" : motivo.trim();
         if (motivoLimpio.length() < 10 || motivoLimpio.length() > 500) {
             throw new GeneralException("El motivo debe tener entre 10 y 500 caracteres", "400");
@@ -315,6 +374,71 @@ public class CitaService {
             registrarAviso(EventCodeEnums.APPOINTMENT_CANCELLED, "Cita cancelada", guardada, correo);
         }
         return citaMapper.toResponse(guardada);
+    }
+
+    /**
+     * Marca que el paciente no se presento (HU-31, criterio 4).
+     *
+     * Quien: el medico de la cita, enfermeria de la sede de la cita o un
+     * administrador (403 a cualquier otro). Cuando: solo desde AGENDADA y solo
+     * si la hora de la cita ya paso (409 si no). No se guarda quien ni cuando:
+     * el modelo de citas no lo guarda para ningun estado.
+     */
+    public CitaResponseDto marcarNoAsistio(Integer id) {
+        Cita cita = citaRepository.bloquearPorId(id)
+                .orElseThrow(() -> new GeneralException("Cita no encontrada", "404"));
+
+        if (!puedeMarcarInasistencia(cita)) {
+            throw new GeneralException(
+                    "Solo el médico de la cita, enfermería de su sede o un administrador "
+                            + "pueden marcar la inasistencia", "403");
+        }
+        if (!Cita.AGENDADA.equals(cita.getEstado())) {
+            throw new GeneralException(
+                    "Solo una cita agendada puede marcarse como no asistida; esta cita está "
+                            + cita.getEstado(), "409");
+        }
+        if (cita.getFechaHora().isAfter(LocalDateTime.now(ZONA))) {
+            throw new GeneralException(
+                    "Todavía no llega la hora de la cita (" + cita.getFechaHora().format(FORMATO_HORA)
+                            + "): no se puede marcar como no asistida", "409");
+        }
+
+        cita.setEstado(Cita.NO_ASISTIO);
+        return citaMapper.toResponse(guardar(cita));
+    }
+
+    private boolean puedeMarcarInasistencia(Cita cita) {
+        if (tieneRol("ROLE_ADMIN")) {
+            return true;
+        }
+        Integer userId = usuarioAutenticado.usuario().getUserID();
+        if (tieneRol("ROLE_MEDICO") && cita.getMedico().getUserID().equals(userId)) {
+            return true;
+        }
+        return tieneRol("ROLE_ENFERMERA")
+                && cita.getClinica() != null
+                && userRepository.trabajaEnClinica(userId, cita.getClinica().getClinicaId());
+    }
+
+    private static boolean tieneRol(String rol) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(rol::equals);
+    }
+
+    /** El motivo de la cita limpio: vacio es null, mas de 500 es 400. */
+    private static String motivoDeCita(String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            return null;
+        }
+        String limpio = motivo.trim();
+        if (limpio.length() > MOTIVO_MAXIMO) {
+            throw new GeneralException(
+                    "El motivo de la cita no puede superar " + MOTIVO_MAXIMO + " caracteres", "400");
+        }
+        return limpio;
     }
 
     private Cita guardar(Cita cita) {

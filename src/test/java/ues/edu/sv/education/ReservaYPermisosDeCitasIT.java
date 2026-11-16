@@ -155,7 +155,7 @@ class ReservaYPermisosDeCitasIT extends PruebaClinica {
                     resultados.add(hilos.submit(() -> {
                         salida.await(10, TimeUnit.SECONDS);
                         try {
-                            citaService.crear(new CitaRequestDto(paciente, fecha, tipo, medicoId, sede));
+                            citaService.crear(new CitaRequestDto(paciente, fecha, tipo, medicoId, sede, null));
                             return "201";
                         } catch (GeneralException e) {
                             return e.getErrorCode();

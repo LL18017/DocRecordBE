@@ -79,25 +79,49 @@ public class CitaController {
     @Operation(
             summary = "Agenda de una clínica o de un médico",
             description = "Las citas entre dos días, ambos incluidos, ordenadas por hora. " +
-                    "Hace falta clinicaId, medicoId o los dos. Las canceladas se incluyen " +
-                    "con su motivo: la agenda conserva el historial (HU-32)."
+                    "Hace falta clinicaId, medicoId, mias=true o una combinación. Las canceladas se incluyen " +
+                    "con su motivo: la agenda conserva el historial (HU-32). Con mias=true (solo rol MEDICO) " +
+                    "son las del médico autenticado y medicoId se ignora (HU-31). Máximo 31 días."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Agenda obtenida"),
-            @ApiResponse(responseCode = "400", description = "Falta el filtro o el rango no es válido")
+            @ApiResponse(responseCode = "400", description = "Falta el filtro, el rango no es válido o supera 31 días, " +
+                    "o mias=true sin ser médico")
     })
     @GetMapping
     public ResponseEntity<List<CitaResponseDto>> agenda(
             @RequestParam(required = false) Integer clinicaId,
             @RequestParam(required = false) Integer medicoId,
-            @Parameter(description = "Primer día, AAAA-MM-DD", example = "2026-10-26", required = true)
-            @RequestParam LocalDate desde,
+            @Parameter(description = "Primer día, AAAA-MM-DD; por defecto hoy", example = "2026-10-26")
+            @RequestParam(required = false) LocalDate desde,
             @Parameter(description = "Último día, AAAA-MM-DD; por defecto el mismo día de inicio")
-            @RequestParam(required = false) LocalDate hasta
+            @RequestParam(required = false) LocalDate hasta,
+            @Parameter(description = "true: solo las citas del médico autenticado (HU-31)")
+            @RequestParam(defaultValue = "false") boolean mias
     ) {
         return ResponseEntity.ok(
-                citaService.agenda(clinicaId, medicoId, desde, hasta != null ? hasta : desde)
+                citaService.agenda(clinicaId, medicoId, desde, hasta, mias)
         );
+    }
+
+    @Operation(
+            summary = "Marcar que el paciente no asistió",
+            description = "Pasa la cita de AGENDADA a NO_ASISTIO cuando su hora ya pasó (HU-31). " +
+                    "Lo puede hacer el médico de la cita, enfermería de la sede o un administrador."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Cita marcada como no asistida",
+                    content = @Content(schema = @Schema(implementation = CitaResponseDto.class))
+            ),
+            @ApiResponse(responseCode = "403", description = "No es el médico de la cita, ni enfermería de su sede, ni administrador"),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada"),
+            @ApiResponse(responseCode = "409", description = "La cita no está AGENDADA o su hora todavía no llega")
+    })
+    @PatchMapping("/{id}/no-asistio")
+    public ResponseEntity<CitaResponseDto> marcarNoAsistio(@PathVariable Integer id) {
+        return ResponseEntity.ok(citaService.marcarNoAsistio(id));
     }
 
     @Operation(

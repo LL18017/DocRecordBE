@@ -43,7 +43,10 @@ public record ConsultaResponseDto(
         LocalDateTime anuladaEn,
 
         @Schema(description = "Nombre de quien la anulo (o pidio anularla); null si no esta ANULADA")
-        String anuladaPor
+        String anuladaPor,
+
+        @Schema(description = "HU-31: cita desde la que se inicio la consulta; null si no vino de la agenda")
+        Integer citaId
 
 ) {
 }
