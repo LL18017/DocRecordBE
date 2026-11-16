@@ -58,4 +58,29 @@ public class HabitosEstiloDeVida {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "tipo_habito_id", nullable = false)
     private TipoHabito tipoHabito;
+
+    // ── Anulacion (HU-14, DEF-03, migracion V42) ───────────────────────────
+    // Un habito no se borra: se anula dejando motivo, quien y cuando. El
+    // historial de versiones se conserva. Builder.Default para que .builder()
+    // no deje el estado en null.
+    public static final String ACTIVO = "ACTIVO";
+    public static final String ANULADO = "ANULADO";
+
+    @Builder.Default
+    @Column(name = "estado", nullable = false, length = 10)
+    private String estado = ACTIVO;
+
+    @Column(name = "motivo_anulacion", length = 500)
+    private String motivoAnulacion;
+
+    @Column(name = "anulado_en")
+    private LocalDateTime anuladoEn;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "anulado_por")
+    private Persona anuladoPor;
+
+    public boolean estaAnulado() {
+        return ANULADO.equals(estado);
+    }
 }

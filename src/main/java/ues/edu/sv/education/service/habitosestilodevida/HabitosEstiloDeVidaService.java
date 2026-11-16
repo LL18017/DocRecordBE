@@ -3,11 +3,12 @@ package ues.edu.sv.education.service.habitosestilodevida;
 
 import ues.edu.sv.education.service.paciente.ExpedientePropio;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ues.edu.sv.education.controller.error.GeneralException;
 import ues.edu.sv.education.controller.error.NoResourceFoundException;
+import ues.edu.sv.education.model.dto.habitosestilodevida.AnularHabitoRequest;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitoHistorialResponse;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitosEstiloDeVidaRequest;
 import ues.edu.sv.education.model.dto.habitosestilodevida.HabitosEstiloDeVidaResponse;
@@ -17,6 +18,7 @@ import ues.edu.sv.education.model.entity.Medico;
 import ues.edu.sv.education.model.entity.Paciente;
 import ues.edu.sv.education.model.entity.Persona;
 import ues.edu.sv.education.model.entity.TipoHabito;
+import ues.edu.sv.education.model.entity.User;
 import ues.edu.sv.education.model.mappers.HabitosEstiloDeVidaMapper;
 import ues.edu.sv.education.repository.HabitoHistorialRepository;
 import ues.edu.sv.education.repository.HabitosEstiloDeVidaRepository;
@@ -24,6 +26,7 @@ import ues.edu.sv.education.repository.PacienteRepository;
 import ues.edu.sv.education.repository.TipoHabitoRepository;
 import ues.edu.sv.education.service.auth.EnfermeraAutenticado;
 import ues.edu.sv.education.service.auth.MedicoAutenticado;
+import ues.edu.sv.education.service.auth.UsuarioAutenticado;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -36,6 +39,10 @@ import java.util.Objects;
  * Cada alta y cada edicion anotan quien (del token, nunca del cuerpo) y
  * cuando. Editar no pisa el pasado: la version anterior se guarda en el
  * historial antes de sobrescribirla, para poder ver la evolucion del habito.
+ *
+ * DEF-03: tampoco se borra. Un habito mal registrado se ANULA (motivo, quien y
+ * cuando) y sigue en los listados, marcado, con su historial intacto. Ya no
+ * hay DELETE: el mapping se retiro del controlador y Spring responde 405.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,6 +57,7 @@ public class HabitosEstiloDeVidaService {
     private final MedicoAutenticado medicoAutenticado;
     private final EnfermeraAutenticado enfermeraAutenticado;
     private final ExpedientePropio expedientePropio;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Transactional
     public HabitosEstiloDeVidaResponse crear(
@@ -101,6 +109,11 @@ public class HabitosEstiloDeVidaService {
         Persona autor = exigirPersonalClinico();
         HabitosEstiloDeVida habito = obtenerHabito(id);
         expedientePropio.exigirAjeno(habito.getPaciente().getPersonaId());
+        if (habito.estaAnulado()) {
+            // Editar un anulado lo "reviviria" sin que nadie lo diga: el estado
+            // seguiria ANULADO con datos nuevos que nadie valido.
+            throw new GeneralException("El hábito está anulado y no se puede modificar", "409");
+        }
         Paciente paciente = obtenerPaciente(request.getPacienteId());
         expedientePropio.exigirAjeno(paciente.getPersonaId());
         TipoHabito tipoHabito =
@@ -148,20 +161,60 @@ public class HabitosEstiloDeVidaService {
                 .toList();
     }
 
+    /**
+     * Los habitos ACTIVOS de un paciente, para el portal (GET /api/mi-perfil/habitos).
+     * Los anulados se excluyen: son errores de registro que el personal ya
+     * corrigio; su trazabilidad queda en los listados del personal clinico.
+     */
+    public List<HabitosEstiloDeVidaResponse> listarActivosDelPaciente(Long pacienteId) {
+        return habitosRepository
+                .findByPaciente_PersonaIdAndEstado(pacienteId, HabitosEstiloDeVida.ACTIVO)
+                .stream()
+                .map(habitosMapper::toResponse)
+                .toList();
+    }
+
+    /**
+     * Anula un habito (HU-14, DEF-03), sin borrarlo ni tocar su historial.
+     *
+     * Puede anularlo quien registro la version vigente (actualizadoPor: el
+     * autor del alta o de la ultima edicion, que es quien firma lo que hoy dice
+     * el habito) o un administrador. Orden de las comprobaciones, como en
+     * signos vitales: 400 motivo, 404 habito, 403 expediente propio, 403 autor,
+     * 409 ya anulado.
+     */
     @Transactional
-    public void eliminar(Long id) {
+    public HabitosEstiloDeVidaResponse anular(Long id, AnularHabitoRequest request) {
+
+        String motivo = request == null || request.motivo() == null ? "" : request.motivo().trim();
+        if (motivo.length() < 10 || motivo.length() > 500) {
+            throw new GeneralException("El motivo debe tener entre 10 y 500 caracteres", "400");
+        }
+
         HabitosEstiloDeVida habito = obtenerHabito(id);
         expedientePropio.exigirAjeno(habito.getPaciente().getPersonaId());
 
-        try {
-            habitosRepository.delete(habito);
-            habitosRepository.flush();
-        } catch (DataIntegrityViolationException ex) {
+        User quien = usuarioAutenticado.exigir();
+        Persona persona = quien.getPersona();
+        var autenticacion = SecurityContextHolder.getContext().getAuthentication();
+        boolean esAdmin = autenticacion != null && autenticacion.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        boolean esAutor = persona != null && habito.getActualizadoPor() != null
+                && Objects.equals(habito.getActualizadoPor().getPersonaId(), persona.getPersonaId());
+        if (!esAutor && !esAdmin) {
             throw new GeneralException(
-                    "No se puede eliminar el hábito debido a restricciones de integridad",
-                    "HABITO_DELETE_ERROR"
-            );
+                    "Solo quien registró el hábito o un administrador puede anularlo", "403");
         }
+        if (habito.estaAnulado()) {
+            throw new GeneralException("El hábito ya estaba anulado", "409");
+        }
+
+        habito.setEstado(HabitosEstiloDeVida.ANULADO);
+        habito.setMotivoAnulacion(motivo);
+        habito.setAnuladoEn(ahora());
+        habito.setAnuladoPor(persona);
+
+        return habitosMapper.toResponse(habitosRepository.save(habito));
     }
 
     /**

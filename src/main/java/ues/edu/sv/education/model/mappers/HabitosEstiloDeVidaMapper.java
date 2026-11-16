@@ -65,6 +65,10 @@ public class HabitosEstiloDeVidaMapper {
                 .actualizadoPor(nombreDe(entity.getActualizadoPor()))
                 .pacienteId(entity.getPaciente().getPersonaId())
                 .tipoHabito(tipoHabitoResponse)
+                .estado(entity.getEstado())
+                .motivoAnulacion(entity.getMotivoAnulacion())
+                .anuladoEn(entity.getAnuladoEn())
+                .anuladoPor(nombreDe(entity.getAnuladoPor()))
                 .build();
     }
 
